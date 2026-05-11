@@ -1,0 +1,24 @@
+model:
+  name: BAAI/bge-small-zh-v1.5
+  dim: 384
+  device: cpu
+  batch_size: 32
+graph:
+  sim_threshold: 0.5
+  parent_child_bonus: 0.2
+  sibling_bonus: 0.1
+  consecutive_bonus: 0.15
+search:
+  top_k: 5
+  source_k: 3
+  steps: 3
+  decay: 0.7
+  amplitude_cutoff: 0.01
+  aggregate: max
+  propagation_boost: 1.0
+parser:
+  max_chars: 500
+  min_chars: 50
+storage:
+  data_dir: data
+  schema_version: "1"

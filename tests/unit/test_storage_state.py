@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import json
+import time
+import threading
+
+import numpy as np
+import pytest
+
+from tagmemorag.graph_builder import build_graph
+from tagmemorag.errors import RebuildInProgressError
+from tagmemorag.state import AppState, build_kb, load_kb, save_kb
+from tagmemorag.storage.atomic import atomic_write
+from tagmemorag.storage.json_anchor import JsonAnchorStore
+from tagmemorag.storage.json_graph import JsonGraphStore
+from tagmemorag.storage.npz_vector import NpzVectorStore
+from tagmemorag.types import Anchor, Chunk
+
+
+def test_storage_round_trip(tmp_path):
+    chunks = [Chunk("蒸汽功能", "蒸汽", ("操作", "蒸汽"), 2, 1, "x.md")]
+    vectors = np.array([[1.0, 0.0]], dtype=np.float32)
+    graph = build_graph(chunks, vectors)
+    JsonGraphStore(tmp_path / "graph.json").save(graph)
+    loaded_graph = JsonGraphStore(tmp_path / "graph.json").load()
+    assert loaded_graph.nodes[0]["text"] == "蒸汽功能"
+    NpzVectorStore(tmp_path / "vectors.npz").add(np.array([0]), vectors)
+    _, loaded_vectors = NpzVectorStore(tmp_path / "vectors.npz").load()
+    np.testing.assert_array_equal(vectors, loaded_vectors)
+    anchor = Anchor(anchor_key=graph.nodes[0]["anchor_key"], label="测试", node_id=0)
+    JsonAnchorStore(tmp_path / "anchors.json").save([anchor])
+    assert JsonAnchorStore(tmp_path / "anchors.json").load()[0].anchor_key == anchor.anchor_key
+
+
+def test_atomic_write_preserves_original_on_failure(tmp_path):
+    target = tmp_path / "data.json"
+    target.write_text("old", encoding="utf-8")
+
+    def bad_write(tmp_path):
+        tmp_path.write_text("new", encoding="utf-8")
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        atomic_write(target, bad_write)
+    assert target.read_text(encoding="utf-8") == "old"
+
+
+def test_vector_search_returns_dot_product_top_k(tmp_path):
+    store = NpzVectorStore(tmp_path / "vectors.npz")
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0], [0.8, 0.2]], dtype=np.float32)
+    store.add(np.array([10, 20, 30]), vectors)
+    assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
+
+
+def test_anchor_reconcile_exact_fallback_and_unresolved(tmp_path, fake_embedder):
+    old_chunks = [
+        Chunk("蒸汽功能用于制作奶泡", "蒸汽功能", ("操作", "蒸汽功能"), 2, 1, "x.md"),
+        Chunk("紧急停机需要立即断电", "紧急停机", ("安全", "紧急停机"), 2, 2, "x.md"),
+    ]
+    old_vecs = fake_embedder.encode_batch([chunk.text for chunk in old_chunks])
+    old_graph = build_graph(old_chunks, old_vecs)
+    exact = Anchor(old_graph.nodes[0]["anchor_key"], "exact", node_id=0, old_text=old_graph.nodes[0]["text"])
+    fallback = Anchor("missing-key", "fallback", node_id=1, old_text=old_graph.nodes[1]["text"])
+    unresolved = Anchor("gone", "unresolved", node_id=1, old_text="完全不存在的特殊内容")
+
+    new_chunks = [
+        old_chunks[0],
+        Chunk("紧急停机需要立即断电并联系售后", "紧急停机", ("安全", "紧急停机"), 2, 2, "x.md"),
+    ]
+    new_vecs = fake_embedder.encode_batch([chunk.text for chunk in new_chunks])
+    new_graph = build_graph(new_chunks, new_vecs)
+    remapped, missing = JsonAnchorStore(tmp_path / "anchors.json").reconcile(
+        [exact, fallback, unresolved],
+        new_graph,
+        new_vecs,
+        fake_embedder,
+        similarity_threshold=0.5,
+    )
+    assert {anchor.label for anchor in remapped} == {"exact", "fallback"}
+    assert [anchor.label for anchor in missing] == ["unresolved"]
+
+
+def test_build_save_load_kb(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    save_kb(state, test_config)
+    loaded = load_kb("default", test_config)
+    assert loaded.graph.number_of_nodes() == state.graph.number_of_nodes()
+    assert loaded.vectors.shape == state.vectors.shape
+    meta = json.loads((tmp_path / "data" / "default" / "meta.json").read_text())
+    assert meta["schema_version"] == "1"
+
+
+def test_rebuild_keeps_old_state_until_done(tmp_path, test_config, fake_embedder):
+    docs1 = tmp_path / "docs1"
+    docs1.mkdir()
+    (docs1 / "manual.md").write_text("# 旧版\n旧图内容。\n", encoding="utf-8")
+    docs2 = tmp_path / "docs2"
+    docs2.mkdir()
+    (docs2 / "manual.md").write_text("# 新版\n新图内容。\n", encoding="utf-8")
+    app = AppState(build_kb(docs1, "default", test_config, embedder=fake_embedder))
+    old_build_id = app.current.build_id
+    task = app.start_rebuild(docs2, "default", test_config, embedder=fake_embedder)
+    assert app.get_current().build_id == old_build_id
+    for _ in range(50):
+        if task.status != "running":
+            break
+        time.sleep(0.02)
+    assert task.status == "done"
+    assert app.get_current().build_id != old_build_id
+
+
+def test_concurrent_rebuild_is_rejected_and_search_reads_old_state(tmp_path, test_config, fake_embedder):
+    class BlockingEmbedder:
+        model_name = "blocking"
+
+        def __init__(self, inner):
+            self.inner = inner
+            self.started = threading.Event()
+            self.release = threading.Event()
+
+        def encode_batch(self, texts):
+            self.started.set()
+            self.release.wait(timeout=2)
+            return self.inner.encode_batch(texts)
+
+        def encode_query(self, text):
+            return self.inner.encode_query(text)
+
+    docs1 = tmp_path / "docs1"
+    docs1.mkdir()
+    (docs1 / "manual.md").write_text("# 旧版\n旧图内容。\n", encoding="utf-8")
+    docs2 = tmp_path / "docs2"
+    docs2.mkdir()
+    (docs2 / "manual.md").write_text("# 新版\n新图内容。\n", encoding="utf-8")
+    app = AppState(build_kb(docs1, "default", test_config, embedder=fake_embedder))
+    old_build_id = app.get_current().build_id
+    blocker = BlockingEmbedder(fake_embedder)
+    task = app.start_rebuild(docs2, "default", test_config, embedder=blocker)
+    assert blocker.started.wait(timeout=1)
+    assert app.get_current().build_id == old_build_id
+    with pytest.raises(RebuildInProgressError):
+        app.start_rebuild(docs2, "default", test_config, embedder=fake_embedder)
+    blocker.release.set()
+    for _ in range(50):
+        if task.status != "running":
+            break
+        time.sleep(0.02)
+    assert task.status == "done"
