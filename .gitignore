@@ -14,3 +14,7 @@ __pycache__/
 .pytest_cache/
 .pycache-compile/
 .uv-cache/
+
+# Local design docs (not for repo)
+浪潮RAG_产品说明书_详细设计说明书.md
+*.pdf
