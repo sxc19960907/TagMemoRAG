@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Load backend project rules before implementing M1 ops changes."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keep logging, config, API, state, and Docker-related changes within the approved module boundaries."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Add SHUTTING_DOWN and probe behavior without breaking the stable {code, message, detail} service error contract."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Implement JSON logs, trace_id, build_id, kb_name, task_id, and duration fields consistently."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Apply M1 test expectations while preserving M0 behavior and avoiding M2-M4 scope creep."}
+{"file": ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/prd.md", "reason": "Use the archived M0 contract as the baseline that M1 must not regress."}
+{"file": ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/design.md", "reason": "Preserve M0 AppState, storage, API, and rebuild semantics while adding ops features."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing config/state/error patterns instead of introducing parallel ops plumbing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Keep env config, CLI serve, Docker CMD, API lifespan, and probes aligned across layers."}

@@ -5,13 +5,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import threading
+import time
 import uuid
 
 import numpy as np
+import structlog
 
 from .config import Settings
 from .embedder import create_embedder
-from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, StorageSchemaMismatchError
+from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
 from .parser import parse_document
 from .storage.atomic import atomic_write
@@ -47,6 +49,8 @@ class RebuildTask:
 class AppState:
     current: GraphState | None = None
     rebuild_tasks: dict[str, RebuildTask] = field(default_factory=dict)
+    embedder_ready: bool = False
+    is_shutting_down: bool = False
     _lock: threading.RLock = field(default_factory=threading.RLock)
     _rebuild_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -60,27 +64,55 @@ class AppState:
         with self._lock:
             self.current = new_state
 
+    def mark_embedder_ready(self) -> None:
+        with self._lock:
+            self.embedder_ready = True
+
+    def begin_shutdown(self) -> None:
+        with self._lock:
+            self.is_shutting_down = True
+
     def start_rebuild(self, docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None) -> RebuildTask:
+        with self._lock:
+            if self.is_shutting_down:
+                raise ShuttingDownError()
         if not self._rebuild_lock.acquire(blocking=False):
             running = next((task.task_id for task in self.rebuild_tasks.values() if task.status == "running"), None)
             raise RebuildInProgressError(running)
         task_id = str(uuid.uuid4())
         task = RebuildTask(task_id=task_id, status="running", kb_name=kb_name, started_at=_now())
         self.rebuild_tasks[task_id] = task
+        structlog.get_logger().info("rebuild_started", task_id=task_id, docs_dir=str(docs_dir), kb_name=kb_name)
         thread = threading.Thread(target=self._rebuild_worker, args=(task, docs_dir, kb_name, cfg, embedder), daemon=True)
         thread.start()
         return task
 
     def _rebuild_worker(self, task: RebuildTask, docs_dir: str | Path, kb_name: str, cfg: Settings, embedder) -> None:
+        t0 = time.perf_counter()
         try:
             new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=self.current)
             save_kb(new_state, cfg)
             self.swap(new_state)
             task.status = "done"
             task.build_id = new_state.build_id
+            structlog.get_logger().info(
+                "rebuild_done",
+                task_id=task.task_id,
+                kb_name=kb_name,
+                build_id=new_state.build_id,
+                duration_ms=round((time.perf_counter() - t0) * 1000.0, 3),
+                chunk_count=new_state.graph.number_of_nodes(),
+            )
         except Exception as exc:
             task.status = "failed"
             task.error = {"type": type(exc).__name__, "message": str(exc)}
+            structlog.get_logger().error(
+                "rebuild_failed",
+                task_id=task.task_id,
+                kb_name=kb_name,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
         finally:
             task.finished_at = _now()
             self._rebuild_lock.release()
@@ -90,7 +122,19 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
     docs_root = Path(docs_dir)
     if not docs_root.exists():
         raise RebuildFailedError({"reason": "docs_dir does not exist", "docs_dir": str(docs_root)})
-    embedder = embedder or create_embedder(cfg.model.name, cfg.model.device, cfg.model.batch_size, cfg.model.dim)
+    embedder = embedder or create_embedder(
+        cfg.model.name,
+        cfg.model.device,
+        cfg.model.batch_size,
+        cfg.model.dim,
+        provider=cfg.model.provider,
+        base_url=cfg.model.base_url,
+        embeddings_url=cfg.model.embeddings_url,
+        api_key_env=cfg.model.api_key_env,
+        timeout_seconds=cfg.model.timeout_seconds,
+        dimensions=cfg.model.dimensions,
+        normalize=cfg.model.normalize,
+    )
     chunks = []
     for path in sorted([*docs_root.rglob("*.md"), *docs_root.rglob("*.txt")]):
         chunks.extend(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root))

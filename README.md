@@ -34,6 +34,13 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 python -m tagmemorag serve --host 127.0.0.1 --port 8000
 ```
 
+Health probes:
+
+```bash
+curl http://127.0.0.1:8000/health  # 200 ok when the process is alive
+curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
+```
+
 ## API Reference
 
 ### `POST /search`
@@ -100,6 +107,82 @@ anchor:
 storage:
   data_dir: ./data
   schema_version: "1"
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  shutdown_timeout_seconds: 60
+
+logging:
+  level: INFO
+  format: json        # json | console
+```
+
+Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix and double underscores for nested fields:
+
+| Variable | Example |
+|----------|---------|
+| `TAGMEMORAG__SERVER__PORT` | `9000` |
+| `TAGMEMORAG__LOGGING__LEVEL` | `DEBUG` |
+| `TAGMEMORAG__MODEL__NAME` | `BAAI/bge-small-zh-v1.5` |
+| `TAGMEMORAG__STORAGE__DATA_DIR` | `/app/data` |
+
+### HTTP Embedding Providers
+
+TagMemoRAG can call OpenAI-compatible embedding APIs instead of loading a local model. This works with providers such as SiliconFlow:
+
+```yaml
+model:
+  provider: http
+  base_url: https://api.siliconflow.cn/v1
+  api_key_env: SILICONFLOW_API_KEY
+  name: Qwen/Qwen3-VL-Embedding-8B
+  dim: 4096
+  dimensions: 4096
+  batch_size: 32
+  timeout_seconds: 30
+  normalize: true
+```
+
+The API key is read only from the environment named by `api_key_env`:
+
+```bash
+export SILICONFLOW_API_KEY=...
+```
+
+The HTTP backend sends `POST {base_url}/embeddings` with `{model, input, encoding_format: "float"}`. If your provider exposes a full custom endpoint, set `model.embeddings_url` instead of `base_url`.
+
+## Docker Deployment
+
+```bash
+docker build -t tagmemorag:m1 .
+docker compose up
+```
+
+The container runs as a non-root user, logs JSON to stdout, prepackages the default BGE model, and sets `HF_HUB_OFFLINE=1` so runtime startup does not depend on external network access. Mount `./data:/app/data` for KB persistence.
+
+If the build environment cannot reach Hugging Face reliably, pass a compatible mirror endpoint while building:
+
+```bash
+docker build --build-arg HF_ENDPOINT=https://hf-mirror.com -t tagmemorag:m1 .
+```
+
+Compose uses `/health` for liveness so an empty first boot is still healthy. For Kubernetes, use `/ready` for readiness:
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health, port: 8000 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /ready, port: 8000 }
+  initialDelaySeconds: 10
+  periodSeconds: 5
+startupProbe:
+  httpGet: { path: /ready, port: 8000 }
+  periodSeconds: 5
+  failureThreshold: 24
+terminationGracePeriodSeconds: 60
 ```
 
 ## Running Tests

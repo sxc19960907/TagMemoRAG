@@ -1,0 +1,23 @@
+services:
+  tagmemorag:
+    build:
+      context: .
+    image: tagmemorag:m1
+    env_file:
+      - .env.example
+    environment:
+      TAGMEMORAG__STORAGE__DATA_DIR: /app/data
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 10s

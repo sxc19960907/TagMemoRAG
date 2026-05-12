@@ -23,6 +23,7 @@ M0 quality is defined by the acceptance criteria in `.trellis/tasks/05-10-wave-r
 - Keep rebuild double-buffer behavior: build new state off to the side, then swap only after success.
 - Include `build_id` in search results and relevant logs.
 - Use explicit config objects instead of scattering constants across modules.
+- For `BaseSettings` configs that merge YAML with env vars, explicitly test precedence. The M1 contract is `env > .env > YAML init data > defaults`; pydantic-settings does not preserve that order unless `settings_customise_sources` is configured.
 
 ---
 
@@ -72,6 +73,67 @@ Tests should avoid network access by default. Heavy model tests should be opt-in
 
 - Optimizing for future HA before M0 is correct.
 - Baking default paths or thresholds into several modules.
+- Passing a custom `--config` only to the CLI wrapper while serving a separately imported FastAPI app with import-time defaults. If `serve --config path.yaml` is supported, inject the loaded `Settings` into the API module before calling `uvicorn.run`.
+- Putting blank optional numeric env vars into `.env.example` when the file is also used by `docker compose env_file`; empty strings do not parse as `int | None`.
 - Testing only happy-path search while missing rebuild and storage failure paths.
 - Treating `node_id` as stable across rebuilds.
 - Forgetting that `implement.jsonl` and `check.jsonl` determine what future agents automatically load.
+
+## Scenario: HTTP Embedding Provider
+
+### 1. Scope / Trigger
+
+- Trigger: embedding provider can be local, hashing, or OpenAI-compatible HTTP.
+
+### 2. Signatures
+
+- `create_embedder(model_name, device, batch_size, dim, provider, base_url, embeddings_url, api_key_env, timeout_seconds, dimensions, normalize)`
+- `HttpEmbedder.encode_batch(texts: Sequence[str]) -> np.ndarray`
+- `HttpEmbedder.encode_query(text: str) -> np.ndarray`
+
+### 3. Contracts
+
+- Config keys live under `model.*`: `provider`, `name`, `dim`, `batch_size`, `base_url`, `embeddings_url`, `api_key_env`, `timeout_seconds`, `dimensions`, `normalize`.
+- `provider=http` sends `POST {base_url.rstrip("/")}/embeddings` unless `embeddings_url` is set.
+- Request body includes `model`, `input`, `encoding_format="float"`, and optional `dimensions`.
+- API key is read only from `os.environ[api_key_env]`; never store secret values in YAML or logs.
+- Response must contain `data[].embedding`; sort by `data[].index` when present.
+- Returned vectors are `np.float32` and normalized by default to preserve dot-product-as-cosine semantics.
+
+### 4. Validation & Error Matrix
+
+- Missing API key env -> `INVALID_CONFIG`.
+- HTTP status error -> `EMBEDDING_FAILED` with status code and endpoint.
+- Network/timeout/invalid JSON -> `EMBEDDING_FAILED`.
+- Missing or malformed response vectors -> `EMBEDDING_FAILED`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: SiliconFlow-compatible config uses `base_url=https://api.siliconflow.cn/v1` and `api_key_env=SILICONFLOW_API_KEY`.
+- Base: local provider remains default for offline deployment.
+- Bad: passing raw API keys in `config.yaml` or logging request headers.
+
+### 6. Tests Required
+
+- Payload shape includes `model`, `input`, `encoding_format`, optional `dimensions`, and Bearer header.
+- Full `embeddings_url` overrides `base_url`.
+- Missing API key and HTTP errors map to project errors.
+- Env override test for `TAGMEMORAG__MODEL__PROVIDER=http`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```yaml
+model:
+  provider: http
+  api_key: sk-...
+```
+
+#### Correct
+
+```yaml
+model:
+  provider: http
+  api_key_env: SILICONFLOW_API_KEY
+```

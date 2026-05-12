@@ -18,3 +18,7 @@ __pycache__/
 # Local design docs (not for repo)
 浪潮RAG_产品说明书_详细设计说明书.md
 *.pdf
+
+# Secrets
+.env
+!.env.example

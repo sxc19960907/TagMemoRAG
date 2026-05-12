@@ -34,6 +34,7 @@ Expected M0 codes include:
 - `STORAGE_LOAD_FAILED`
 - `STORAGE_SCHEMA_MISMATCH`
 - `ANCHOR_NOT_FOUND`
+- `EMBEDDING_FAILED`
 
 ---
 
@@ -44,6 +45,7 @@ Expected M0 codes include:
 - Rebuild failures must not clear or replace the current graph. Keep serving the old `GraphState`.
 - Concurrent rebuild attempts should fail fast with `REBUILD_IN_PROGRESS`.
 - Anchor reconcile failures are not fatal when the graph is valid. Return unresolved anchors in rebuild or graph info responses.
+- Embedding provider failures should use `EMBEDDING_FAILED`; missing API key configuration should use `INVALID_CONFIG`.
 
 ---
 

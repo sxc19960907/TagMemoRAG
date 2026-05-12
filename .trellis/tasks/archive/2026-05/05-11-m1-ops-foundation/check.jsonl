@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Verify M1 against backend project rules and the pre-development checklist."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that new logging/config/probe/Docker files follow the approved ownership boundaries."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check ServiceError responses remain stable and probes intentionally return plain text."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check JSON log fields, trace propagation, and sensitive-data exclusions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check regression coverage, shutdown safety, and M1-only scope control."}
+{"file": ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/task.json", "reason": "Confirm M0 is completed and use its archived state as the regression baseline."}
+{"file": ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/design.md", "reason": "Check M1 does not break M0 AppState, rebuild, storage, or API contracts."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review for duplicated config/logging constants or unnecessary helper abstractions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review env config, CLI, Docker, probes, and API startup/shutdown as one data flow."}

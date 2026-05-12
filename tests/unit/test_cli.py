@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+from tagmemorag import cli
+
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
     docs = tmp_path / "docs"
@@ -41,3 +43,28 @@ storage:
     body = json.loads(search.stdout)
     assert body["results"]
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
+
+
+def test_cli_serve_uses_config_host_port(tmp_path, monkeypatch):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        """
+model:
+  name: hashing
+server:
+  host: 127.0.0.9
+  port: 9000
+""",
+        encoding="utf-8",
+    )
+    called = {}
+
+    def fake_run(app, **kwargs):
+        called["app"] = app
+        called["kwargs"] = kwargs
+
+    monkeypatch.setattr(cli.uvicorn, "run", fake_run)
+
+    assert cli.main(["serve", "--config", str(config)]) == 0
+    assert called["kwargs"]["host"] == "127.0.0.9"
+    assert called["kwargs"]["port"] == 9000

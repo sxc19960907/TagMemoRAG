@@ -1,8 +1,15 @@
 model:
+  provider: local
   name: BAAI/bge-small-zh-v1.5
   dim: 384
   device: cpu
   batch_size: 32
+  base_url: https://api.siliconflow.cn/v1
+  embeddings_url:
+  api_key_env: SILICONFLOW_API_KEY
+  timeout_seconds: 30
+  dimensions:
+  normalize: true
 graph:
   sim_threshold: 0.5
   parent_child_bonus: 0.2
@@ -22,3 +29,10 @@ parser:
 storage:
   data_dir: data
   schema_version: "1"
+server:
+  host: 0.0.0.0
+  port: 8000
+  shutdown_timeout_seconds: 60
+logging:
+  level: INFO
+  format: json

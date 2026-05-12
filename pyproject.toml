@@ -9,13 +9,16 @@ description = "AI memory system with tag-based organization and RAG retrieval"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "sentence-transformers>=2.7",
+    "sentence-transformers>=2.7,<3.0",
     "networkx>=3.2",
-    "numpy>=1.26",
+    "numpy>=1.26,<2.0",
+    "torch>=2.2,<2.3",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pyyaml>=6.0",
     "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "structlog>=24.1",
 ]
 
 [project.optional-dependencies]
@@ -27,3 +30,13 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tagmemorag"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Load the backend pre-development checklist and core project rules before implementing M0."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Follow the approved TagMemoRAG module layout, dependency direction, and naming conventions."}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Implement JSON+NPZ storage, schema metadata, and atomic writes according to the M0 storage contract."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Use stable ServiceError codes and the {code, message, detail} API error format."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Preserve build_id, kb_name, trace_id, task_id, and duration fields needed by later observability milestones."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Apply M0 testing expectations, forbidden patterns, and code review rules during implementation."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Search for existing patterns and avoid unnecessary helpers or duplicate constants."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Keep parser, storage, state, API, CLI, and tests aligned across their shared contracts."}

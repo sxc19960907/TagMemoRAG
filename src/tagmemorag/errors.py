@@ -14,6 +14,8 @@ class ErrorCode(StrEnum):
     STORAGE_LOAD_FAILED = "STORAGE_LOAD_FAILED"
     STORAGE_SCHEMA_MISMATCH = "STORAGE_SCHEMA_MISMATCH"
     ANCHOR_NOT_FOUND = "ANCHOR_NOT_FOUND"
+    SHUTTING_DOWN = "SHUTTING_DOWN"
+    EMBEDDING_FAILED = "EMBEDDING_FAILED"
     INTERNAL = "INTERNAL"
 
 
@@ -42,6 +44,16 @@ class RebuildInProgressError(ServiceError):
 class RebuildFailedError(ServiceError):
     def __init__(self, detail: dict[str, Any] | None = None):
         super().__init__(ErrorCode.REBUILD_FAILED, "Rebuild failed.", detail)
+
+
+class ShuttingDownError(ServiceError):
+    def __init__(self):
+        super().__init__(ErrorCode.SHUTTING_DOWN, "Service is shutting down.")
+
+
+class EmbeddingError(ServiceError):
+    def __init__(self, message: str = "Embedding request failed.", detail: dict[str, Any] | None = None):
+        super().__init__(ErrorCode.EMBEDDING_FAILED, message, detail)
 
 
 class InvalidConfigError(ServiceError):

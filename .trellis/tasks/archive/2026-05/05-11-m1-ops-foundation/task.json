@@ -1,17 +1,17 @@
 {
-  "id": "wave-rag-implementation",
-  "name": "wave-rag-implementation",
-  "title": "brainstorm: 浪潮RAG 产品说明书语义检索引擎",
+  "id": "m1-ops-foundation",
+  "name": "m1-ops-foundation",
+  "title": "brainstorm: M1 运维基础（容器化+可观测+健康探针）",
   "description": "",
   "status": "completed",
   "dev_type": "feature",
-  "scope": "backend",
+  "scope": "backend,ops",
   "package": null,
   "priority": "P2",
   "creator": "suixingchen",
   "assignee": "suixingchen",
-  "createdAt": "2026-05-10",
-  "completedAt": "2026-05-11",
+  "createdAt": "2026-05-11",
+  "completedAt": "2026-05-12",
   "branch": null,
   "base_branch": "master",
   "worktree_path": null,
@@ -23,13 +23,13 @@
   "relatedFiles": [
     ".trellis/spec/backend/index.md",
     ".trellis/spec/backend/directory-structure.md",
-    ".trellis/spec/backend/database-guidelines.md",
     ".trellis/spec/backend/error-handling.md",
     ".trellis/spec/backend/logging-guidelines.md",
     ".trellis/spec/backend/quality-guidelines.md",
     ".trellis/spec/guides/code-reuse-thinking-guide.md",
-    ".trellis/spec/guides/cross-layer-thinking-guide.md"
+    ".trellis/spec/guides/cross-layer-thinking-guide.md",
+    ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/"
   ],
-  "notes": "M0 archived after implementation review. Core parser/embedder/graph/search/storage/state/API/CLI are implemented; regression currently passes with 23 tests. M1 ops foundation has been created as the next task.",
+  "notes": "M1 builds on archived M0. Context manifests now load backend specs and archived M0 contracts. Keep Docker/CLI/env port semantics aligned: CLI should default from Settings.server, CLI args override env/YAML, and Docker CMD should not hardcode host/port if env override is an acceptance criterion.",
   "meta": {}
 }

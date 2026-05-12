@@ -69,3 +69,63 @@ Do not invent different names for the same concept in different modules.
 M1 introduces JSON logs, `/health`, `/ready`, graceful shutdown, and model warm-up.
 
 M4 introduces Prometheus metrics and OTel hook points. M0 should keep function boundaries clean enough that these can wrap search/build calls without rewriting the algorithm.
+
+## M1 Observability Contracts
+
+### 1. Scope / Trigger
+
+- Trigger: JSON logging, request trace IDs, health/readiness probes, env-driven server config, and graceful shutdown.
+
+### 2. Signatures
+
+- `configure_logging(level: str = "INFO", format: "json" | "console" = "json") -> None`
+- `GET /health -> text/plain`, always `200 ok` while the process can answer.
+- `GET /ready -> text/plain`, `200 ok` only when model warm-up has completed and a KB is loaded.
+- `python -m tagmemorag serve [--host HOST] [--port PORT] [--config PATH]`
+
+### 3. Contracts
+
+- Env keys use `TAGMEMORAG__` and double-underscore nesting, for example `TAGMEMORAG__SERVER__PORT=9000`.
+- Config precedence is `env > .env > YAML > defaults`.
+- Every HTTP response includes `X-Trace-Id`; if the request supplies `X-Trace-Id`, preserve it.
+- `/search` response body includes the same `trace_id` as `X-Trace-Id`.
+- `/search` log event includes `kb_name`, `build_id`, `query_len`, `top_k`, `result_count`, and `latency_ms`.
+
+### 4. Validation & Error Matrix
+
+- `AppState.is_shutting_down` and new `/rebuild` -> `503` with `SHUTTING_DOWN`.
+- `/ready` when `embedder_ready` is false -> `503 embedder not ready`.
+- `/ready` when KB is missing -> `503 kb not loaded`.
+- Known `ServiceError` responses keep `{code, message, detail}`; probe endpoints deliberately use short text.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `TAGMEMORAG__SERVER__PORT=9000 python -m tagmemorag serve` listens on 9000.
+- Base: no KB on first boot means `/health=200` and `/ready=503`.
+- Bad: Docker CMD hardcodes `--host` or `--port`, making env overrides ineffective.
+
+### 6. Tests Required
+
+- Env precedence test with YAML and `TAGMEMORAG__SERVER__PORT`.
+- Trace test for generated and preserved `X-Trace-Id`.
+- Probe tests for not-ready, loaded-ready, and shutdown states.
+- CLI serve test proving `--config` host/port reaches `uvicorn.run`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+uvicorn.run("tagmemorag.api:app", host=args.host, port=args.port)
+```
+
+This imports the API module with import-time defaults and ignores a custom config path for application state.
+
+#### Correct
+
+```python
+from . import api
+
+api.settings = cfg
+uvicorn.run(api.app, host=args.host or cfg.server.host, port=args.port or cfg.server.port)
+```

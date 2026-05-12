@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/backend/index.md", "reason": "Verify the change against the backend pre-development checklist and core project rules."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that implementation respects layer boundaries and approved file/module ownership."}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check storage abstractions, atomic persistence, schema metadata, and avoidance of pickle or out-of-scope databases."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check all known service failures return stable {code, message, detail} errors."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check search and rebuild paths preserve useful logging fields without leaking sensitive text."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check M0 test coverage, deterministic behavior, rebuild safety, and scope control."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review whether duplicated logic or scattered constants should be consolidated."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer data contracts for consistency between API, CLI, state, storage, and tests."}
