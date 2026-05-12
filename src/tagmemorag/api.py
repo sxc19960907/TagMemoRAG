@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
@@ -24,6 +24,8 @@ from .config import Settings, load_config
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
+from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
+from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .state import AppState, load_kb
 from .storage.json_anchor import JsonAnchorStore
@@ -44,6 +46,11 @@ async def lifespan(app: FastAPI):
     logger.info("service_starting", config_path="config.yaml")
     app.state.settings = settings
     app.state.app_state = app_state
+    configure_metrics(
+        enabled=settings.observability.metrics.enabled,
+        include_runtime=settings.observability.metrics.include_runtime,
+    )
+    configure_tracing(app, settings)
     if embedder is None:
         t0 = time.perf_counter()
         embedder = create_embedder(
@@ -70,6 +77,7 @@ async def lifespan(app: FastAPI):
         t0 = time.perf_counter()
         embedder.encode_query("warmup")
         app_state.mark_embedder_ready()
+        get_metrics().set_embedder_ready(True)
         logger.info("model_warmed_up", duration_ms=round((time.perf_counter() - t0) * 1000.0, 3))
     except Exception as exc:
         logger.error("model_warmup_failed", error_type=type(exc).__name__, error_message=str(exc))
@@ -80,6 +88,10 @@ async def lifespan(app: FastAPI):
         LRUTTLCache(settings.cache.max_entries, settings.cache.ttl_seconds) if settings.cache.enabled else None
     )
     _load_all_kbs(logger)
+    get_metrics().set_kbs_loaded(len(app_state.kbs))
+    if app_state.query_cache is not None:
+        get_metrics().set_cache_entries(len(app_state.query_cache))
+    get_metrics().record_startup_duration(time.perf_counter() - startup_t0)
     logger.info(
         "service_ready",
         kb_count=len(app_state.kbs),
@@ -161,7 +173,8 @@ def _load_all_kbs(logger) -> None:
         if not (kb_dir / "meta.json").exists():
             continue
         try:
-            loaded = load_kb(kb_dir.name, settings)
+            with start_span("tagmemorag.kb.load", **{"tagmemorag.kb_name": kb_dir.name}):
+                loaded = load_kb(kb_dir.name, settings)
             app_state.swap_kb(kb_dir.name, loaded)
             loaded_any = True
             logger.info(
@@ -174,7 +187,8 @@ def _load_all_kbs(logger) -> None:
             logger.warning("kb_load_failed", kb_name=kb_dir.name, code=exc.code.value, message=exc.message)
     if not loaded_any:
         try:
-            loaded = load_kb("default", settings)
+            with start_span("tagmemorag.kb.load", **{"tagmemorag.kb_name": "default"}):
+                loaded = load_kb("default", settings)
             app_state.swap_kb("default", loaded)
             logger.info("kb_loaded", kb_name=loaded.kb_name, build_id=loaded.build_id)
         except KbNotLoadedError:
@@ -232,6 +246,30 @@ async def trace_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    metrics_path = settings.observability.metrics.path
+    if settings.observability.metrics.enabled and request.url.path == metrics_path:
+        return _metrics_response()
+    if not settings.observability.metrics.enabled:
+        return await call_next(request)
+    t0 = time.perf_counter()
+    status_code = "500"
+    route = request.url.path
+    try:
+        response = await call_next(request)
+        status_code = str(response.status_code)
+        route = _route_template(request)
+        return response
+    finally:
+        get_metrics().record_http_request(
+            method=request.method,
+            route=route,
+            status_code=status_code,
+            duration=time.perf_counter() - t0,
+        )
+
+
+@app.middleware("http")
 async def rate_limit_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     result = getattr(request.state, "rate_limit", None)
@@ -244,8 +282,18 @@ async def rate_limit_headers_middleware(request: Request, call_next):
     return response
 
 
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    return str(getattr(route, "path", request.url.path))
+
+
 @app.exception_handler(ServiceError)
 async def service_error_handler(request: Request, exc: ServiceError):
+    get_metrics().record_http_error(
+        route=_route_template(request),
+        status_code=_status_for(exc.code),
+        error_code=exc.code.value,
+    )
     structlog.get_logger().warning(
         "request_error",
         code=exc.code.value,
@@ -257,6 +305,11 @@ async def service_error_handler(request: Request, exc: ServiceError):
 
 @app.exception_handler(Exception)
 async def unexpected_error_handler(request: Request, exc: Exception):
+    get_metrics().record_http_error(
+        route=_route_template(request),
+        status_code=500,
+        error_code=ErrorCode.INTERNAL.value,
+    )
     structlog.get_logger().error(
         "request_error",
         code=ErrorCode.INTERNAL.value,
@@ -287,6 +340,20 @@ def ready():
     return PlainTextResponse("ok", status_code=200)
 
 
+@app.get("/metrics", include_in_schema=False)
+def metrics_endpoint():
+    if not settings.observability.metrics.enabled:
+        return PlainTextResponse("metrics disabled", status_code=404)
+    if settings.observability.metrics.path != "/metrics":
+        return PlainTextResponse("metrics not found", status_code=404)
+    return _metrics_response()
+
+
+def _metrics_response() -> Response:
+    body, content_type = metrics_response_bytes()
+    return Response(content=body, media_type=content_type)
+
+
 @app.post("/search")
 def search(
     request: SearchRequest,
@@ -297,25 +364,75 @@ def search(
     ensure_kb_access(api_key, request.kb_name)
     state = app_state.get_current(request.kb_name)
     t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        search_span = start_span("tagmemorag.search", **span_attrs)
+        with search_span:
+            return _search_impl(request, http_request, state, t0)
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=request.kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
+def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
+    cache_status = "disabled"
     cache_key = _compute_cache_key(request, state)
     cache = app_state.query_cache if settings.cache.enabled else None
-    cached = cache.get(cache_key) if cache is not None else None
+    with start_span("tagmemorag.search.cache", **{"tagmemorag.kb_name": state.kb_name}):
+        cached = cache.get(cache_key) if cache is not None else None
+        cache_status = "hit" if cached is not None else ("miss" if cache is not None else "disabled")
+        set_span_attributes(**{"tagmemorag.cache_status": cache_status})
+    get_metrics().record_cache_operation(operation="get", outcome=cache_status)
     if cached is not None:
         search_time_ms = (time.perf_counter() - t0) * 1000.0
         trace_id = str(getattr(http_request.state, "trace_id", ""))
         payload = {**cached, "trace_id": trace_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
+        result_count = len(payload.get("results", []))
+        get_metrics().record_search(
+            kb_name=state.kb_name,
+            cache_status="hit",
+            outcome="success",
+            duration=time.perf_counter() - t0,
+            result_count=result_count,
+        )
+        set_span_attributes(
+            **{
+                "tagmemorag.cache_status": "hit",
+                "tagmemorag.result_count": result_count,
+            }
+        )
         structlog.get_logger().info(
             "search",
             kb_name=state.kb_name,
             build_id=state.build_id,
             query_len=len(request.question),
             top_k=request.top_k or settings.search.top_k,
-            result_count=len(payload.get("results", [])),
+            result_count=result_count,
             latency_ms=round(search_time_ms, 3),
             cache_status="hit",
         )
         return payload
-    query_vec = embedder.encode_query(request.question)
+    emb_t0 = time.perf_counter()
+    try:
+        with start_span("tagmemorag.search.embedding", **{"tagmemorag.kb_name": state.kb_name}):
+            query_vec = embedder.encode_query(request.question)
+        get_metrics().record_embedding(operation="query", outcome="success", duration=time.perf_counter() - emb_t0)
+    except Exception:
+        get_metrics().record_embedding(operation="query", outcome="error", duration=time.perf_counter() - emb_t0)
+        raise
     params = _search_param_values(request)
     aggregate = str(params["aggregate"])
     if aggregate not in {"max", "sum"}:
@@ -324,18 +441,19 @@ def search(
             "aggregate must be 'max' or 'sum'.",
             {"aggregate": aggregate},
         )
-    results = wave_search(
-        query_vec,
-        state.graph,
-        state.vectors,
-        state.anchors,
-        top_k=int(params["top_k"]),
-        source_k=int(params["source_k"]),
-        steps=int(params["steps"]),
-        decay=float(params["decay"]),
-        amplitude_cutoff=float(params["amplitude_cutoff"]),
-        aggregate=aggregate,  # type: ignore[arg-type]
-    )
+    with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
+        results = wave_search(
+            query_vec,
+            state.graph,
+            state.vectors,
+            state.anchors,
+            top_k=int(params["top_k"]),
+            source_k=int(params["source_k"]),
+            steps=int(params["steps"]),
+            decay=float(params["decay"]),
+            amplitude_cutoff=float(params["amplitude_cutoff"]),
+            aggregate=aggregate,  # type: ignore[arg-type]
+        )
     search_time_ms = (time.perf_counter() - t0) * 1000.0
     trace_id = str(getattr(http_request.state, "trace_id", ""))
     structlog.get_logger().info(
@@ -348,6 +466,19 @@ def search(
         latency_ms=round(search_time_ms, 3),
         cache_status="miss",
     )
+    get_metrics().record_search(
+        kb_name=state.kb_name,
+        cache_status=cache_status,
+        outcome="success",
+        duration=time.perf_counter() - t0,
+        result_count=len(results),
+    )
+    set_span_attributes(
+        **{
+            "tagmemorag.cache_status": cache_status,
+            "tagmemorag.result_count": len(results),
+        }
+    )
     payload = {
         "build_id": state.build_id,
         "kb_name": state.kb_name,
@@ -358,6 +489,8 @@ def search(
     }
     if cache is not None:
         cache.set(cache_key, {k: v for k, v in payload.items() if k not in {"trace_id", "search_time_ms", "cache"}}, kb_name=request.kb_name)
+        get_metrics().record_cache_operation(operation="set", outcome="success")
+        get_metrics().set_cache_entries(len(cache))
     return payload
 
 
@@ -461,8 +594,12 @@ def list_kbs(api_key: ApiKey = Depends(require_scope("search")), _: None = Depen
 
 @app.post("/admin/cache/clear")
 def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_scope("admin"))):
-    if app_state.query_cache is None:
-        return {"cleared_count": 0}
-    cleared = app_state.query_cache.clear(request.kb_name)
-    structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
-    return {"cleared_count": cleared}
+    with start_span("tagmemorag.cache.clear", **{"tagmemorag.kb_name": request.kb_name or "all"}):
+        if app_state.query_cache is None:
+            get_metrics().record_cache_operation(operation="clear", outcome="disabled")
+            return {"cleared_count": 0}
+        cleared = app_state.query_cache.clear(request.kb_name)
+        get_metrics().record_cache_operation(operation="clear", outcome="success")
+        get_metrics().set_cache_entries(len(app_state.query_cache))
+        structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
+        return {"cleared_count": cleared}

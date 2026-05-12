@@ -74,7 +74,9 @@ class ApiKeyConfig(BaseModel):
 class AuthConfig(BaseModel):
     enabled: bool = False
     backend: Literal["config", "sqlite"] = "config"
-    public_paths: list[str] = Field(default_factory=lambda: ["/health", "/ready", "/docs", "/redoc", "/openapi.json"])
+    public_paths: list[str] = Field(
+        default_factory=lambda: ["/health", "/ready", "/metrics", "/docs", "/redoc", "/openapi.json"]
+    )
     global_max_rate_limit_per_minute: int = 1000
     keys: list[ApiKeyConfig] = Field(default_factory=list)
 
@@ -89,6 +91,25 @@ class CacheConfig(BaseModel):
     enabled: bool = True
     max_entries: int = 10000
     ttl_seconds: int = 3600
+
+
+class MetricsConfig(BaseModel):
+    enabled: bool = True
+    path: str = "/metrics"
+    include_runtime: bool = True
+
+
+class TracingConfig(BaseModel):
+    enabled: bool = False
+    service_name: str = "tagmemorag"
+    otlp_endpoint: str | None = None
+    sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
+    export_timeout_seconds: float = 5.0
+
+
+class ObservabilityConfig(BaseModel):
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    tracing: TracingConfig = Field(default_factory=TracingConfig)
 
 
 class Settings(BaseSettings):
@@ -110,6 +131,7 @@ class Settings(BaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
+    observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod
     def settings_customise_sources(

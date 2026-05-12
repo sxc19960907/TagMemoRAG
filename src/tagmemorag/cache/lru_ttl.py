@@ -48,3 +48,7 @@ class LRUTTLCache(QueryCache):
             for key in keys:
                 self._data.pop(key, None)
             return len(keys)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)

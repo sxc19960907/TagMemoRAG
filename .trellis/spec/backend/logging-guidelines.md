@@ -70,6 +70,33 @@ M1 introduces JSON logs, `/health`, `/ready`, graceful shutdown, and model warm-
 
 M4 introduces Prometheus metrics and OTel hook points. M0 should keep function boundaries clean enough that these can wrap search/build calls without rewriting the algorithm.
 
+## M4 Metrics and Tracing Contracts
+
+### 1. Scope / Trigger
+
+- Trigger: Prometheus `/metrics`, OpenTelemetry tracing, and business telemetry around search, cache, rate-limit, rebuild, KB load/build, and embedding.
+
+### 2. Config Contract
+
+- Config lives under `observability.metrics.*` and `observability.tracing.*`.
+- Env keys use existing nesting, for example `TAGMEMORAG__OBSERVABILITY__METRICS__ENABLED=false`.
+- Metrics default to enabled at `/metrics`; tracing defaults to disabled.
+- `/metrics` belongs in default `auth.public_paths` so Prometheus can scrape authenticated deployments unless an operator explicitly changes the public path list.
+
+### 3. Metrics Contract
+
+- Custom metric names start with `tagmemorag_`.
+- Allowed labels are only `method`, `route`, `status_code`, `kb_name`, `cache_status`, `error_code`, `operation`, and `outcome`.
+- Never use raw query text, trace IDs, task IDs, API key identifiers or hashes, build IDs, source paths, document text, exception messages, or vectors as metric labels.
+- Metrics recording helpers must not raise into the request or rebuild path.
+
+### 4. Trace Contract
+
+- Tracing setup must be idempotent and safe when no collector/exporter is configured.
+- Business span names use the `tagmemorag.*` prefix, including `tagmemorag.search`, `tagmemorag.search.cache`, `tagmemorag.search.embedding`, `tagmemorag.search.wave`, `tagmemorag.rebuild`, `tagmemorag.kb.load`, `tagmemorag.kb.build`, and `tagmemorag.cache.clear`.
+- Span attributes use low-sensitive `tagmemorag.*` fields such as `tagmemorag.kb_name`, `tagmemorag.build_id`, `tagmemorag.cache_status`, `tagmemorag.query_len`, `tagmemorag.result_count`, `tagmemorag.error_code`, and `tagmemorag.x_trace_id`.
+- Do not put raw questions, document text, API keys, or embedding vectors in span attributes.
+
 ## M1 Observability Contracts
 
 ### 1. Scope / Trigger

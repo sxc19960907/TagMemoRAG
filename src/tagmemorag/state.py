@@ -15,6 +15,8 @@ from .config import Settings
 from .embedder import create_embedder
 from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
+from .observability.metrics import get_metrics
+from .observability.tracing import set_span_attributes, start_span
 from .parser import parse_document
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
@@ -106,6 +108,7 @@ class AppState:
     def start_rebuild(self, docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None) -> RebuildTask:
         with self._lock:
             if self.is_shutting_down:
+                get_metrics().record_rebuild_rejected(kb_name=kb_name)
                 raise ShuttingDownError()
         rebuild_lock = self.lock_for(kb_name)
         if not rebuild_lock.acquire(blocking=False):
@@ -113,10 +116,13 @@ class AppState:
                 (task.task_id for task in self.rebuild_tasks.values() if task.status == "running" and task.kb_name == kb_name),
                 None,
             )
+            get_metrics().record_rebuild_rejected(kb_name=kb_name)
             raise RebuildInProgressError(running)
         task_id = str(uuid.uuid4())
         task = RebuildTask(task_id=task_id, status="running", kb_name=kb_name, started_at=_now())
         self.rebuild_tasks[task_id] = task
+        get_metrics().record_rebuild_started(kb_name=kb_name)
+        get_metrics().set_rebuild_in_progress(kb_name=kb_name, value=1)
         structlog.get_logger().info("rebuild_started", task_id=task_id, docs_dir=str(docs_dir), kb_name=kb_name)
         thread = threading.Thread(target=self._rebuild_worker, args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock), daemon=True)
         thread.start()
@@ -134,22 +140,35 @@ class AppState:
         t0 = time.perf_counter()
         try:
             old_state = self.kbs.get(kb_name)
-            new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
-            save_kb(new_state, cfg)
-            self.swap_kb(kb_name, new_state)
-            task.status = "done"
-            task.build_id = new_state.build_id
-            structlog.get_logger().info(
-                "rebuild_done",
-                task_id=task.task_id,
-                kb_name=kb_name,
-                build_id=new_state.build_id,
-                duration_ms=round((time.perf_counter() - t0) * 1000.0, 3),
-                chunk_count=new_state.graph.number_of_nodes(),
-            )
+            with start_span(
+                "tagmemorag.rebuild",
+                **{"tagmemorag.kb_name": kb_name, "tagmemorag.x_trace_id": task.task_id},
+            ):
+                new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
+                save_kb(new_state, cfg)
+                self.swap_kb(kb_name, new_state)
+                task.status = "done"
+                task.build_id = new_state.build_id
+                set_span_attributes(
+                    **{
+                        "tagmemorag.build_id": new_state.build_id,
+                        "tagmemorag.rebuild.task_status": task.status,
+                    }
+                )
+                get_metrics().record_rebuild_done(kb_name=kb_name, duration=time.perf_counter() - t0)
+                get_metrics().set_kbs_loaded(len(self.kbs))
+                structlog.get_logger().info(
+                    "rebuild_done",
+                    task_id=task.task_id,
+                    kb_name=kb_name,
+                    build_id=new_state.build_id,
+                    duration_ms=round((time.perf_counter() - t0) * 1000.0, 3),
+                    chunk_count=new_state.graph.number_of_nodes(),
+                )
         except Exception as exc:
             task.status = "failed"
             task.error = {"type": type(exc).__name__, "message": str(exc)}
+            get_metrics().record_rebuild_failed(kb_name=kb_name, duration=time.perf_counter() - t0)
             structlog.get_logger().error(
                 "rebuild_failed",
                 task_id=task.task_id,
@@ -159,61 +178,70 @@ class AppState:
             )
         finally:
             task.finished_at = _now()
+            get_metrics().set_rebuild_in_progress(kb_name=kb_name, value=0)
             rebuild_lock.release()
 
 
 def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, old_state: GraphState | None = None) -> GraphState:
-    docs_root = Path(docs_dir)
-    if not docs_root.exists():
-        raise RebuildFailedError({"reason": "docs_dir does not exist", "docs_dir": str(docs_root)})
-    embedder = embedder or create_embedder(
-        cfg.model.name,
-        cfg.model.device,
-        cfg.model.batch_size,
-        cfg.model.dim,
-        provider=cfg.model.provider,
-        base_url=cfg.model.base_url,
-        embeddings_url=cfg.model.embeddings_url,
-        api_key_env=cfg.model.api_key_env,
-        timeout_seconds=cfg.model.timeout_seconds,
-        dimensions=cfg.model.dimensions,
-        normalize=cfg.model.normalize,
-    )
-    chunks = []
-    for path in sorted([*docs_root.rglob("*.md"), *docs_root.rglob("*.txt")]):
-        chunks.extend(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root))
-    texts = [chunk.text for chunk in chunks]
-    vectors = embedder.encode_batch(texts) if texts else np.zeros((0, cfg.model.dim), dtype=np.float32)
-    graph = build_graph(chunks, vectors, cfg.graph)
-    anchor_store = _anchor_store(kb_name, cfg)
-    old_anchors, stored_anchor_version = anchor_store.load_with_version()
-    if old_state:
-        by_key = {anchor.anchor_key: anchor for anchor in old_anchors}
-        for anchor in old_state.anchors.values():
-            by_key.setdefault(anchor.anchor_key, anchor)
-        old_anchors = list(by_key.values())
-    remapped, unresolved = anchor_store.reconcile(old_anchors, graph, vectors, embedder)
-    anchors = {anchor.node_id: anchor for anchor in remapped if anchor.node_id is not None}
-    build_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-    meta = {
-        "schema_version": cfg.storage.schema_version,
-        "model_name": getattr(embedder, "model_name", cfg.model.name),
-        "model_dim": int(vectors.shape[1]) if vectors.ndim == 2 and vectors.shape[1] else cfg.model.dim,
-        "built_at": _now(),
-        "chunk_count": len(chunks),
-        "aggregate_default": cfg.search.aggregate,
-    }
-    anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
-    return GraphState(
-        graph=graph,
-        vectors=vectors,
-        anchors=anchors,
-        build_id=build_id,
-        kb_name=kb_name,
-        meta=meta,
-        unresolved_anchors=unresolved,
-        anchors_version=anchors_version,
-    )
+    with start_span("tagmemorag.kb.build", **{"tagmemorag.kb_name": kb_name}):
+        docs_root = Path(docs_dir)
+        if not docs_root.exists():
+            raise RebuildFailedError({"reason": "docs_dir does not exist", "docs_dir": str(docs_root)})
+        embedder = embedder or create_embedder(
+            cfg.model.name,
+            cfg.model.device,
+            cfg.model.batch_size,
+            cfg.model.dim,
+            provider=cfg.model.provider,
+            base_url=cfg.model.base_url,
+            embeddings_url=cfg.model.embeddings_url,
+            api_key_env=cfg.model.api_key_env,
+            timeout_seconds=cfg.model.timeout_seconds,
+            dimensions=cfg.model.dimensions,
+            normalize=cfg.model.normalize,
+        )
+        chunks = []
+        for path in sorted([*docs_root.rglob("*.md"), *docs_root.rglob("*.txt")]):
+            chunks.extend(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root))
+        texts = [chunk.text for chunk in chunks]
+        emb_t0 = time.perf_counter()
+        try:
+            vectors = embedder.encode_batch(texts) if texts else np.zeros((0, cfg.model.dim), dtype=np.float32)
+            get_metrics().record_embedding(operation="batch", outcome="success", duration=time.perf_counter() - emb_t0)
+        except Exception:
+            get_metrics().record_embedding(operation="batch", outcome="error", duration=time.perf_counter() - emb_t0)
+            raise
+        graph = build_graph(chunks, vectors, cfg.graph)
+        anchor_store = _anchor_store(kb_name, cfg)
+        old_anchors, stored_anchor_version = anchor_store.load_with_version()
+        if old_state:
+            by_key = {anchor.anchor_key: anchor for anchor in old_anchors}
+            for anchor in old_state.anchors.values():
+                by_key.setdefault(anchor.anchor_key, anchor)
+            old_anchors = list(by_key.values())
+        remapped, unresolved = anchor_store.reconcile(old_anchors, graph, vectors, embedder)
+        anchors = {anchor.node_id: anchor for anchor in remapped if anchor.node_id is not None}
+        build_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        meta = {
+            "schema_version": cfg.storage.schema_version,
+            "model_name": getattr(embedder, "model_name", cfg.model.name),
+            "model_dim": int(vectors.shape[1]) if vectors.ndim == 2 and vectors.shape[1] else cfg.model.dim,
+            "built_at": _now(),
+            "chunk_count": len(chunks),
+            "aggregate_default": cfg.search.aggregate,
+        }
+        anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
+        set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
+        return GraphState(
+            graph=graph,
+            vectors=vectors,
+            anchors=anchors,
+            build_id=build_id,
+            kb_name=kb_name,
+            meta=meta,
+            unresolved_anchors=unresolved,
+            anchors_version=anchors_version,
+        )
 
 
 def save_kb(state: GraphState, cfg: Settings) -> None:

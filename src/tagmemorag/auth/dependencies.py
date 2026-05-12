@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from structlog.contextvars import bind_contextvars
 
 from tagmemorag.errors import ForbiddenError, RateLimitedError, UnauthorizedError
+from tagmemorag.observability.metrics import get_metrics
 
 from .base import ApiKey, anonymous_key
 
@@ -64,5 +65,6 @@ def rate_limit_dep(request: Request, api_key: ApiKey = Depends(require_key)) -> 
     limit = min(configured, settings.auth.global_max_rate_limit_per_minute)
     result = limiter.check_and_incr(api_key.id, limit)
     request.state.rate_limit = result
+    get_metrics().record_rate_limit(outcome="allowed" if result.allowed else "limited")
     if not result.allowed:
         raise RateLimitedError({"limit": result.limit, "retry_after_seconds": result.retry_after_seconds})

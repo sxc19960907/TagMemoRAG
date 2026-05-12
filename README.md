@@ -90,7 +90,7 @@ curl -X POST http://127.0.0.1:8000/search \
   -d '{"question":"蒸汽很小","kb_name":"product-a"}'
 ```
 
-Missing or invalid credentials return `401 UNAUTHORIZED`; valid keys without the required scope or KB access return `403 FORBIDDEN`. `/health`, `/ready`, and API docs remain public by default.
+Missing or invalid credentials return `401 UNAUTHORIZED`; valid keys without the required scope or KB access return `403 FORBIDDEN`. `/health`, `/ready`, `/metrics`, and API docs remain public by default.
 
 ### Rate Limiting
 
@@ -189,6 +189,18 @@ cache:
   enabled: true
   max_entries: 10000
   ttl_seconds: 3600
+
+observability:
+  metrics:
+    enabled: true
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    service_name: tagmemorag
+    otlp_endpoint:
+    sample_ratio: 1.0
+    export_timeout_seconds: 5
 ```
 
 Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix and double underscores for nested fields:
@@ -201,6 +213,8 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 | `TAGMEMORAG__STORAGE__DATA_DIR` | `/app/data` |
 | `TAGMEMORAG__AUTH__ENABLED` | `true` |
 | `TAGMEMORAG__CACHE__MAX_ENTRIES` | `20000` |
+| `TAGMEMORAG__OBSERVABILITY__TRACING__ENABLED` | `true` |
+| `TAGMEMORAG__OBSERVABILITY__TRACING__OTLP_ENDPOINT` | `http://otel-collector:4317` |
 
 ### HTTP Embedding Providers
 
@@ -226,6 +240,45 @@ export SILICONFLOW_API_KEY=...
 ```
 
 The HTTP backend sends `POST {base_url}/embeddings` with `{model, input, encoding_format: "float"}`. If your provider exposes a full custom endpoint, set `model.embeddings_url` instead of `base_url`.
+
+## Observability
+
+Prometheus metrics are enabled by default:
+
+```bash
+curl http://127.0.0.1:8000/metrics | grep tagmemorag
+```
+
+Example scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: tagmemorag
+    static_configs:
+      - targets: ["tagmemorag:8000"]
+```
+
+Custom metrics include HTTP request volume/latency, search cache hit/miss, result counts, cache operations, rate-limit decisions, rebuild lifecycle, loaded KB count, embedder readiness, and embedding latency/failures. Labels are intentionally low-cardinality: route template, method, status code, `kb_name`, cache status, operation, outcome, and stable error code. Metrics never label raw query text, trace IDs, task IDs, API keys, document paths/text, or vectors.
+
+Useful PromQL examples:
+
+```promql
+sum(rate(tagmemorag_search_requests_total[5m])) by (kb_name, cache_status, outcome)
+histogram_quantile(0.95, sum(rate(tagmemorag_search_duration_seconds_bucket[5m])) by (le, kb_name))
+sum(rate(tagmemorag_rate_limit_checks_total{outcome="limited"}[5m]))
+tagmemorag_rebuilds_in_progress
+tagmemorag_embedder_ready
+```
+
+OpenTelemetry tracing is disabled by default. Enable it with an OTLP collector:
+
+```bash
+export TAGMEMORAG__OBSERVABILITY__TRACING__ENABLED=true
+export TAGMEMORAG__OBSERVABILITY__TRACING__OTLP_ENDPOINT=http://otel-collector:4317
+export TAGMEMORAG__OBSERVABILITY__TRACING__SAMPLE_RATIO=0.1
+```
+
+HTTP requests get automatic FastAPI spans when tracing is enabled. Business spans cover search cache lookup, query embedding, WAVE search, rebuild, KB load/build, and cache clear. `X-Trace-Id` is still returned in every API response and appears in logs as `trace_id`; traces include it as `tagmemorag.x_trace_id` so logs, API responses, and distributed traces can be correlated.
 
 ## Quality Eval
 

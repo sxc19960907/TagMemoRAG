@@ -49,6 +49,22 @@ def test_m2_env_overrides(tmp_path, monkeypatch):
     assert cfg.rate_limit.default_per_minute == 120
 
 
+def test_m4_observability_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__OBSERVABILITY__METRICS__ENABLED", "false")
+    monkeypatch.setenv("TAGMEMORAG__OBSERVABILITY__TRACING__SAMPLE_RATIO", "0.25")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.observability.metrics.enabled is False
+    assert cfg.observability.tracing.sample_ratio == 0.25
+
+
+def test_metrics_public_by_default():
+    cfg = load_config("missing.yaml")
+
+    assert "/metrics" in cfg.auth.public_paths
+
+
 def test_yaml_fallback(tmp_path, monkeypatch):
     monkeypatch.delenv("TAGMEMORAG__SERVER__PORT", raising=False)
     config = tmp_path / "config.yaml"
