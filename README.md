@@ -2,7 +2,7 @@
 
 A production-grade semantic retrieval engine for product manuals, built on the **WAVE-RAG** algorithm: knowledge chunks are organized into a semantic topology graph, and user queries propagate as waves along graph edges — interference peaks become the top-K results.
 
-> **M0 scope note**: `kb_name` is reserved in the API/CLI but only `"default"` is supported. Multi-KB isolation lands in M2; passing any other value returns `404 KB_NOT_LOADED`.
+`kb_name` selects an isolated knowledge base under `data/{kb_name}/`. API keys can be scoped to one or more KBs.
 
 ## Install
 
@@ -57,6 +57,7 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 ```
 
 Response includes `build_id`, `search_time_ms`, and a `results` array — each result has `node_id / score / text / header / path / source_file / anchor_key`.
+The response also includes `cache: "hit" | "miss"`.
 
 ### `POST /rebuild`
 
@@ -75,6 +76,55 @@ Anchors survive rebuilds via stable `anchor_key` (sha256 of path+header+text pre
 ### `GET /graph_info`
 
 Returns node/edge counts, `build_id`, `meta`, and any `unresolved_anchors`.
+
+### Authentication
+
+Enable API key auth in `config.yaml` and send keys as Bearer tokens:
+
+```bash
+python -m tagmemorag auth generate-key --id cs-a --scopes search --kb product-a --rate 200
+
+curl -X POST http://127.0.0.1:8000/search \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"question":"蒸汽很小","kb_name":"product-a"}'
+```
+
+Missing or invalid credentials return `401 UNAUTHORIZED`; valid keys without the required scope or KB access return `403 FORBIDDEN`. `/health`, `/ready`, and API docs remain public by default.
+
+### Rate Limiting
+
+Rate limits are enforced per API key in process memory. Responses include:
+
+```text
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
+```
+
+Exceeded limits return `429 RATE_LIMITED` with `Retry-After`.
+
+### Multi-KB
+
+Build multiple KBs by using different `--kb` names:
+
+```bash
+python -m tagmemorag build --docs docs/product-a --kb product-a
+python -m tagmemorag build --docs docs/product-b --kb product-b
+```
+
+`GET /kb` lists the KBs visible to the current API key, including `build_id`, `node_count`, `anchors_version`, and `status`.
+
+### Query Cache
+
+`/search` uses an in-memory LRU+TTL cache when `cache.enabled=true`. The cache key includes `kb_name`, `build_id`, `anchors_version`, normalized question text, and all search parameters, so rebuilds and anchor edits naturally miss stale entries. Admins can clear it:
+
+```bash
+curl -X POST http://127.0.0.1:8000/admin/cache/clear \
+  -H "Authorization: Bearer tmr_live_admin..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"product-a"}'
+```
 
 ## Configuration
 
@@ -116,6 +166,29 @@ server:
 logging:
   level: INFO
   format: json        # json | console
+
+auth:
+  enabled: false
+  backend: config
+  public_paths: [/health, /ready, /docs, /redoc, /openapi.json]
+  global_max_rate_limit_per_minute: 1000
+  keys:
+    - id: cs-a
+      hash: sha256:...
+      label: Customer service A
+      kb_allowlist: [product-a]
+      scopes: [search]
+      rate_limit_per_minute: 200
+
+rate_limit:
+  enabled: true
+  default_per_minute: 60
+  window_seconds: 60
+
+cache:
+  enabled: true
+  max_entries: 10000
+  ttl_seconds: 3600
 ```
 
 Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix and double underscores for nested fields:
@@ -126,6 +199,8 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 | `TAGMEMORAG__LOGGING__LEVEL` | `DEBUG` |
 | `TAGMEMORAG__MODEL__NAME` | `BAAI/bge-small-zh-v1.5` |
 | `TAGMEMORAG__STORAGE__DATA_DIR` | `/app/data` |
+| `TAGMEMORAG__AUTH__ENABLED` | `true` |
+| `TAGMEMORAG__CACHE__MAX_ENTRIES` | `20000` |
 
 ### HTTP Embedding Providers
 
@@ -151,6 +226,37 @@ export SILICONFLOW_API_KEY=...
 ```
 
 The HTTP backend sends `POST {base_url}/embeddings` with `{model, input, encoding_format: "float"}`. If your provider exposes a full custom endpoint, set `model.embeddings_url` instead of `base_url`.
+
+## Quality Eval
+
+Run the offline retrieval regression suite with the deterministic hashing embedder:
+
+```bash
+uv run tagmemorag eval run \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --config config.yaml \
+  --output .tmp/eval-report.json \
+  --eval-data-dir .tmp/eval/coffee
+```
+
+For CI, use a config whose model provider is `hashing` so the gate does not download a model or call the network:
+
+```yaml
+model:
+  provider: hashing
+  dim: 64
+```
+
+By default, docs-based eval builds into `--eval-data-dir` and leaves normal `storage.data_dir` untouched. Use `--reuse-built-kb` only when you intentionally want to evaluate an already persisted KB.
+
+Eval suites are JSONL: one query case per line. Each case names the KB, query, and one or more expected relevant chunks:
+
+```json
+{"id":"coffee-steam-weak","kb_name":"default","query":"蒸汽很小怎么办","relevant":[{"source_file":"coffee_machine.md","header":"蒸汽功能","text_contains":["蒸汽很小","喷嘴"]}]}
+```
+
+Expected results can match by `source_file`, `header`, `anchor_key`, and `text_contains`; all supplied fields must match. The report includes per-case `precision_at_k`, `recall_at_k`, `mrr`, `hit_at_k`, expected references, and actual top-k results. Default gate thresholds apply to `recall_at_k`, `mrr`, and `hit_at_k`; `precision_at_k` is reported and only becomes a hard gate when `--min-precision-at-k` is set.
 
 ## Docker Deployment
 

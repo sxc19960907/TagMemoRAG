@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Load backend project rules before implementing M3 eval modules and CLI integration."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "M3 adds a new eval package and tests; module boundaries should follow backend structure conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "M3 is primarily a quality gate; implementation must emphasize deterministic tests and regression coverage."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Eval CLI loader and runner errors should be clear, structured, and testable without breaking API error contracts."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M3 data flow crosses fixtures, config, CLI, build/load state, wave search, and reports."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing build_kb/load_kb/wave_search/Result contracts rather than duplicating retrieval logic."}
+{"file": ".trellis/tasks/archive/2026-05/05-10-wave-rag-implementation/prd.md", "reason": "Use original roadmap and M0 quality NFRs for precision@k/MRR thresholds and eval scope."}
+{"file": ".trellis/tasks/05-12-m2-security-multikb-cache/prd.md", "reason": "M3 should respect M2 multi-KB behavior while keeping default eval offline and independent of auth/cache/rate-limit."}

@@ -2,23 +2,32 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+import hashlib
 import sys
 import time
 import uuid
 
-from fastapi import FastAPI, Request
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from .anchor import AnchorSystem
+from .auth.base import ApiKey
+from .auth.config_store import ConfigAuthStore
+from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
+from .cache.lru_ttl import LRUTTLCache
 from .config import Settings, load_config
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
+from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .state import AppState, load_kb
 from .storage.json_anchor import JsonAnchorStore
+from .types import GraphState
 from .wave_searcher import wave_search
 
 settings = load_config()
@@ -33,6 +42,8 @@ async def lifespan(app: FastAPI):
     logger = structlog.get_logger()
     startup_t0 = time.perf_counter()
     logger.info("service_starting", config_path="config.yaml")
+    app.state.settings = settings
+    app.state.app_state = app_state
     if embedder is None:
         t0 = time.perf_counter()
         embedder = create_embedder(
@@ -63,18 +74,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("model_warmup_failed", error_type=type(exc).__name__, error_message=str(exc))
         sys.exit(1)
-    try:
-        loaded = load_kb("default", settings)
-        app_state.swap(loaded)
-        logger.info(
-            "kb_loaded",
-            kb_name=loaded.kb_name,
-            build_id=loaded.build_id,
-            node_count=loaded.graph.number_of_nodes(),
-        )
-    except KbNotLoadedError:
-        logger.warning("kb_load_skipped", kb_name="default")
-    logger.info("service_ready", startup_duration_ms=round((time.perf_counter() - startup_t0) * 1000.0, 3))
+    app_state.auth_store = ConfigAuthStore.from_config(settings.auth)
+    app_state.rate_limiter = InMemorySlidingWindowStore(settings.rate_limit.window_seconds)
+    app_state.query_cache = (
+        LRUTTLCache(settings.cache.max_entries, settings.cache.ttl_seconds) if settings.cache.enabled else None
+    )
+    _load_all_kbs(logger)
+    logger.info(
+        "service_ready",
+        kb_count=len(app_state.kbs),
+        startup_duration_ms=round((time.perf_counter() - startup_t0) * 1000.0, 3),
+    )
     try:
         yield
     finally:
@@ -82,8 +92,10 @@ async def lifespan(app: FastAPI):
         logger.info("shutdown_started")
         app_state.begin_shutdown()
         drain_t0 = time.perf_counter()
-        await asyncio.to_thread(app_state._rebuild_lock.acquire)
-        app_state._rebuild_lock.release()
+        for kb_name in app_state.list_kbs():
+            lock = app_state.lock_for(kb_name)
+            await asyncio.to_thread(lock.acquire)
+            lock.release()
         logger.info("rebuild_drained", wait_ms=round((time.perf_counter() - drain_t0) * 1000.0, 3))
         logger.info("shutdown_complete", total_ms=round((time.perf_counter() - shutdown_t0) * 1000.0, 3))
 
@@ -115,6 +127,10 @@ class AnchorRequest(BaseModel):
     kb_name: str = "default"
 
 
+class CacheClearRequest(BaseModel):
+    kb_name: str | None = None
+
+
 def _status_for(code: ErrorCode) -> int:
     return {
         ErrorCode.KB_NOT_LOADED: 404,
@@ -128,12 +144,81 @@ def _status_for(code: ErrorCode) -> int:
         ErrorCode.REBUILD_FAILED: 500,
         ErrorCode.SHUTTING_DOWN: 503,
         ErrorCode.EMBEDDING_FAILED: 502,
+        ErrorCode.UNAUTHORIZED: 401,
+        ErrorCode.FORBIDDEN: 403,
+        ErrorCode.RATE_LIMITED: 429,
         ErrorCode.INTERNAL: 500,
     }.get(code, 500)
 
 
+def _load_all_kbs(logger) -> None:
+    root = Path(settings.storage.data_dir)
+    if not root.exists():
+        logger.warning("kb_load_skipped", kb_name="default")
+        return
+    loaded_any = False
+    for kb_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        if not (kb_dir / "meta.json").exists():
+            continue
+        try:
+            loaded = load_kb(kb_dir.name, settings)
+            app_state.swap_kb(kb_dir.name, loaded)
+            loaded_any = True
+            logger.info(
+                "kb_loaded",
+                kb_name=loaded.kb_name,
+                build_id=loaded.build_id,
+                node_count=loaded.graph.number_of_nodes(),
+            )
+        except ServiceError as exc:
+            logger.warning("kb_load_failed", kb_name=kb_dir.name, code=exc.code.value, message=exc.message)
+    if not loaded_any:
+        try:
+            loaded = load_kb("default", settings)
+            app_state.swap_kb("default", loaded)
+            logger.info("kb_loaded", kb_name=loaded.kb_name, build_id=loaded.build_id)
+        except KbNotLoadedError:
+            logger.warning("kb_load_skipped", kb_name="default")
+
+
+def _normalize_question(question: str) -> str:
+    return " ".join(question.strip().split())
+
+
+def _search_param_values(request: SearchRequest) -> dict[str, object]:
+    return {
+        "top_k": request.top_k or settings.search.top_k,
+        "source_k": request.source_k or settings.search.source_k,
+        "steps": request.steps if request.steps is not None else settings.search.steps,
+        "decay": request.decay if request.decay is not None else settings.search.decay,
+        "amplitude_cutoff": request.amplitude_cutoff
+        if request.amplitude_cutoff is not None
+        else settings.search.amplitude_cutoff,
+        "aggregate": request.aggregate or settings.search.aggregate,
+    }
+
+
+def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
+    params = _search_param_values(request)
+    parts = [
+        request.kb_name,
+        state.build_id,
+        str(state.anchors_version),
+        _normalize_question(request.question),
+        str(params["top_k"]),
+        str(params["source_k"]),
+        str(params["steps"]),
+        str(params["decay"]),
+        str(params["amplitude_cutoff"]),
+        str(params["aggregate"]),
+    ]
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
 @app.middleware("http")
 async def trace_middleware(request: Request, call_next):
+    request.app.state.settings = settings
+    request.app.state.app_state = app_state
     trace_id = request.headers.get("X-Trace-Id") or str(uuid.uuid4())
     request.state.trace_id = trace_id
     clear_contextvars()
@@ -144,6 +229,19 @@ async def trace_middleware(request: Request, call_next):
         return response
     finally:
         clear_contextvars()
+
+
+@app.middleware("http")
+async def rate_limit_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    result = getattr(request.state, "rate_limit", None)
+    if result is not None:
+        response.headers["X-RateLimit-Limit"] = str(result.limit)
+        response.headers["X-RateLimit-Remaining"] = str(result.remaining)
+        response.headers["X-RateLimit-Reset"] = str(result.reset_epoch)
+        if not result.allowed:
+            response.headers["Retry-After"] = str(result.retry_after_seconds)
+    return response
 
 
 @app.exception_handler(ServiceError)
@@ -190,11 +288,36 @@ def ready():
 
 
 @app.post("/search")
-def search(request: SearchRequest, http_request: Request):
+def search(
+    request: SearchRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
     state = app_state.get_current(request.kb_name)
     t0 = time.perf_counter()
+    cache_key = _compute_cache_key(request, state)
+    cache = app_state.query_cache if settings.cache.enabled else None
+    cached = cache.get(cache_key) if cache is not None else None
+    if cached is not None:
+        search_time_ms = (time.perf_counter() - t0) * 1000.0
+        trace_id = str(getattr(http_request.state, "trace_id", ""))
+        payload = {**cached, "trace_id": trace_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
+        structlog.get_logger().info(
+            "search",
+            kb_name=state.kb_name,
+            build_id=state.build_id,
+            query_len=len(request.question),
+            top_k=request.top_k or settings.search.top_k,
+            result_count=len(payload.get("results", [])),
+            latency_ms=round(search_time_ms, 3),
+            cache_status="hit",
+        )
+        return payload
     query_vec = embedder.encode_query(request.question)
-    aggregate = request.aggregate or settings.search.aggregate
+    params = _search_param_values(request)
+    aggregate = str(params["aggregate"])
     if aggregate not in {"max", "sum"}:
         raise ServiceError(
             ErrorCode.INVALID_INPUT,
@@ -206,13 +329,11 @@ def search(request: SearchRequest, http_request: Request):
         state.graph,
         state.vectors,
         state.anchors,
-        top_k=request.top_k or settings.search.top_k,
-        source_k=request.source_k or settings.search.source_k,
-        steps=request.steps if request.steps is not None else settings.search.steps,
-        decay=request.decay if request.decay is not None else settings.search.decay,
-        amplitude_cutoff=request.amplitude_cutoff
-        if request.amplitude_cutoff is not None
-        else settings.search.amplitude_cutoff,
+        top_k=int(params["top_k"]),
+        source_k=int(params["source_k"]),
+        steps=int(params["steps"]),
+        decay=float(params["decay"]),
+        amplitude_cutoff=float(params["amplitude_cutoff"]),
         aggregate=aggregate,  # type: ignore[arg-type]
     )
     search_time_ms = (time.perf_counter() - t0) * 1000.0
@@ -225,24 +346,34 @@ def search(request: SearchRequest, http_request: Request):
         top_k=request.top_k or settings.search.top_k,
         result_count=len(results),
         latency_ms=round(search_time_ms, 3),
+        cache_status="miss",
     )
-    return {
+    payload = {
         "build_id": state.build_id,
         "kb_name": state.kb_name,
         "trace_id": trace_id,
         "results": [r.to_dict() for r in results],
         "search_time_ms": round(search_time_ms, 3),
+        "cache": "miss",
     }
+    if cache is not None:
+        cache.set(cache_key, {k: v for k, v in payload.items() if k not in {"trace_id", "search_time_ms", "cache"}}, kb_name=request.kb_name)
+    return payload
 
 
 @app.post("/rebuild", status_code=202)
-def rebuild(request: RebuildRequest):
+def rebuild(
+    request: RebuildRequest,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
     task = app_state.start_rebuild(request.docs_dir, request.kb_name, settings, embedder=embedder)
     return task.to_dict()
 
 
 @app.get("/rebuild/{task_id}")
-def get_rebuild(task_id: str):
+def get_rebuild(task_id: str, _api_key: ApiKey = Depends(require_scope("rebuild")), _: None = Depends(rate_limit_dep)):
     task = app_state.rebuild_tasks.get(task_id)
     if not task:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Rebuild task not found.", {"task_id": task_id})
@@ -250,7 +381,12 @@ def get_rebuild(task_id: str):
 
 
 @app.post("/anchor")
-def add_anchor(request: AnchorRequest):
+def add_anchor(
+    request: AnchorRequest,
+    api_key: ApiKey = Depends(require_scope("anchor.write")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
     state = app_state.get_current(request.kb_name)
     store = JsonAnchorStore(f"{settings.storage.data_dir}/{request.kb_name}/anchors.json")
     anchor = AnchorSystem(state, store).add(request.node_id, request.label, request.boost, request.propagation_boost)
@@ -259,7 +395,13 @@ def add_anchor(request: AnchorRequest):
 
 
 @app.delete("/anchor/{anchor_key}")
-def delete_anchor(anchor_key: str, kb_name: str = "default"):
+def delete_anchor(
+    anchor_key: str,
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("anchor.write")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
     state = app_state.get_current(kb_name)
     store = JsonAnchorStore(f"{settings.storage.data_dir}/{kb_name}/anchors.json")
     AnchorSystem(state, store).delete(anchor_key)
@@ -268,19 +410,59 @@ def delete_anchor(anchor_key: str, kb_name: str = "default"):
 
 
 @app.get("/anchor")
-def list_anchor(kb_name: str = "default"):
+def list_anchor(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
     state = app_state.get_current(kb_name)
     return {"anchors": [anchor.to_dict() for anchor in state.anchors.values()]}
 
 
 @app.get("/graph_info")
-def graph_info(kb_name: str = "default"):
+def graph_info(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
     state = app_state.get_current(kb_name)
     return {
         "kb_name": state.kb_name,
         "build_id": state.build_id,
         "node_count": state.graph.number_of_nodes(),
         "edge_count": state.graph.number_of_edges(),
+        "anchors_version": state.anchors_version,
         "meta": state.meta,
         "unresolved_anchors": [anchor.to_dict() for anchor in state.unresolved_anchors],
     }
+
+
+@app.get("/kb")
+def list_kbs(api_key: ApiKey = Depends(require_scope("search")), _: None = Depends(rate_limit_dep)):
+    entries = []
+    running = {task.kb_name for task in app_state.rebuild_tasks.values() if task.status == "running"}
+    for kb_name in app_state.list_kbs():
+        if not api_key.allows_kb(kb_name):
+            continue
+        state = app_state.get_kb(kb_name)
+        entries.append(
+            {
+                "kb_name": state.kb_name,
+                "build_id": state.build_id,
+                "node_count": state.graph.number_of_nodes(),
+                "anchors_version": state.anchors_version,
+                "status": "rebuilding" if kb_name in running else "ready",
+            }
+        )
+    return {"kbs": entries}
+
+
+@app.post("/admin/cache/clear")
+def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_scope("admin"))):
+    if app_state.query_cache is None:
+        return {"cleared_count": 0}
+    cleared = app_state.query_cache.clear(request.kb_name)
+    structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
+    return {"cleared_count": cleared}

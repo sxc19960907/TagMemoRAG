@@ -16,6 +16,9 @@ class ErrorCode(StrEnum):
     ANCHOR_NOT_FOUND = "ANCHOR_NOT_FOUND"
     SHUTTING_DOWN = "SHUTTING_DOWN"
     EMBEDDING_FAILED = "EMBEDDING_FAILED"
+    UNAUTHORIZED = "UNAUTHORIZED"
+    FORBIDDEN = "FORBIDDEN"
+    RATE_LIMITED = "RATE_LIMITED"
     INTERNAL = "INTERNAL"
 
 
@@ -59,6 +62,21 @@ class EmbeddingError(ServiceError):
 class InvalidConfigError(ServiceError):
     def __init__(self, message: str, detail: dict[str, Any] | None = None):
         super().__init__(ErrorCode.INVALID_CONFIG, message, detail)
+
+
+class UnauthorizedError(ServiceError):
+    def __init__(self, message: str = "Missing or invalid Authorization.", detail: dict[str, Any] | None = None):
+        super().__init__(ErrorCode.UNAUTHORIZED, message, detail)
+
+
+class ForbiddenError(ServiceError):
+    def __init__(self, message: str = "Forbidden.", detail: dict[str, Any] | None = None):
+        super().__init__(ErrorCode.FORBIDDEN, message, detail)
+
+
+class RateLimitedError(ServiceError):
+    def __init__(self, detail: dict[str, Any] | None = None):
+        super().__init__(ErrorCode.RATE_LIMITED, "Rate limit exceeded.", detail)
 
 
 class StorageSchemaMismatchError(ServiceError):

@@ -1,0 +1,1 @@
+"""Authentication contracts and stores."""

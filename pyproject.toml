@@ -21,6 +21,9 @@ dependencies = [
     "structlog>=24.1",
 ]
 
+[project.scripts]
+tagmemorag = "tagmemorag.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",

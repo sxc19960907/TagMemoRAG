@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for M2 implementation scope and pre-development checklist."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "M2 adds auth, rate_limit, cache, and optional kb_manager modules; module boundaries must follow backend conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "M2 spans config, API, state, storage, and tests; quality checklist defines required coverage and forbidden patterns."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "M2 adds UNAUTHORIZED, FORBIDDEN, and RATE_LIMITED while preserving structured API error responses."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "M2 adds api_key_id, cache status, rate-limit events, and multi-KB request logs."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "M2 changes anchors.json schema and continues using file-backed atomic persistence."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M2 data flow crosses config, auth dependencies, API handlers, AppState, storage, and tests."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M2 creates shared contracts for auth, rate limits, cache, and config constants that should avoid duplication."}

@@ -88,3 +88,4 @@ class GraphState:
     kb_name: str = "default"
     meta: dict[str, Any] = field(default_factory=dict)
     unresolved_anchors: list[Anchor] = field(default_factory=list)
+    anchors_version: int = 0

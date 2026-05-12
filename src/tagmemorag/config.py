@@ -60,6 +60,37 @@ class LoggingConfig(BaseModel):
     format: Literal["json", "console"] = "json"
 
 
+class ApiKeyConfig(BaseModel):
+    id: str
+    hash: str
+    label: str = ""
+    kb_allowlist: list[str] = Field(default_factory=list)
+    scopes: list[str] = Field(default_factory=lambda: ["search"])
+    rate_limit_per_minute: int | None = None
+    created_at: str | None = None
+    revoked: bool = False
+
+
+class AuthConfig(BaseModel):
+    enabled: bool = False
+    backend: Literal["config", "sqlite"] = "config"
+    public_paths: list[str] = Field(default_factory=lambda: ["/health", "/ready", "/docs", "/redoc", "/openapi.json"])
+    global_max_rate_limit_per_minute: int = 1000
+    keys: list[ApiKeyConfig] = Field(default_factory=list)
+
+
+class RateLimitConfig(BaseModel):
+    enabled: bool = True
+    default_per_minute: int = 60
+    window_seconds: int = 60
+
+
+class CacheConfig(BaseModel):
+    enabled: bool = True
+    max_entries: int = 10000
+    ttl_seconds: int = 3600
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="TAGMEMORAG__",
@@ -76,6 +107,9 @@ class Settings(BaseSettings):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
 
     @classmethod
     def settings_customise_sources(

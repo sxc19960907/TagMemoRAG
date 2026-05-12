@@ -30,6 +30,7 @@ class AnchorSystem:
             old_text=str(node.get("text", "")),
         )
         self.state.anchors[node_id] = anchor
+        self.state.anchors_version += 1
         self._persist()
         return anchor
 
@@ -37,10 +38,11 @@ class AnchorSystem:
         for node_id, anchor in list(self.state.anchors.items()):
             if anchor.anchor_key == anchor_key:
                 del self.state.anchors[node_id]
+                self.state.anchors_version += 1
                 self._persist()
                 return
         raise AnchorNotFoundError(anchor_key)
 
     def _persist(self) -> None:
         if self.store:
-            self.store.save(self.list())
+            self.store.save(self.list(), version=self.state.anchors_version)

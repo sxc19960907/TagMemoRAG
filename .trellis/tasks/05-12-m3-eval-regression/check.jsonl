@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Verify M3 against backend project rules and pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check deterministic eval coverage, regression gate behavior, and scope control."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check JSONL loader, CLI exit codes, and invalid data failures are clear and stable."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify CLI-to-runner-to-search data flow and report output across layers."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check implementation reuses existing core search/build contracts without duplicating logic."}
+{"file": ".trellis/tasks/05-12-m3-eval-regression/prd.md", "reason": "Verify implementation satisfies M3 acceptance criteria and out-of-scope boundaries."}
+{"file": ".trellis/tasks/05-12-m3-eval-regression/design.md", "reason": "Verify implemented contracts match eval dataset, metrics, report, and CLI design."}

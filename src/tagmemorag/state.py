@@ -48,21 +48,52 @@ class RebuildTask:
 @dataclass
 class AppState:
     current: GraphState | None = None
+    kbs: dict[str, GraphState] = field(default_factory=dict)
+    rebuild_locks: dict[str, threading.Lock] = field(default_factory=dict)
     rebuild_tasks: dict[str, RebuildTask] = field(default_factory=dict)
     embedder_ready: bool = False
     is_shutting_down: bool = False
     _lock: threading.RLock = field(default_factory=threading.RLock)
     _rebuild_lock: threading.Lock = field(default_factory=threading.Lock)
+    auth_store: object | None = None
+    rate_limiter: object | None = None
+    query_cache: object | None = None
+
+    def __post_init__(self) -> None:
+        self.rebuild_locks.setdefault("default", self._rebuild_lock)
+        if self.current is not None:
+            self.kbs[self.current.kb_name] = self.current
 
     def get_current(self, kb_name: str = "default") -> GraphState:
+        return self.get_kb(kb_name)
+
+    def get_kb(self, kb_name: str = "default") -> GraphState:
         with self._lock:
-            if self.current is None or self.current.kb_name != kb_name:
+            state = self.kbs.get(kb_name)
+            if state is None:
                 raise KbNotLoadedError(kb_name)
-            return self.current
+            return state
 
     def swap(self, new_state: GraphState) -> None:
+        self.swap_kb(new_state.kb_name, new_state)
+
+    def swap_kb(self, kb_name: str, new_state: GraphState) -> None:
         with self._lock:
-            self.current = new_state
+            self.kbs[kb_name] = new_state
+            if kb_name == "default" or self.current is None or self.current.kb_name == kb_name:
+                self.current = new_state
+
+    def list_kbs(self) -> list[str]:
+        with self._lock:
+            return sorted(self.kbs)
+
+    def lock_for(self, kb_name: str) -> threading.Lock:
+        with self._lock:
+            lock = self.rebuild_locks.get(kb_name)
+            if lock is None:
+                lock = threading.Lock()
+                self.rebuild_locks[kb_name] = lock
+            return lock
 
     def mark_embedder_ready(self) -> None:
         with self._lock:
@@ -76,23 +107,36 @@ class AppState:
         with self._lock:
             if self.is_shutting_down:
                 raise ShuttingDownError()
-        if not self._rebuild_lock.acquire(blocking=False):
-            running = next((task.task_id for task in self.rebuild_tasks.values() if task.status == "running"), None)
+        rebuild_lock = self.lock_for(kb_name)
+        if not rebuild_lock.acquire(blocking=False):
+            running = next(
+                (task.task_id for task in self.rebuild_tasks.values() if task.status == "running" and task.kb_name == kb_name),
+                None,
+            )
             raise RebuildInProgressError(running)
         task_id = str(uuid.uuid4())
         task = RebuildTask(task_id=task_id, status="running", kb_name=kb_name, started_at=_now())
         self.rebuild_tasks[task_id] = task
         structlog.get_logger().info("rebuild_started", task_id=task_id, docs_dir=str(docs_dir), kb_name=kb_name)
-        thread = threading.Thread(target=self._rebuild_worker, args=(task, docs_dir, kb_name, cfg, embedder), daemon=True)
+        thread = threading.Thread(target=self._rebuild_worker, args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock), daemon=True)
         thread.start()
         return task
 
-    def _rebuild_worker(self, task: RebuildTask, docs_dir: str | Path, kb_name: str, cfg: Settings, embedder) -> None:
+    def _rebuild_worker(
+        self,
+        task: RebuildTask,
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        embedder,
+        rebuild_lock: threading.Lock,
+    ) -> None:
         t0 = time.perf_counter()
         try:
-            new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=self.current)
+            old_state = self.kbs.get(kb_name)
+            new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
             save_kb(new_state, cfg)
-            self.swap(new_state)
+            self.swap_kb(kb_name, new_state)
             task.status = "done"
             task.build_id = new_state.build_id
             structlog.get_logger().info(
@@ -115,7 +159,7 @@ class AppState:
             )
         finally:
             task.finished_at = _now()
-            self._rebuild_lock.release()
+            rebuild_lock.release()
 
 
 def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, old_state: GraphState | None = None) -> GraphState:
@@ -142,7 +186,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
     vectors = embedder.encode_batch(texts) if texts else np.zeros((0, cfg.model.dim), dtype=np.float32)
     graph = build_graph(chunks, vectors, cfg.graph)
     anchor_store = _anchor_store(kb_name, cfg)
-    old_anchors = anchor_store.load()
+    old_anchors, stored_anchor_version = anchor_store.load_with_version()
     if old_state:
         by_key = {anchor.anchor_key: anchor for anchor in old_anchors}
         for anchor in old_state.anchors.values():
@@ -159,14 +203,24 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         "chunk_count": len(chunks),
         "aggregate_default": cfg.search.aggregate,
     }
-    return GraphState(graph=graph, vectors=vectors, anchors=anchors, build_id=build_id, kb_name=kb_name, meta=meta, unresolved_anchors=unresolved)
+    anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
+    return GraphState(
+        graph=graph,
+        vectors=vectors,
+        anchors=anchors,
+        build_id=build_id,
+        kb_name=kb_name,
+        meta=meta,
+        unresolved_anchors=unresolved,
+        anchors_version=anchors_version,
+    )
 
 
 def save_kb(state: GraphState, cfg: Settings) -> None:
     root = _kb_dir(state.kb_name, cfg)
     JsonGraphStore(root / "graph.json").save(state.graph)
     NpzVectorStore(root / "vectors.npz").add(np.arange(state.vectors.shape[0]), state.vectors)
-    JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()))
+    JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
 
     def write_meta(tmp_path: Path) -> None:
         tmp_path.write_text(json.dumps(state.meta, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -184,9 +238,17 @@ def load_kb(kb_name: str, cfg: Settings) -> GraphState:
         raise StorageSchemaMismatchError(cfg.storage.schema_version, meta.get("schema_version"))
     graph = JsonGraphStore(root / "graph.json").load()
     _, vectors = NpzVectorStore(root / "vectors.npz").load()
-    loaded = JsonAnchorStore(root / "anchors.json").load()
+    loaded, anchors_version = JsonAnchorStore(root / "anchors.json").load_with_version()
     anchors = {anchor.node_id: anchor for anchor in loaded if anchor.node_id is not None}
-    return GraphState(graph=graph, vectors=vectors, anchors=anchors, kb_name=kb_name, meta=meta, build_id=str(meta.get("built_at", _now())))
+    return GraphState(
+        graph=graph,
+        vectors=vectors,
+        anchors=anchors,
+        kb_name=kb_name,
+        meta=meta,
+        build_id=str(meta.get("built_at", _now())),
+        anchors_version=anchors_version,
+    )
 
 
 def _kb_dir(kb_name: str, cfg: Settings) -> Path:

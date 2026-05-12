@@ -16,8 +16,8 @@ class JsonAnchorStore(AnchorStore):
     def __init__(self, path: str | Path):
         self.path = Path(path)
 
-    def save(self, anchors: list[Anchor]) -> None:
-        data = {"anchors": [anchor.to_dict() for anchor in anchors]}
+    def save(self, anchors: list[Anchor], version: int = 0) -> None:
+        data = {"version": version, "anchors": [anchor.to_dict() for anchor in anchors]}
 
         def write(tmp_path: Path) -> None:
             tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -25,10 +25,16 @@ class JsonAnchorStore(AnchorStore):
         atomic_write(self.path, write)
 
     def load(self) -> list[Anchor]:
+        anchors, _version = self.load_with_version()
+        return anchors
+
+    def load_with_version(self) -> tuple[list[Anchor], int]:
         if not self.path.exists():
-            return []
+            return [], 0
         data = json.loads(self.path.read_text(encoding="utf-8"))
-        return [Anchor.from_dict(item) for item in data.get("anchors", [])]
+        if isinstance(data, list):
+            return [Anchor.from_dict(item) for item in data], 0
+        return [Anchor.from_dict(item) for item in data.get("anchors", [])], int(data.get("version", 0))
 
     def reconcile(
         self,

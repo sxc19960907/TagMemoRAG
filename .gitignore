@@ -15,6 +15,11 @@ __pycache__/
 .pycache-compile/
 .uv-cache/
 
+# Local AI/tooling config
+.agents/
+.claude/
+.codex/
+
 # Local design docs (not for repo)
 浪潮RAG_产品说明书_详细设计说明书.md
 *.pdf

@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Quality check should start from the backend spec index and follow its review checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests, config precedence, rebuild double-buffer semantics, and avoidance of forbidden backend patterns."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify all M2 auth, authorization, rate-limit, and rebuild errors preserve the structured response contract."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify M2 logs include safe api_key_id, kb_name, cache status, and rate-limit context without leaking secrets."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify anchors.json version changes preserve schema compatibility and atomic writes."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify cross-layer flow from settings to dependencies to handlers to storage and responses."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify new shared utilities and constants are reused instead of duplicated across endpoints and tests."}

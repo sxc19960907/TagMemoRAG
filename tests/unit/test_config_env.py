@@ -37,6 +37,18 @@ def test_http_model_env_overrides(tmp_path, monkeypatch):
     assert cfg.model.dimensions == 4096
 
 
+def test_m2_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__AUTH__ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__CACHE__MAX_ENTRIES", "5000")
+    monkeypatch.setenv("TAGMEMORAG__RATE_LIMIT__DEFAULT_PER_MINUTE", "120")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.auth.enabled is True
+    assert cfg.cache.max_entries == 5000
+    assert cfg.rate_limit.default_per_minute == 120
+
+
 def test_yaml_fallback(tmp_path, monkeypatch):
     monkeypatch.delenv("TAGMEMORAG__SERVER__PORT", raising=False)
     config = tmp_path / "config.yaml"

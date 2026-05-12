@@ -68,3 +68,13 @@ server:
     assert cli.main(["serve", "--config", str(config)]) == 0
     assert called["kwargs"]["host"] == "127.0.0.9"
     assert called["kwargs"]["port"] == 9000
+
+
+def test_cli_auth_generate_key_outputs_hash_and_plaintext(capsys):
+    assert cli.main(["auth", "generate-key", "--id", "cs-test", "--scopes", "search,rebuild", "--kb", "default", "--rate", "10"]) == 0
+
+    out = capsys.readouterr().out
+    assert '"id": "cs-test"' in out
+    assert '"hash": "sha256:' in out
+    assert '"scopes": [' in out
+    assert "tmr_live_" in out
