@@ -24,9 +24,11 @@ class FakeQdrantClient:
     collections: dict[str, dict[int, SimpleNamespace]] = {}
     upsert_calls: list[tuple[str, list[int]]] = []
     set_payload_calls: list[tuple[str, list[int], dict]] = []
+    batch_payload_calls: list[tuple[str, list[tuple[int, dict]]]] = []
     delete_calls: list[tuple[str, list[int]]] = []
     search_calls: list[tuple[str, int, list[int]]] = []
     fail_next_upsert: bool = False
+    fail_next_batch_payload: bool = False
     fail_next_search: bool = False
 
     def __init__(self, **_kwargs):
@@ -37,9 +39,11 @@ class FakeQdrantClient:
         cls.collections = {}
         cls.upsert_calls = []
         cls.set_payload_calls = []
+        cls.batch_payload_calls = []
         cls.delete_calls = []
         cls.search_calls = []
         cls.fail_next_upsert = False
+        cls.fail_next_batch_payload = False
         cls.fail_next_search = False
 
     def get_collection(self, collection_name):
@@ -79,6 +83,25 @@ class FakeQdrantClient:
         for node_id in ids:
             if node_id in collection:
                 collection[node_id].payload.update(safe_payload)
+
+    def batch_update_points(self, collection_name, update_operations):
+        if self.fail_next_batch_payload:
+            type(self).fail_next_batch_payload = False
+            raise RuntimeError("batch payload failed")
+        updates: list[tuple[int, dict]] = []
+        collection = self.collections.setdefault(collection_name, {})
+        for operation in update_operations:
+            raw = operation["set_payload"] if isinstance(operation, dict) else operation.set_payload
+            payload = dict(raw["payload"] if isinstance(raw, dict) else raw.payload)
+            points = raw["points"] if isinstance(raw, dict) else raw.points
+            if points is None:
+                raise RuntimeError("fake batch payload requires explicit point ids")
+            for node_id in points:
+                point_id = int(node_id)
+                updates.append((point_id, payload))
+                if point_id in collection:
+                    collection[point_id].payload.update(payload)
+        self.batch_payload_calls.append((collection_name, updates))
 
     def search(self, collection_name, query_vector, limit=10, with_payload=False, with_vectors=False):
         if self.fail_next_search:
@@ -214,6 +237,64 @@ def test_qdrant_vector_store_update_payload_and_delete():
     }
     store.delete([1])
     assert 1 not in FakeQdrantClient.collections["tmr_default"]
+
+
+def test_qdrant_vector_store_update_payloads_batches_distinct_payloads():
+    FakeQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=2,
+        url="http://qdrant:6333",
+        collection_prefix="tmr",
+        client_factory=FakeQdrantClient,
+    )
+    store.add(np.array([1, 2]), np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))
+
+    store.update_payloads(
+        [1, 2],
+        [
+            {"build_id": "b2", "node_id": 1, "chunk_identity_key": "key-1", "text": "must-not-be-stored"},
+            {"build_id": "b2", "node_id": 2, "chunk_identity_key": "key-2", "secret": "must-not-be-stored"},
+        ],
+    )
+
+    assert FakeQdrantClient.set_payload_calls == []
+    assert FakeQdrantClient.batch_payload_calls == [
+        (
+            "tmr_default",
+            [
+                (1, {"build_id": "b2", "node_id": 1, "chunk_identity_key": "key-1"}),
+                (2, {"build_id": "b2", "node_id": 2, "chunk_identity_key": "key-2"}),
+            ],
+        )
+    ]
+    assert FakeQdrantClient.collections["tmr_default"][1].payload["chunk_identity_key"] == "key-1"
+    assert FakeQdrantClient.collections["tmr_default"][2].payload["chunk_identity_key"] == "key-2"
+    assert "text" not in FakeQdrantClient.collections["tmr_default"][1].payload
+    assert "secret" not in FakeQdrantClient.collections["tmr_default"][2].payload
+
+
+def test_qdrant_vector_store_update_payloads_falls_back_without_batch_support():
+    class PerPointQdrantClient(FakeQdrantClient):
+        batch_update_points = None
+
+    PerPointQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=2,
+        url="http://qdrant:6333",
+        collection_prefix="tmr",
+        client_factory=PerPointQdrantClient,
+    )
+    store.add(np.array([1, 2]), np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))
+
+    store.update_payloads([1, 2], [{"build_id": "b2", "node_id": 1}, {"build_id": "b2", "node_id": 2}])
+
+    assert PerPointQdrantClient.batch_payload_calls == []
+    assert PerPointQdrantClient.set_payload_calls == [
+        ("tmr_default", [1], {"build_id": "b2", "node_id": 1}),
+        ("tmr_default", [2], {"build_id": "b2", "node_id": 2}),
+    ]
 
 
 def test_qdrant_vector_store_search_candidates():

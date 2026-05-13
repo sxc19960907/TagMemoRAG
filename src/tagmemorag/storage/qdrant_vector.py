@@ -84,14 +84,38 @@ class QdrantVectorStore(VectorStore):
                 {"ids": len(ids_array), "payloads": len(payloads)},
             )
         try:
-            for index, node_id in enumerate(ids_array):
-                self.client.set_payload(
-                    collection_name=self.collection_name,
-                    points=[int(node_id)],
-                    payload=_safe_payload(payloads[index]),
-                )
+            safe_payloads = [_safe_payload(payload) for payload in payloads]
+            try:
+                self._update_payloads_batch(ids_array, safe_payloads)
+            except NotImplementedError:
+                self._update_payloads_per_point(ids_array, safe_payloads)
         except Exception as exc:
             raise _storage_error("Failed to update Qdrant payloads.", exc, self.collection_name) from exc
+
+    def _update_payloads_batch(self, ids: np.ndarray, payloads: list[dict[str, Any]]) -> None:
+        batch_update = getattr(self.client, "batch_update_points", None)
+        if not callable(batch_update):
+            raise NotImplementedError
+        if not self._uses_real_client():
+            operations = [{"set_payload": {"payload": payload, "points": [int(ids[index])]}} for index, payload in enumerate(payloads)]
+        else:
+            try:
+                from qdrant_client.models import SetPayload, SetPayloadOperation
+            except ImportError as exc:
+                raise _missing_dependency() from exc
+            operations = [
+                SetPayloadOperation(set_payload=SetPayload(payload=payload, points=[int(ids[index])]))
+                for index, payload in enumerate(payloads)
+            ]
+        batch_update(collection_name=self.collection_name, update_operations=operations)
+
+    def _update_payloads_per_point(self, ids: np.ndarray, payloads: list[dict[str, Any]]) -> None:
+        for index, node_id in enumerate(ids):
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                points=[int(node_id)],
+                payload=payloads[index],
+            )
 
     def load(self, ids: np.ndarray | list[int] | None = None) -> tuple[np.ndarray, np.ndarray]:
         try:

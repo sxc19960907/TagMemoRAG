@@ -314,9 +314,55 @@ def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake
         "fallback_reason": "",
     }
     assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
-    assert FakeQdrantClient.set_payload_calls[-1][0:2] == ("test_default", [1])
+    assert FakeQdrantClient.set_payload_calls == []
+    assert FakeQdrantClient.batch_payload_calls[-1] == (
+        "test_default",
+        [
+            (
+                1,
+                {
+                    "kb_name": "default",
+                    "node_id": 1,
+                    "build_id": app.get_current("default").build_id,
+                    "chunk_identity_key": FakeQdrantClient.collections["test_default"][1].payload["chunk_identity_key"],
+                    "manual_id": "b",
+                    "source_file": "coffee/b.md",
+                    "text_hash": FakeQdrantClient.collections["test_default"][1].payload["text_hash"],
+                },
+            )
+        ],
+    )
     assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
     assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == app.get_current("default").build_id
+
+
+def test_qdrant_incremental_sync_batches_multiple_reused_payloads(qdrant_library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", qdrant_library_config)
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# B\nClean weekly.\n", qdrant_library_config)
+    upsert_manual("default", _metadata("coffee/c.md", "c"), b"# C\nDescale monthly.\n", qdrant_library_config)
+    old_state = build_kb(library_root("default", qdrant_library_config), "default", qdrant_library_config, embedder=fake_embedder)
+    _persist_qdrant_baseline(old_state, qdrant_library_config)
+    app = AppState(old_state)
+    FakeQdrantClient.upsert_calls.clear()
+    FakeQdrantClient.set_payload_calls.clear()
+    FakeQdrantClient.batch_payload_calls.clear()
+    update_manual_metadata("default", "a", {"product_model": "A1"}, qdrant_library_config)
+
+    task = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.qdrant_sync["points_upserted"] == 1
+    assert task.qdrant_sync["points_reused"] == 2
+    assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
+    assert FakeQdrantClient.set_payload_calls == []
+    assert len(FakeQdrantClient.batch_payload_calls) == 1
+    assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
+    assert [node_id for node_id, _payload in FakeQdrantClient.batch_payload_calls[-1][1]] == [1, 2]
+    assert all(payload["build_id"] == app.get_current("default").build_id for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1])
 
 
 def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_path):
@@ -343,6 +389,7 @@ def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_
     app = AppState(old_state)
     FakeQdrantClient.upsert_calls.clear()
     FakeQdrantClient.set_payload_calls.clear()
+    FakeQdrantClient.batch_payload_calls.clear()
     FakeQdrantClient.delete_calls.clear()
 
     (library_root("default", cfg) / "coffee" / "a.md").write_text(
@@ -371,7 +418,9 @@ def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_
     collection = FakeQdrantClient.collections["test_default"]
     assert sorted(collection) == [0, 1]
     assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [1])
-    assert FakeQdrantClient.set_payload_calls[-1][0:2] == ("test_default", [0])
+    assert FakeQdrantClient.set_payload_calls == []
+    assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
+    assert FakeQdrantClient.batch_payload_calls[-1][1][0][0] == 0
     assert FakeQdrantClient.delete_calls[-1] == ("test_default", [2])
     assert collection[0].vector == old_reused_vector
     assert collection[0].payload["build_id"] == current_state.build_id
@@ -439,3 +488,49 @@ def test_failed_qdrant_sync_keeps_pending_dirty_state(qdrant_library_config, fak
     assert app.get_current("default").build_id == old_state.build_id
     assert load_manifest("default", qdrant_library_config).pending_changes is True
     assert FakeQdrantClient.delete_calls == []
+
+
+def test_failed_reused_payload_refresh_blocks_stale_delete_and_graph_swap(monkeypatch, tmp_path):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": KeywordEmbedder.dim},
+    )
+    embedder = KeywordEmbedder()
+    upsert_manual(
+        "default",
+        _metadata("coffee/a.md", "a"),
+        b"# Reused\nalpha stable reusable chunk.\n# Changed\ncharlie original chunk.\n",
+        cfg,
+    )
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# Removed\ndelta stale chunk.\n", cfg)
+    old_state = build_kb(library_root("default", cfg), "default", cfg, embedder=embedder)
+    _persist_qdrant_baseline(old_state, cfg)
+    app = AppState(old_state)
+    FakeQdrantClient.upsert_calls.clear()
+    FakeQdrantClient.batch_payload_calls.clear()
+    FakeQdrantClient.delete_calls.clear()
+
+    (library_root("default", cfg) / "coffee" / "a.md").write_text(
+        "# Reused\nalpha stable reusable chunk.\n# Changed\nbravo changed chunk.\n",
+        encoding="utf-8",
+    )
+    mark_pending("default", cfg, dirty={"manual_id": "a", "source_file": "coffee/a.md", "operation": "file_replace"})
+    delete_manual("default", "b", cfg)
+    FakeQdrantClient.fail_next_batch_payload = True
+
+    task = start_library_rebuild(app, "default", cfg, embedder=embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "failed"
+    assert app.get_current("default").build_id == old_state.build_id
+    assert load_manifest("default", cfg).pending_changes is True
+    assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [1])
+    assert FakeQdrantClient.delete_calls == []
+    assert 2 in FakeQdrantClient.collections["test_default"]
