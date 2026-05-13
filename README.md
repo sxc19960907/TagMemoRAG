@@ -188,6 +188,18 @@ Other library operations:
 
 Create/update/disable/rebuild require the `rebuild` scope plus KB allowlist access. Hard delete also requires `admin`. `status=disabled` or `status=archived` sidecars are skipped by future builds while remaining visible in the managed library list.
 
+### Manual library admin UI
+
+Start the same FastAPI service, then open:
+
+```text
+http://127.0.0.1:8000/admin/manual-library
+```
+
+Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, uploads manuals, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
+
+The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
+
 ### Authentication
 
 Enable API key auth in `config.yaml` and send keys as Bearer tokens:

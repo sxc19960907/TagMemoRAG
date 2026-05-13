@@ -12,6 +12,8 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
@@ -47,6 +49,8 @@ from .wave_searcher import filter_node_ids, normalize_filters, wave_search
 settings = load_config()
 app_state = AppState()
 embedder = None  # lazily created in lifespan to avoid import-time model download
+WEB_DIR = Path(__file__).resolve().parent / "web"
+templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
 
 @asynccontextmanager
@@ -125,6 +129,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
+app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
 
 
 class SearchRequest(BaseModel):
@@ -189,6 +194,19 @@ class AnchorRequest(BaseModel):
 
 class CacheClearRequest(BaseModel):
     kb_name: str | None = None
+
+
+@app.get("/admin/manual-library")
+def manual_library_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "manual_library.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
 
 
 def _status_for(code: ErrorCode) -> int:

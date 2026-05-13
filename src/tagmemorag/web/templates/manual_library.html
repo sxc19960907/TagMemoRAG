@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG Manual Library</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="manual-library-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="eyebrow">TagMemoRAG</span>
+          <h1>Manual Library</h1>
+        </div>
+        <form class="kb-form" id="kb-form">
+          <label>
+            <span>KB</span>
+            <input id="kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
+          </label>
+          <button type="submit">Load</button>
+        </form>
+        <label class="token-field">
+          <span>API token</span>
+          <input id="api-token" type="password" autocomplete="off" placeholder="Bearer token">
+        </label>
+        <div class="top-actions">
+          <button id="open-upload" type="button">Upload</button>
+          <button id="rebuild-library" type="button" class="primary">Rebuild</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="status-strip" id="status-strip" role="status" aria-live="polite"></section>
+
+        <section class="filters" aria-label="Manual filters">
+          <label>
+            <span>Search</span>
+            <input id="filter-text" type="search" placeholder="id, title, source, model, category">
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="filter-status">
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <label>
+            <span>Searchable</span>
+            <select id="filter-searchable">
+              <option value="all">All</option>
+              <option value="yes">Searchable</option>
+              <option value="no">Unbuilt</option>
+            </select>
+          </label>
+          <label>
+            <span>Rebuild</span>
+            <select id="filter-pending">
+              <option value="all">All</option>
+              <option value="yes">Required</option>
+              <option value="no">Clear</option>
+            </select>
+          </label>
+        </section>
+
+        <div class="workspace">
+          <section class="table-pane" aria-label="Managed manuals">
+            <div class="pane-header">
+              <div>
+                <h2>Library</h2>
+                <p id="library-root">Root not loaded</p>
+              </div>
+              <span id="manual-count" class="muted">0 manuals</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Manual ID</th>
+                    <th>Title</th>
+                    <th>Source</th>
+                    <th>Category</th>
+                    <th>Model</th>
+                    <th>Lang</th>
+                    <th>Tags</th>
+                    <th>Searchable</th>
+                    <th>Chunks</th>
+                    <th>Rebuild</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody id="manual-rows"></tbody>
+              </table>
+            </div>
+            <div id="table-empty" class="empty-state">Load a KB to view managed manuals.</div>
+          </section>
+
+          <aside class="detail-pane" aria-label="Manual detail">
+            <div class="pane-header">
+              <div>
+                <h2>Detail</h2>
+                <p id="detail-subtitle">Select a manual</p>
+              </div>
+            </div>
+            <form id="detail-form" class="metadata-form">
+              <div class="field-grid">
+                <label><span>Title</span><input name="title"></label>
+                <label><span>Source file</span><input name="source_file"></label>
+                <label><span>Brand</span><input name="brand"></label>
+                <label><span>Category</span><input name="product_category"></label>
+                <label><span>Product</span><input name="product_name"></label>
+                <label><span>Model</span><input name="product_model"></label>
+                <label><span>Language</span><input name="language"></label>
+                <label><span>Version</span><input name="version"></label>
+                <label><span>Status</span>
+                  <select name="status">
+                    <option value="active">active</option>
+                    <option value="disabled">disabled</option>
+                    <option value="archived">archived</option>
+                  </select>
+                </label>
+              </div>
+              <label><span>Tags</span><textarea name="tags" rows="3" placeholder="comma or newline separated"></textarea></label>
+              <label><span>Notes</span><textarea name="notes" rows="3"></textarea></label>
+              <details>
+                <summary>Raw JSON</summary>
+                <textarea name="raw_json" rows="8" spellcheck="false"></textarea>
+              </details>
+              <div id="detail-messages" class="messages"></div>
+              <div class="button-row">
+                <button type="button" id="validate-detail">Validate</button>
+                <button type="submit" class="primary">Save</button>
+              </div>
+            </form>
+
+            <section class="file-actions">
+              <h3>Source File</h3>
+              <p class="muted">Large content changes may leave anchors unresolved until the next rebuild.</p>
+              <input id="replace-file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf">
+              <button type="button" id="replace-file-button">Replace file</button>
+            </section>
+
+            <section class="danger-zone">
+              <h3>Disable or Delete</h3>
+              <p class="muted">Disabled manuals remain on disk and are excluded from future rebuilds.</p>
+              <button type="button" id="disable-manual">Disable</button>
+              <div class="hard-delete">
+                <label><span>Type manual id to hard delete</span><input id="hard-delete-confirm" autocomplete="off"></label>
+                <button type="button" id="hard-delete" class="danger">Hard delete</button>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="upload-dialog">
+      <form id="upload-form" class="upload-form">
+        <div class="dialog-header">
+          <h2>Upload Manual</h2>
+          <button type="button" id="close-upload" aria-label="Close">x</button>
+        </div>
+        <label><span>File</span><input name="file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" required></label>
+        <div class="field-grid">
+          <label><span>Manual ID</span><input name="manual_id" required></label>
+          <label><span>Title</span><input name="title" required></label>
+          <label><span>Source file</span><input name="source_file" required></label>
+          <label><span>Category</span><input name="product_category" required></label>
+          <label><span>Brand</span><input name="brand"></label>
+          <label><span>Product</span><input name="product_name"></label>
+          <label><span>Model</span><input name="product_model"></label>
+          <label><span>Language</span><input name="language" value="unknown"></label>
+          <label><span>Version</span><input name="version"></label>
+        </div>
+        <label><span>Tags</span><textarea name="tags" rows="3" placeholder="comma or newline separated"></textarea></label>
+        <label><span>Notes</span><textarea name="notes" rows="3"></textarea></label>
+        <div class="toggles">
+          <label><input name="overwrite" type="checkbox"> Overwrite existing</label>
+          <label><input name="trigger_rebuild" type="checkbox"> Trigger rebuild after upload</label>
+        </div>
+        <div id="upload-messages" class="messages"></div>
+        <div class="button-row">
+          <button type="button" id="validate-upload">Validate</button>
+          <button type="submit" class="primary">Upload</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="{{ url_for('manual-library-static', path='manual_library.js') }}"></script>
+  </body>
+</html>
