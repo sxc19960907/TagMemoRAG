@@ -23,6 +23,13 @@ def run_eval(
     suite_path: str | Path,
     docs_path: str | Path | None = None,
     top_k: int | None = None,
+    source_k: int | None = None,
+    steps: int | None = None,
+    decay: float | None = None,
+    amplitude_cutoff: float | None = None,
+    aggregate: str | None = None,
+    metadata_field_boost: float | None = None,
+    tag_boost: float | None = None,
     kb_filter: str | None = None,
     reuse_built_kb: bool = False,
     eval_data_dir: str | Path | None = None,
@@ -31,6 +38,16 @@ def run_eval(
     resolved_top_k = top_k or cfg.search.top_k or 5
     _validate_top_k(resolved_top_k)
     _validate_thresholds(thresholds)
+    search_params = _resolve_search_params(
+        cfg,
+        source_k=source_k,
+        steps=steps,
+        decay=decay,
+        amplitude_cutoff=amplitude_cutoff,
+        aggregate=aggregate,
+        metadata_field_boost=metadata_field_boost,
+        tag_boost=tag_boost,
+    )
     cases = load_eval_suite(suite_path)
     if kb_filter:
         cases = [case for case in cases if case.kb_name == kb_filter]
@@ -60,11 +77,11 @@ def run_eval(
             query_vec=query_vec,
             settings=run_cfg,
             top_k=case_top_k,
-            source_k=run_cfg.search.source_k,
-            steps=run_cfg.search.steps,
-            decay=run_cfg.search.decay,
-            amplitude_cutoff=run_cfg.search.amplitude_cutoff,
-            aggregate=run_cfg.search.aggregate,
+            source_k=int(search_params["source_k"]),
+            steps=int(search_params["steps"]),
+            decay=float(search_params["decay"]),
+            amplitude_cutoff=float(search_params["amplitude_cutoff"]),
+            aggregate=str(search_params["aggregate"]),
             filters=None,
         )
         results = execution.results
@@ -118,7 +135,7 @@ def run_eval(
         cases=case_reports,
         config_snapshot={
             "model": {"provider": run_cfg.model.provider, "name": run_cfg.model.name, "dim": run_cfg.model.dim},
-            "search": {"top_k": resolved_top_k, "source_k": run_cfg.search.source_k, "aggregate": run_cfg.search.aggregate},
+            "search": {"top_k": resolved_top_k, **search_params},
             "storage": storage_snapshot,
             "reuse_built_kb": reuse_built_kb,
         },
@@ -173,6 +190,43 @@ def _validate_thresholds(thresholds: EvalThresholds) -> None:
 def _validate_top_k(top_k: int) -> None:
     if top_k <= 0:
         raise EvalSuiteError("top_k must be a positive integer")
+
+
+def _resolve_search_params(
+    cfg: Settings,
+    *,
+    source_k: int | None,
+    steps: int | None,
+    decay: float | None,
+    amplitude_cutoff: float | None,
+    aggregate: str | None,
+    metadata_field_boost: float | None,
+    tag_boost: float | None,
+) -> dict[str, int | float | str]:
+    resolved = {
+        "source_k": source_k if source_k is not None else cfg.search.source_k,
+        "steps": steps if steps is not None else cfg.search.steps,
+        "decay": decay if decay is not None else cfg.search.decay,
+        "amplitude_cutoff": amplitude_cutoff if amplitude_cutoff is not None else cfg.search.amplitude_cutoff,
+        "aggregate": aggregate if aggregate is not None else cfg.search.aggregate,
+        "metadata_field_boost": metadata_field_boost if metadata_field_boost is not None else cfg.search.metadata_field_boost,
+        "tag_boost": tag_boost if tag_boost is not None else cfg.search.tag_boost,
+    }
+    if int(resolved["source_k"]) <= 0:
+        raise EvalSuiteError("source_k must be a positive integer")
+    if int(resolved["steps"]) < 0:
+        raise EvalSuiteError("steps must be greater than or equal to 0")
+    if float(resolved["decay"]) < 0.0:
+        raise EvalSuiteError("decay must be greater than or equal to 0.0")
+    if float(resolved["amplitude_cutoff"]) < 0.0:
+        raise EvalSuiteError("amplitude_cutoff must be greater than or equal to 0.0")
+    if str(resolved["aggregate"]) not in {"max", "sum"}:
+        raise EvalSuiteError("aggregate must be 'max' or 'sum'")
+    if float(resolved["metadata_field_boost"]) < 0.0:
+        raise EvalSuiteError("metadata_field_boost must be greater than or equal to 0.0")
+    if float(resolved["tag_boost"]) < 0.0:
+        raise EvalSuiteError("tag_boost must be greater than or equal to 0.0")
+    return resolved
 
 
 def _result_to_report(result, matched_expected_indexes: set[int]) -> dict:

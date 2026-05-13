@@ -56,6 +56,46 @@ def test_run_eval_product_manual_suite_is_reproducible(tmp_path, test_config):
     assert not str(report.config_snapshot["storage"]["data_dir"]).startswith(str(test_config.storage.data_dir))
 
 
+def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Steam\nSteam pressure drops when scale blocks the nozzle.\n", encoding="utf-8")
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"steam","query":"steam pressure nozzle scale","relevant":[{"source_file":"manual.md","header":"Steam","text_contains":["scale blocks"]}]}\n',
+        encoding="utf-8",
+    )
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=suite,
+        docs_path=docs,
+        top_k=4,
+        source_k=4,
+        steps=2,
+        decay=0.55,
+        amplitude_cutoff=0.02,
+        aggregate="sum",
+        metadata_field_boost=0.08,
+        tag_boost=0.05,
+        eval_data_dir=tmp_path / "eval-data",
+        thresholds=EvalThresholds(min_recall_at_k=0.0, min_mrr=0.0, min_hit_at_k=0.0),
+    )
+
+    assert report.summary.passed
+    assert report.config_snapshot["search"] == {
+        "top_k": 4,
+        "source_k": 4,
+        "steps": 2,
+        "decay": 0.55,
+        "amplitude_cutoff": 0.02,
+        "aggregate": "sum",
+        "metadata_field_boost": 0.08,
+        "tag_boost": 0.05,
+    }
+
+
 def test_run_eval_uses_ann_preselection_with_fake_qdrant(monkeypatch, tmp_path, test_config):
     FakeQdrantClient.reset()
     monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())

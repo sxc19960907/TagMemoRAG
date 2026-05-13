@@ -88,6 +88,13 @@ def main(argv: list[str] | None = None) -> int:
     eval_run.add_argument("--config", default="config.yaml")
     eval_run.add_argument("--output", default=None)
     eval_run.add_argument("--top-k", type=int, default=None)
+    eval_run.add_argument("--source-k", type=int, default=None)
+    eval_run.add_argument("--steps", type=int, default=None)
+    eval_run.add_argument("--decay", type=float, default=None)
+    eval_run.add_argument("--amplitude-cutoff", type=float, default=None)
+    eval_run.add_argument("--aggregate", choices=["max", "sum"], default=None)
+    eval_run.add_argument("--metadata-field-boost", type=float, default=None)
+    eval_run.add_argument("--tag-boost", type=float, default=None)
     eval_run.add_argument("--kb", default=None)
     eval_run.add_argument("--reuse-built-kb", action="store_true")
     eval_run.add_argument("--eval-data-dir", default=None)
@@ -245,6 +252,13 @@ def main(argv: list[str] | None = None) -> int:
                 suite_path=args.suite,
                 docs_path=args.docs,
                 top_k=args.top_k,
+                source_k=args.source_k,
+                steps=args.steps,
+                decay=args.decay,
+                amplitude_cutoff=args.amplitude_cutoff,
+                aggregate=args.aggregate,
+                metadata_field_boost=args.metadata_field_boost,
+                tag_boost=args.tag_boost,
                 kb_filter=args.kb,
                 reuse_built_kb=args.reuse_built_kb,
                 eval_data_dir=args.eval_data_dir,

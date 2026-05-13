@@ -23,6 +23,11 @@ search:
   amplitude_cutoff: 0.01
   aggregate: max
   propagation_boost: 1.0
+  metadata_field_boost: 0.05
+  tag_boost: 0.03
+  ann_preselect_enabled: false
+  ann_candidate_k: 64
+  ann_force_exact_on_filters: false
   debug_metadata_enabled: false
 parser:
   max_chars: 500

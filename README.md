@@ -722,7 +722,7 @@ uv run tagmemorag eval run \
   --eval-data-dir .tmp/eval/coffee
 ```
 
-Use `tests/fixtures/eval/coffee.jsonl` as the fast smoke suite for basic CLI and report compatibility. Use the broader M20 product-manual suite when checking retrieval behavior across categories, metadata, tags, ANN preselection, and rebuild-related regressions:
+Use `tests/fixtures/eval/coffee.jsonl` as the fast smoke suite for basic CLI and report compatibility. Use the broader product-manual suite when checking retrieval behavior across categories, metadata, tags, ANN preselection, and rebuild-related regressions:
 
 ```bash
 uv run tagmemorag eval run \
@@ -733,7 +733,22 @@ uv run tagmemorag eval run \
   --eval-data-dir .tmp/eval/product-manuals
 ```
 
-M20 is measurement-first: use the expanded report to compare retrieval changes, but keep ranking constant tuning in a separate, evidence-backed task.
+For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
+
+```bash
+uv run tagmemorag eval run \
+  --suite tests/fixtures/eval/product_manuals.jsonl \
+  --docs tests/fixtures/product_manuals \
+  --config config.yaml \
+  --output .tmp/eval-product-source4.json \
+  --eval-data-dir .tmp/eval/product-source4 \
+  --source-k 4 \
+  --min-recall-at-k 0 \
+  --min-mrr 0 \
+  --min-hit-at-k 0
+```
+
+Supported tuning overrides are `--top-k`, `--source-k`, `--steps`, `--decay`, `--amplitude-cutoff`, `--aggregate`, `--metadata-field-boost`, and `--tag-boost`. The report `config_snapshot.search` records the effective values. M23 evaluated source count, propagation depth, decay, aggregate mode, and metadata/tag boost variants against the coffee and product-manual fixtures; the product baseline was already at `recall_at_k=1.0`, `mrr=1.0`, and `hit_at_k=1.0`, so the default search settings remain unchanged. `aggregate=sum` regressed product-manual recall and should not be used as a default without new evidence.
 
 For CI, use a config whose model provider is `hashing` so the gate does not download a model or call the network:
 
@@ -756,7 +771,7 @@ Expected results can match by `source_file`, `header`, `anchor_key`, `text_conta
 ## Docker Deployment
 
 ```bash
-docker build -t tagmemorag:m1 .
+docker build -t tagmemorag:latest .
 docker compose up
 ```
 
@@ -765,7 +780,7 @@ The container runs as a non-root user, logs JSON to stdout, prepackages the defa
 If the build environment cannot reach Hugging Face reliably, pass a compatible mirror endpoint while building:
 
 ```bash
-docker build --build-arg HF_ENDPOINT=https://hf-mirror.com -t tagmemorag:m1 .
+docker build --build-arg HF_ENDPOINT=https://hf-mirror.com -t tagmemorag:latest .
 ```
 
 Compose uses `/health` for liveness so an empty first boot is still healthy. For Kubernetes, use `/ready` for readiness:
@@ -799,17 +814,27 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | Milestone | Scope |
 |-----------|-------|
 | **M0** ✅ | Wave algorithm, anchors, JSON+NPZ storage, FastAPI, CLI, zero-downtime rebuild |
-| **M1** | Dockerfile, JSON logs, `/health`+`/ready`, graceful shutdown, env-var config |
-| **M2** | API key + rate limiting, multi-KB isolation, query cache |
-| **M3** | Eval harness (precision@k / MRR), CI regression gate |
-| **M4** | Prometheus metrics, OpenTelemetry traces |
-| **M5** | Manual metadata sidecars, filters, facets, tag-aware search boosts |
-| **M6** | File-backed managed manual library, upload/update/disable/delete, library rebuild |
-| **M7** | Server-rendered manual library admin UI |
-| **M8** | Deterministic tag suggestion API and admin UI workflow |
-| **M9** | Qdrant vector backend as selectable vector persistence |
-| **M10** | Batch import/validation and production manual library ergonomics |
-| **M11** | Tag governance, synonym mapping, and usage analytics |
-| **M12** | Retrieval quality feedback loop and eval dataset growth |
-| **M13** | Incremental manual rebuild/update path |
-| **post-v1** | Qdrant ANN preselection, HA multi-replica, additional vector backends |
+| **M1** ✅ | Dockerfile, JSON logs, `/health`+`/ready`, graceful shutdown, env-var config |
+| **M2** ✅ | API key + rate limiting, multi-KB isolation, query cache |
+| **M3** ✅ | Eval harness (precision@k / MRR), CI regression gate |
+| **M4** ✅ | Prometheus metrics, OpenTelemetry traces |
+| **M5** ✅ | Manual metadata sidecars, filters, facets, tag-aware search boosts |
+| **M6** ✅ | File-backed managed manual library, upload/update/disable/delete, library rebuild |
+| **M7** ✅ | Server-rendered manual library admin UI |
+| **M8** ✅ | Deterministic tag suggestion API and admin UI workflow |
+| **M9** ✅ | Qdrant vector backend as selectable vector persistence |
+| **M10** ✅ | Batch import/validation and production manual library ergonomics |
+| **M11** ✅ | Tag governance, synonym mapping, and usage analytics |
+| **M12** ✅ | Retrieval quality feedback loop and eval dataset growth |
+| **M13** ✅ | Incremental manual rebuild/update path |
+| **M14** ✅ | Incremental rebuild strategy and impact reporting |
+| **M15** ✅ | Point-level incremental Qdrant updates |
+| **M16** ✅ | Qdrant ANN preselection as candidate generation for local WAVE-RAG ranking |
+| **M17** ✅ | Incremental rebuild plus ANN integration regression coverage |
+| **M18** ✅ | Batched Qdrant payload refresh with safe per-point fallback |
+| **M19** ✅ | Opt-in search diagnostics and operator debug metadata |
+| **M20** ✅ | Expanded retrieval quality fixtures and product-manual eval coverage |
+| **M21** ✅ | Rebuild operations UX and failure recovery guidance |
+| **M22** ✅ | Qdrant operations documentation and inspection command |
+| **M23** ✅ | Retrieval tuning experiment loop; defaults preserved from eval evidence |
+| **Parking lot** | Payload-filtered ANN, database-backed manual registry/audit, background rebuild queue/cancellation, HA multi-replica, import/export bundles |

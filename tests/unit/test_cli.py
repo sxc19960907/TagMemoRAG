@@ -194,6 +194,77 @@ search:
         qdrant_vector.QdrantVectorStore._create_client = original
 
 
+def test_cli_eval_run_accepts_search_parameter_overrides(tmp_path, capsys):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Steam\nSteam pressure drops when scale blocks the nozzle.\n", encoding="utf-8")
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"steam","query":"steam pressure nozzle scale","relevant":[{"source_file":"manual.md","header":"Steam","text_contains":["scale blocks"]}]}\n',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+""",
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.json"
+
+    assert (
+        cli.main(
+            [
+                "eval",
+                "run",
+                "--suite",
+                str(suite),
+                "--docs",
+                str(docs),
+                "--config",
+                str(config),
+                "--output",
+                str(output),
+                "--top-k",
+                "4",
+                "--source-k",
+                "4",
+                "--steps",
+                "2",
+                "--decay",
+                "0.55",
+                "--amplitude-cutoff",
+                "0.02",
+                "--aggregate",
+                "sum",
+                "--metadata-field-boost",
+                "0.08",
+                "--tag-boost",
+                "0.05",
+                "--eval-data-dir",
+                str(tmp_path / "eval-data"),
+                "--min-recall-at-k",
+                "0",
+                "--min-mrr",
+                "0",
+                "--min-hit-at-k",
+                "0",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["config_snapshot"]["search"]["source_k"] == 4
+    assert report["config_snapshot"]["search"]["aggregate"] == "sum"
+    assert report["config_snapshot"]["search"]["metadata_field_boost"] == 0.08
+
+
 def test_cli_qdrant_inspect_outputs_safe_report(tmp_path, capsys, monkeypatch, fake_embedder):
     docs = tmp_path / "docs"
     docs.mkdir()
