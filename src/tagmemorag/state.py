@@ -24,6 +24,7 @@ from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
 from .storage.json_graph import JsonGraphStore
 from .storage.npz_vector import NpzVectorStore
+from .storage.qdrant_vector import QdrantVectorStore
 from .types import Anchor, GraphState
 
 
@@ -278,7 +279,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
 def save_kb(state: GraphState, cfg: Settings) -> None:
     root = _kb_dir(state.kb_name, cfg)
     JsonGraphStore(root / "graph.json").save(state.graph)
-    NpzVectorStore(root / "vectors.npz").add(np.arange(state.vectors.shape[0]), state.vectors)
+    _vector_store(state.kb_name, cfg, dim=_vector_dim(state)).add(np.arange(state.vectors.shape[0]), state.vectors)
     JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
 
     def write_meta(tmp_path: Path) -> None:
@@ -296,7 +297,8 @@ def load_kb(kb_name: str, cfg: Settings) -> GraphState:
     if str(meta.get("schema_version")) != cfg.storage.schema_version:
         raise StorageSchemaMismatchError(cfg.storage.schema_version, meta.get("schema_version"))
     graph = JsonGraphStore(root / "graph.json").load()
-    _, vectors = NpzVectorStore(root / "vectors.npz").load()
+    node_ids = np.asarray(sorted(int(node_id) for node_id in graph.nodes), dtype=np.int64)
+    _, vectors = _vector_store(kb_name, cfg, dim=int(meta.get("model_dim") or cfg.model.dim)).load(node_ids)
     loaded, anchors_version = JsonAnchorStore(root / "anchors.json").load_with_version()
     anchors = {anchor.node_id: anchor for anchor in loaded if anchor.node_id is not None}
     return GraphState(
@@ -316,6 +318,24 @@ def _kb_dir(kb_name: str, cfg: Settings) -> Path:
 
 def _anchor_store(kb_name: str, cfg: Settings) -> JsonAnchorStore:
     return JsonAnchorStore(_kb_dir(kb_name, cfg) / "anchors.json")
+
+
+def _vector_store(kb_name: str, cfg: Settings, *, dim: int):
+    if cfg.vector_store.provider == "qdrant":
+        return QdrantVectorStore(
+            kb_name=kb_name,
+            dim=dim,
+            url=cfg.vector_store.qdrant_url,
+            collection_prefix=cfg.vector_store.collection_prefix,
+            timeout_seconds=cfg.vector_store.timeout_seconds,
+        )
+    return NpzVectorStore(_kb_dir(kb_name, cfg) / "vectors.npz")
+
+
+def _vector_dim(state: GraphState) -> int:
+    if state.vectors.ndim == 2 and state.vectors.shape[1]:
+        return int(state.vectors.shape[1])
+    return int(state.meta.get("model_dim") or 0)
 
 
 def _now() -> str:

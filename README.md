@@ -294,6 +294,12 @@ storage:
   data_dir: ./data
   schema_version: "1"
 
+vector_store:
+  provider: npz              # npz | qdrant
+  qdrant_url: http://localhost:6333
+  collection_prefix: tagmemorag
+  timeout_seconds: 10
+
 server:
   host: 0.0.0.0
   port: 8000
@@ -351,10 +357,29 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 | `TAGMEMORAG__LOGGING__LEVEL` | `DEBUG` |
 | `TAGMEMORAG__MODEL__NAME` | `BAAI/bge-small-zh-v1.5` |
 | `TAGMEMORAG__STORAGE__DATA_DIR` | `/app/data` |
+| `TAGMEMORAG__VECTOR_STORE__PROVIDER` | `qdrant` |
 | `TAGMEMORAG__AUTH__ENABLED` | `true` |
 | `TAGMEMORAG__CACHE__MAX_ENTRIES` | `20000` |
 | `TAGMEMORAG__OBSERVABILITY__TRACING__ENABLED` | `true` |
 | `TAGMEMORAG__OBSERVABILITY__TRACING__OTLP_ENDPOINT` | `http://otel-collector:4317` |
+
+### Qdrant Vector Backend
+
+The default vector backend is local NPZ at `data/{kb_name}/vectors.npz`. To persist vectors in Qdrant while keeping graph, anchors, and build metadata in local JSON files, install the optional extra and point the service at Qdrant:
+
+```bash
+uv sync --extra qdrant
+docker run -p 6333:6333 qdrant/qdrant
+```
+
+```yaml
+vector_store:
+  provider: qdrant
+  qdrant_url: http://localhost:6333
+  collection_prefix: tagmemorag
+```
+
+Each KB uses a collection named `{collection_prefix}_{kb_name}` after safe character normalization. Qdrant is currently used as vector persistence; WAVE-RAG still loads the KB's vectors back into memory for graph propagation during search. The optional `qdrant-client` extra is supported on Python `<3.13` while the project pins `numpy<2`.
 
 ### HTTP Embedding Providers
 

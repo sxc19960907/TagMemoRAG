@@ -24,10 +24,19 @@ class NpzVectorStore(VectorStore):
 
         atomic_write(self.path, write)
 
-    def load(self) -> tuple[np.ndarray, np.ndarray]:
+    def load(self, ids: np.ndarray | list[int] | None = None) -> tuple[np.ndarray, np.ndarray]:
         with np.load(self.path) as data:
             self.ids = np.asarray(data["ids"], dtype=np.int64)
             self.vecs = np.asarray(data["vecs"], dtype=np.float32)
+        if ids is not None:
+            requested = np.asarray(ids, dtype=np.int64)
+            positions = []
+            for node_id in requested:
+                matches = np.where(self.ids == node_id)[0]
+                if len(matches) == 0:
+                    raise KeyError(int(node_id))
+                positions.append(int(matches[0]))
+            return requested, self.vecs[positions]
         return self.ids, self.vecs
 
     def search(self, query_vec: np.ndarray, k: int) -> list[tuple[int, float]]:

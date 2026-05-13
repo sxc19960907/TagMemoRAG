@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 import time
 import threading
 
 import numpy as np
 import pytest
 
+from tagmemorag.config import Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.graph_builder import build_graph
 from tagmemorag.errors import RebuildInProgressError
 from tagmemorag.state import AppState, build_kb, load_kb, save_kb
@@ -14,7 +16,50 @@ from tagmemorag.storage.atomic import atomic_write
 from tagmemorag.storage.json_anchor import JsonAnchorStore
 from tagmemorag.storage.json_graph import JsonGraphStore
 from tagmemorag.storage.npz_vector import NpzVectorStore
+from tagmemorag.storage.qdrant_vector import QdrantVectorStore, collection_name
 from tagmemorag.types import Anchor, Chunk
+
+
+class FakeQdrantClient:
+    collections: dict[str, dict[int, SimpleNamespace]] = {}
+
+    def __init__(self, **_kwargs):
+        pass
+
+    @classmethod
+    def reset(cls):
+        cls.collections = {}
+
+    def get_collection(self, collection_name):
+        if collection_name not in self.collections:
+            raise KeyError(collection_name)
+        return {"name": collection_name}
+
+    def create_collection(self, collection_name, vectors_config):
+        self.collections[collection_name] = {}
+        self.vectors_config = vectors_config
+
+    def upsert(self, collection_name, points):
+        collection = self.collections.setdefault(collection_name, {})
+        for point in points:
+            collection[int(point.id)] = SimpleNamespace(
+                id=int(point.id),
+                vector=list(point.vector),
+                payload=dict(point.payload or {}),
+            )
+
+    def retrieve(self, collection_name, ids, with_vectors=True, with_payload=False):
+        collection = self.collections.get(collection_name, {})
+        return [collection[int(node_id)] for node_id in ids if int(node_id) in collection]
+
+    def scroll(self, collection_name, offset=None, limit=256, with_vectors=False, with_payload=False):
+        ids = sorted(self.collections.get(collection_name, {}))
+        start = 0
+        if offset is not None and offset in ids:
+            start = ids.index(offset) + 1
+        selected = ids[start : start + limit]
+        next_offset = selected[-1] if start + limit < len(ids) and selected else None
+        return [self.collections[collection_name][node_id] for node_id in selected], next_offset
 
 
 def test_storage_round_trip(tmp_path):
@@ -62,6 +107,27 @@ def test_vector_search_returns_dot_product_top_k(tmp_path):
     vectors = np.array([[1.0, 0.0], [0.0, 1.0], [0.8, 0.2]], dtype=np.float32)
     store.add(np.array([10, 20, 30]), vectors)
     assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
+
+
+def test_qdrant_vector_store_round_trip_and_search():
+    FakeQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=2,
+        url="http://qdrant:6333",
+        collection_prefix="tmr",
+        client_factory=FakeQdrantClient,
+    )
+    vectors = np.array([[1.0, 0.0], [0.0, 1.0], [0.8, 0.2]], dtype=np.float32)
+
+    store.add(np.array([10, 20, 30]), vectors)
+    ids, loaded = store.load([30, 10])
+
+    assert ids.tolist() == [30, 10]
+    np.testing.assert_array_equal(loaded, np.array([[0.8, 0.2], [1.0, 0.0]], dtype=np.float32))
+    assert store.get(20).tolist() == [0.0, 1.0]
+    assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
+    assert collection_name("tmr", "product/a") == "tmr_product-a"
 
 
 def test_anchor_reconcile_exact_fallback_and_unresolved(tmp_path, fake_embedder):
@@ -118,6 +184,28 @@ def test_build_save_load_kb(tmp_path, test_config, fake_embedder):
     assert loaded.graph.nodes[0]["metadata"]["tags"] == ["steam"]
     meta = json.loads((tmp_path / "data" / "default" / "meta.json").read_text())
     assert meta["schema_version"] == "1"
+
+
+def test_build_save_load_kb_with_qdrant_vectors(monkeypatch, tmp_path, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    loaded = load_kb("default", cfg)
+
+    assert not (tmp_path / "data" / "default" / "vectors.npz").exists()
+    assert "test_default" in FakeQdrantClient.collections
+    assert loaded.vectors.shape == state.vectors.shape
+    np.testing.assert_array_equal(loaded.vectors, state.vectors)
 
 
 def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fake_embedder):

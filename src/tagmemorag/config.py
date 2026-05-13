@@ -51,6 +51,13 @@ class StorageConfig(BaseModel):
     schema_version: str = "1"
 
 
+class VectorStoreConfig(BaseModel):
+    provider: Literal["npz", "qdrant"] = "npz"
+    qdrant_url: str = "http://localhost:6333"
+    collection_prefix: str = "tagmemorag"
+    timeout_seconds: float = 10.0
+
+
 class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
@@ -133,6 +140,7 @@ class Settings(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)

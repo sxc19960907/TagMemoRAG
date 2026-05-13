@@ -59,6 +59,18 @@ def test_m4_observability_env_overrides(tmp_path, monkeypatch):
     assert cfg.observability.tracing.sample_ratio == 0.25
 
 
+def test_vector_store_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__VECTOR_STORE__PROVIDER", "qdrant")
+    monkeypatch.setenv("TAGMEMORAG__VECTOR_STORE__QDRANT_URL", "http://qdrant:6333")
+    monkeypatch.setenv("TAGMEMORAG__VECTOR_STORE__COLLECTION_PREFIX", "tmr")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.vector_store.provider == "qdrant"
+    assert cfg.vector_store.qdrant_url == "http://qdrant:6333"
+    assert cfg.vector_store.collection_prefix == "tmr"
+
+
 def test_metrics_public_by_default():
     cfg = load_config("missing.yaml")
 
