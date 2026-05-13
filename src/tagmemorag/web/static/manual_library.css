@@ -187,6 +187,10 @@ main {
   align-items: start;
 }
 
+.quality-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+}
+
 .table-pane,
 .detail-pane,
 dialog {
@@ -212,6 +216,55 @@ dialog {
 .pane-header h3 {
   margin: 0;
   font-size: 15px;
+}
+
+.quality-detail-block {
+  display: grid;
+  gap: 10px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quality-detail-block h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.quality-detail-block dl {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+}
+
+.quality-detail-block dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.quality-detail-block dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.quality-detail-block pre,
+.json-preview {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  padding: 9px;
+  white-space: pre-wrap;
+}
+
+.query-cell {
+  max-width: 420px;
+}
+
+.selected-row {
+  background: #e8f2ff;
 }
 
 .pane-header.compact {

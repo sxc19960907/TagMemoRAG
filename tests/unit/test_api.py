@@ -20,6 +20,7 @@ def test_api_search_and_anchor(tmp_path, test_config, fake_embedder, monkeypatch
     assert response.status_code == 200
     body = response.json()
     assert body["build_id"] == state.build_id
+    assert body["search_id"]
     assert body["results"]
     assert "search_time_ms" in body and body["search_time_ms"] >= 0
 

@@ -35,7 +35,7 @@ def test_eval_cli_passes_coffee_fixture(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["passed"] is True
-    assert report["summary"]["cases"] == 3
+    assert report["summary"]["cases"] == 7
     assert report["cases"][0]["actual_top_k"]
 
 

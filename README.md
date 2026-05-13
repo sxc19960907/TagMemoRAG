@@ -298,6 +298,54 @@ Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered 
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 
+### Retrieval quality feedback
+
+Search responses include `trace_id` and `search_id` so clients can attach bounded feedback to a specific retrieval interaction. Feedback is stored per KB at `storage.data_dir/{kb_name}/feedback/search-feedback.jsonl`; review state lives in `search-feedback-reviews.json`.
+
+Submit feedback with the `search` scope:
+
+```bash
+curl -X POST http://127.0.0.1:8000/search/feedback \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","trace_id":"...","search_id":"...","build_id":"...","query":"E05 蒸汽异常怎么处理","outcome":"missing_result","expected":[{"source_file":"coffee_machine.md","header":"E05 蒸汽异常","metadata":{"manual_id":"coffee-machine"}}],"note":"Expected the E05 troubleshooting section."}'
+```
+
+Operators use `admin` scope to list, review, preview promotion, and export eval drafts:
+
+```bash
+curl "http://127.0.0.1:8000/search/feedback?kb_name=default&status=new" \
+  -H "Authorization: Bearer tmr_live_..."
+
+curl -X PATCH http://127.0.0.1:8000/search/feedback/FB_ID \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","status":"triaged","operator_note":"Good eval candidate."}'
+
+curl -X POST http://127.0.0.1:8000/search/feedback/promote/preview \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","feedback_ids":["FB_ID"]}'
+```
+
+The same workflow is available from the CLI and always prints JSON:
+
+```bash
+python -m tagmemorag feedback submit --kb default --json feedback.json
+python -m tagmemorag feedback list --kb default --status new
+python -m tagmemorag feedback review --kb default --feedback-id FB_ID --status triaged
+python -m tagmemorag feedback promote-preview --kb default --feedback-id FB_ID
+python -m tagmemorag feedback promote --kb default --feedback-id FB_ID --output eval_drafts/default/feedback.jsonl --append
+```
+
+The operator UI is available at:
+
+```text
+http://127.0.0.1:8000/admin/retrieval-quality
+```
+
+Promotion writes JSONL cases in the existing eval schema. Existing draft files are not overwritten unless `append` or `overwrite` is explicit.
+
 ### Authentication
 
 Enable API key auth in `config.yaml` and send keys as Bearer tokens:

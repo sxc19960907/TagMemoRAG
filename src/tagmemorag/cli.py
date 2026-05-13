@@ -15,6 +15,13 @@ from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
+from .retrieval_feedback import (
+    create_feedback,
+    export_eval_promotion,
+    list_feedback,
+    preview_eval_promotion,
+    review_feedback,
+)
 from .state import build_kb, load_kb, save_kb
 from .tag_governance import (
     commit_tag_rewrite,
@@ -114,6 +121,32 @@ def main(argv: list[str] | None = None) -> int:
     _add_tag_rewrite_args(tag_preview, include_commit_args=False)
     tag_commit = tag_sub.add_parser("rewrite")
     _add_tag_rewrite_args(tag_commit, include_commit_args=True)
+
+    feedback = sub.add_parser("feedback")
+    feedback_sub = feedback.add_subparsers(dest="feedback_command", required=True)
+    feedback_submit = feedback_sub.add_parser("submit")
+    feedback_submit.add_argument("--kb", default="default")
+    feedback_submit.add_argument("--config", default="config.yaml")
+    feedback_submit.add_argument("--json", required=True, help="Feedback payload JSON file.")
+    feedback_list = feedback_sub.add_parser("list")
+    feedback_list.add_argument("--kb", default="default")
+    feedback_list.add_argument("--config", default="config.yaml")
+    feedback_list.add_argument("--status", default=None)
+    feedback_list.add_argument("--outcome", default=None)
+    feedback_list.add_argument("--query", default=None)
+    feedback_list.add_argument("--limit", type=int, default=50)
+    feedback_review = feedback_sub.add_parser("review")
+    feedback_review.add_argument("--kb", default="default")
+    feedback_review.add_argument("--config", default="config.yaml")
+    feedback_review.add_argument("--feedback-id", required=True)
+    feedback_review.add_argument("--status", default=None)
+    feedback_review.add_argument("--operator-note", default=None)
+    feedback_preview = feedback_sub.add_parser("promote-preview")
+    _add_feedback_promote_args(feedback_preview)
+    feedback_promote = feedback_sub.add_parser("promote")
+    _add_feedback_promote_args(feedback_promote)
+    feedback_promote.add_argument("--append", action="store_true")
+    feedback_promote.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args(argv)
     if args.command == "build":
@@ -292,6 +325,50 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "feedback" and args.feedback_command == "submit":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        payload = json.loads(_read_text_file(args.json))
+        feedback = create_feedback(args.kb, payload, cfg)
+        print(json.dumps({"feedback": feedback.to_dict()}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "feedback" and args.feedback_command == "list":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        rows = list_feedback(args.kb, cfg, status=args.status, outcome=args.outcome, query=args.query, limit=args.limit)
+        print(json.dumps({"kb_name": args.kb, "feedback": [row.to_dict() for row in rows]}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "feedback" and args.feedback_command == "review":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        feedback = review_feedback(
+            args.kb,
+            args.feedback_id,
+            cfg,
+            status=args.status,
+            operator_note=args.operator_note,
+        )
+        print(json.dumps({"feedback": feedback.to_dict()}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "feedback" and args.feedback_command == "promote-preview":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        preview = preview_eval_promotion(args.kb, args.feedback_id, cfg, output_path=args.output)
+        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "feedback" and args.feedback_command == "promote":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        preview = export_eval_promotion(
+            args.kb,
+            args.feedback_id,
+            cfg,
+            output_path=args.output,
+            append=args.append,
+            overwrite=args.overwrite,
+        )
+        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
+        return 0
     return 1
 
 
@@ -316,6 +393,13 @@ def _add_tag_rewrite_args(parser: argparse.ArgumentParser, *, include_commit_arg
     if include_commit_args:
         parser.add_argument("--update-policy", action="store_true")
         parser.add_argument("--policy-alias-mode", choices=["synonym", "deprecated"], default=None)
+
+
+def _add_feedback_promote_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--kb", default="default")
+    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--feedback-id", action="append", required=True)
+    parser.add_argument("--output", default=None)
 
 
 def _read_text_file(path: str) -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tagmemorag.api import SearchRequest, _compute_cache_key
+from tagmemorag.api import SearchRequest, _compute_cache_key, _compute_search_id
 from tagmemorag.cache.lru_ttl import LRUTTLCache
 from tagmemorag.types import GraphState
 
@@ -77,3 +77,14 @@ def test_cache_key_includes_canonical_filters():
 
     assert base != filtered
     assert filtered == same_filtered
+
+
+def test_search_id_changes_with_trace_but_uses_same_request_canonicalization():
+    graph = nx.Graph()
+    state = GraphState(graph=graph, vectors=np.zeros((0, 64)), build_id="build-a", kb_name="kb-a", anchors_version=1)
+    request = SearchRequest(question="  a   b  ", kb_name="kb-a", top_k=3)
+
+    first = _compute_search_id(request, state, "trace-a")
+
+    assert first == _compute_search_id(SearchRequest(question="a b", kb_name="kb-a", top_k=3), state, "trace-a")
+    assert first != _compute_search_id(request, state, "trace-b")

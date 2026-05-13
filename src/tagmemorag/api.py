@@ -43,6 +43,13 @@ from .manual_library import (
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
+from .retrieval_feedback import (
+    create_feedback,
+    export_eval_promotion,
+    list_feedback,
+    preview_eval_promotion,
+    review_feedback,
+)
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
@@ -228,11 +235,50 @@ class CacheClearRequest(BaseModel):
     kb_name: str | None = None
 
 
+class FeedbackSubmitRequest(BaseModel):
+    kb_name: str = "default"
+    trace_id: str = ""
+    search_id: str = ""
+    build_id: str = ""
+    query: str = Field(..., max_length=1000)
+    outcome: str
+    selected_results: list[dict[str, object]] = Field(default_factory=list, max_length=20)
+    expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
+    note: str = Field(default="", max_length=2000)
+
+
+class FeedbackReviewRequest(BaseModel):
+    kb_name: str = "default"
+    status: str | None = None
+    operator_note: str | None = Field(default=None, max_length=2000)
+
+
+class FeedbackPromoteRequest(BaseModel):
+    kb_name: str = "default"
+    feedback_ids: list[str]
+    output_path: str | None = None
+    append: bool = False
+    overwrite: bool = False
+
+
 @app.get("/admin/manual-library")
 def manual_library_admin(request: Request, kb_name: str = "default"):
     return templates.TemplateResponse(
         request,
         "manual_library.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
+@app.get("/admin/retrieval-quality")
+def retrieval_quality_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "retrieval_quality.html",
         {
             "default_kb_name": kb_name or "default",
             "api_base_path": "",
@@ -318,6 +364,25 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         request.kb_name,
         state.build_id,
         str(state.anchors_version),
+        _normalize_question(request.question),
+        str(params["top_k"]),
+        str(params["source_k"]),
+        str(params["steps"]),
+        str(params["decay"]),
+        str(params["amplitude_cutoff"]),
+        str(params["aggregate"]),
+        json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
+    ]
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
+    params = _search_param_values(request)
+    canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
+    parts = [
+        state.kb_name,
+        state.build_id,
+        trace_id,
         _normalize_question(request.question),
         str(params["top_k"]),
         str(params["source_k"]),
@@ -500,7 +565,8 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
     if cached is not None:
         search_time_ms = (time.perf_counter() - t0) * 1000.0
         trace_id = str(getattr(http_request.state, "trace_id", ""))
-        payload = {**cached, "trace_id": trace_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
+        search_id = _compute_search_id(request, state, trace_id)
+        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
         result_count = len(payload.get("results", []))
         get_metrics().record_search(
             kb_name=state.kb_name,
@@ -590,12 +656,17 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         "build_id": state.build_id,
         "kb_name": state.kb_name,
         "trace_id": trace_id,
+        "search_id": _compute_search_id(request, state, trace_id),
         "results": [r.to_dict() for r in results],
         "search_time_ms": round(search_time_ms, 3),
         "cache": "miss",
     }
     if cache is not None:
-        cache.set(cache_key, {k: v for k, v in payload.items() if k not in {"trace_id", "search_time_ms", "cache"}}, kb_name=request.kb_name)
+        cache.set(
+            cache_key,
+            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache"}},
+            kb_name=request.kb_name,
+        )
         get_metrics().record_cache_operation(operation="set", outcome="success")
         get_metrics().set_cache_entries(len(cache))
     return payload
@@ -610,6 +681,104 @@ def rebuild(
     ensure_kb_access(api_key, request.kb_name)
     task = app_state.start_rebuild(request.docs_dir, request.kb_name, settings, embedder=embedder)
     return task.to_dict()
+
+
+@app.post("/search/feedback")
+def submit_search_feedback(
+    request: FeedbackSubmitRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    feedback = create_feedback(request.kb_name, request.model_dump(), settings)
+    structlog.get_logger().info(
+        "search_feedback_created",
+        kb_name=feedback.kb_name,
+        outcome=feedback.outcome,
+        status=feedback.status,
+        trace_id=feedback.trace_id,
+    )
+    return {"feedback": feedback.to_dict()}
+
+
+@app.get("/search/feedback")
+def get_search_feedback(
+    kb_name: str = "default",
+    status: str | None = None,
+    outcome: str | None = None,
+    query: str | None = None,
+    limit: int = 50,
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    rows = list_feedback(kb_name, settings, status=status, outcome=outcome, query=query, limit=limit)
+    return {"kb_name": kb_name, "feedback": [row.to_dict() for row in rows]}
+
+
+@app.patch("/search/feedback/{feedback_id}")
+def patch_search_feedback(
+    feedback_id: str,
+    request: FeedbackReviewRequest,
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    feedback = review_feedback(
+        request.kb_name,
+        feedback_id,
+        settings,
+        status=request.status,
+        operator_note=request.operator_note,
+    )
+    structlog.get_logger().info(
+        "search_feedback_reviewed",
+        kb_name=feedback.kb_name,
+        status=feedback.status,
+        outcome=feedback.outcome,
+        trace_id=feedback.trace_id,
+    )
+    return {"feedback": feedback.to_dict()}
+
+
+@app.post("/search/feedback/promote/preview")
+def preview_search_feedback_promotion(
+    request: FeedbackPromoteRequest,
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    preview = preview_eval_promotion(
+        request.kb_name,
+        request.feedback_ids,
+        settings,
+        output_path=request.output_path,
+    )
+    return preview.to_dict()
+
+
+@app.post("/search/feedback/promote")
+def promote_search_feedback(
+    request: FeedbackPromoteRequest,
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    preview = export_eval_promotion(
+        request.kb_name,
+        request.feedback_ids,
+        settings,
+        output_path=request.output_path,
+        append=request.append,
+        overwrite=request.overwrite,
+    )
+    structlog.get_logger().info(
+        "search_feedback_promoted",
+        kb_name=request.kb_name,
+        status="promoted",
+        count=len(preview.cases),
+    )
+    return preview.to_dict()
 
 
 @app.get("/rebuild/{task_id}")

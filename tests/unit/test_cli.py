@@ -187,3 +187,50 @@ manual_library:
     result = json.loads(capsys.readouterr().out)
     assert result["imported_count"] == 1
     assert (tmp_path / "manuals" / "default" / "coffee" / "cm1.md").exists()
+
+
+def test_cli_feedback_workflow(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+""",
+        encoding="utf-8",
+    )
+    payload_path = tmp_path / "feedback.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "feedback_id": "fb-cli",
+                "trace_id": "trace-1",
+                "search_id": "search-1",
+                "build_id": "build-1",
+                "query": "E05 蒸汽异常怎么处理",
+                "outcome": "missing_result",
+                "expected": [{"source_file": "coffee.md", "header": "E05", "metadata": {"manual_id": "cm1"}}],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    assert cli.main(["feedback", "submit", "--config", str(config), "--json", str(payload_path)]) == 0
+    created = json.loads(capsys.readouterr().out)
+    assert created["feedback"]["feedback_id"] == "fb-cli"
+
+    assert cli.main(["feedback", "list", "--config", str(config), "--status", "new"]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert [row["feedback_id"] for row in listed["feedback"]] == ["fb-cli"]
+
+    assert cli.main(["feedback", "review", "--config", str(config), "--feedback-id", "fb-cli", "--status", "triaged"]) == 0
+    reviewed = json.loads(capsys.readouterr().out)
+    assert reviewed["feedback"]["status"] == "triaged"
+
+    output = tmp_path / "eval_drafts" / "default" / "feedback.jsonl"
+    assert cli.main(["feedback", "promote-preview", "--config", str(config), "--feedback-id", "fb-cli", "--output", str(output)]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["cases"][0]["id"] == "feedback-fb-cli"

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG Retrieval Quality</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="retrieval-quality-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell quality-shell">
+      <header class="topbar quality-topbar">
+        <div class="brand">
+          <span class="eyebrow">TagMemoRAG</span>
+          <h1>Retrieval Quality</h1>
+        </div>
+        <form class="kb-form" id="quality-kb-form">
+          <label>
+            <span>KB</span>
+            <input id="quality-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
+          </label>
+          <button type="submit">Load</button>
+        </form>
+        <label class="token-field">
+          <span>API token</span>
+          <input id="quality-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+        </label>
+        <div class="top-actions">
+          <button id="quality-refresh" type="button" class="primary">Refresh</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="status-strip" id="quality-status" role="status" aria-live="polite"></section>
+
+        <section class="filters quality-filters" aria-label="Feedback filters">
+          <label><span>Search</span><input id="quality-filter-query" type="search" placeholder="query text"></label>
+          <label><span>Status</span>
+            <select id="quality-filter-status">
+              <option value="">All</option>
+              <option value="new">new</option>
+              <option value="triaged">triaged</option>
+              <option value="promoted">promoted</option>
+              <option value="dismissed">dismissed</option>
+            </select>
+          </label>
+          <label><span>Outcome</span>
+            <select id="quality-filter-outcome">
+              <option value="">All</option>
+              <option value="helpful">helpful</option>
+              <option value="not_helpful">not_helpful</option>
+              <option value="missing_result">missing_result</option>
+              <option value="wrong_manual">wrong_manual</option>
+              <option value="other">other</option>
+            </select>
+          </label>
+          <label><span>Limit</span><input id="quality-filter-limit" type="number" min="1" max="500" value="50"></label>
+        </section>
+
+        <div class="workspace quality-workspace">
+          <section class="table-pane" aria-label="Search feedback">
+            <div class="pane-header">
+              <div>
+                <h2>Feedback</h2>
+                <p id="quality-count">0 records</p>
+              </div>
+              <button id="quality-preview-selected" type="button">Preview Selected</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Created</th>
+                    <th>Outcome</th>
+                    <th>Status</th>
+                    <th>Query</th>
+                    <th>Build</th>
+                    <th>Refs</th>
+                  </tr>
+                </thead>
+                <tbody id="quality-feedback-rows"></tbody>
+              </table>
+            </div>
+            <div id="quality-empty" class="empty-state">Load feedback to review retrieval quality.</div>
+          </section>
+
+          <aside class="detail-pane" aria-label="Feedback detail">
+            <div class="pane-header">
+              <div>
+                <h2>Detail</h2>
+                <p id="quality-detail-subtitle">Select feedback</p>
+              </div>
+            </div>
+            <section class="quality-detail-block">
+              <dl id="quality-detail-list"></dl>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Review</h3>
+              <label><span>Status</span>
+                <select id="quality-review-status">
+                  <option value="new">new</option>
+                  <option value="triaged">triaged</option>
+                  <option value="promoted">promoted</option>
+                  <option value="dismissed">dismissed</option>
+                </select>
+              </label>
+              <label><span>Operator note</span><textarea id="quality-operator-note" rows="4"></textarea></label>
+              <div class="button-row">
+                <button id="quality-save-review" type="button" class="primary">Save Review</button>
+                <button id="quality-dismiss" type="button">Dismiss</button>
+              </div>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Promotion</h3>
+              <label><span>Output path</span><input id="quality-output-path" placeholder="optional eval draft path"></label>
+              <div class="toggles">
+                <label><input id="quality-append" type="checkbox"> Append</label>
+                <label><input id="quality-overwrite" type="checkbox"> Overwrite</label>
+              </div>
+              <div class="button-row">
+                <button id="quality-preview" type="button">Preview</button>
+                <button id="quality-export" type="button" class="primary">Export</button>
+              </div>
+              <pre id="quality-promotion-preview" class="json-preview"></pre>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script src="{{ url_for('manual-library-static', path='retrieval_quality.js') }}"></script>
+  </body>
+</html>

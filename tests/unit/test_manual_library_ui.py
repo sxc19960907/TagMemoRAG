@@ -55,3 +55,29 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "manual-library/tags/rewrite/preview" in js.text
     assert "manual-library/tags/policy" in js.text
     assert "acceptAllSuggestions" in js.text
+
+
+def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/admin/retrieval-quality?kb_name=ops")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "Retrieval Quality" in body
+    assert 'id="quality-feedback-rows"' in body
+    assert 'id="quality-promotion-preview"' in body
+    assert '"defaultKbName": "ops"' in body
+    assert "/static/manual-library/retrieval_quality.js" in body
+
+
+def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/retrieval_quality.js")
+
+    assert js.status_code == 200
+    assert "/search/feedback" in js.text
+    assert "/search/feedback/promote/preview" in js.text
+    assert "quality-feedback-rows" in js.text
