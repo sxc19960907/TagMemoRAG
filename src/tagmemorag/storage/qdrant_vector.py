@@ -27,7 +27,10 @@ class QdrantVectorStore(VectorStore):
         self.collection_name = collection_name(collection_prefix, kb_name)
         self.client = client or self._create_client(client_factory, url=url, timeout=timeout_seconds)
 
-    def add(self, ids: np.ndarray, vecs: np.ndarray) -> None:
+    def add(self, ids: np.ndarray, vecs: np.ndarray, payloads: list[dict[str, Any]] | None = None) -> None:
+        self.update(ids, vecs, payloads=payloads)
+
+    def update(self, ids: np.ndarray, vecs: np.ndarray, payloads: list[dict[str, Any]] | None = None) -> None:
         ids = np.asarray(ids, dtype=np.int64)
         vecs = np.asarray(vecs, dtype=np.float32)
         if vecs.ndim != 2 or vecs.shape[1] != self.dim:
@@ -36,15 +39,39 @@ class QdrantVectorStore(VectorStore):
                 "Qdrant vector dimension does not match configured model dimension.",
                 {"expected": self.dim, "actual": int(vecs.shape[1]) if vecs.ndim == 2 else None},
             )
+        if len(ids) != len(vecs):
+            raise ServiceError(
+                ErrorCode.STORAGE_SCHEMA_MISMATCH,
+                "Qdrant vector ids and vectors have different lengths.",
+                {"ids": len(ids), "vectors": len(vecs)},
+            )
+        if payloads is not None and len(payloads) != len(ids):
+            raise ServiceError(
+                ErrorCode.STORAGE_SCHEMA_MISMATCH,
+                "Qdrant payload count does not match vector ids.",
+                {"ids": len(ids), "payloads": len(payloads)},
+            )
         try:
             self._ensure_collection()
-            points = [self._point_struct(int(node_id), vecs[index]) for index, node_id in enumerate(ids)]
+            points = [
+                self._point_struct(int(node_id), vecs[index], payloads[index] if payloads is not None else None)
+                for index, node_id in enumerate(ids)
+            ]
             if points:
                 self.client.upsert(collection_name=self.collection_name, points=points)
         except ServiceError:
             raise
         except Exception as exc:
             raise _storage_error("Failed to write vectors to Qdrant.", exc, self.collection_name) from exc
+
+    def delete(self, ids: np.ndarray | list[int]) -> None:
+        ids_array = np.asarray(ids, dtype=np.int64)
+        if len(ids_array) == 0:
+            return
+        try:
+            self.client.delete(collection_name=self.collection_name, points_selector=[int(node_id) for node_id in ids_array])
+        except Exception as exc:
+            raise _storage_error("Failed to delete vectors from Qdrant.", exc, self.collection_name) from exc
 
     def load(self, ids: np.ndarray | list[int] | None = None) -> tuple[np.ndarray, np.ndarray]:
         try:
@@ -123,10 +150,12 @@ class QdrantVectorStore(VectorStore):
                 break
         return np.asarray(sorted(ids), dtype=np.int64)
 
-    def _point_struct(self, node_id: int, vector: np.ndarray):
-        payload = {"kb_name": self.kb_name, "node_id": node_id}
+    def _point_struct(self, node_id: int, vector: np.ndarray, payload: dict[str, Any] | None = None):
+        point_payload = {"kb_name": self.kb_name, "node_id": node_id}
+        if payload:
+            point_payload.update(_safe_payload(payload))
         if not self._uses_real_client():
-            return _SimplePoint(id=node_id, vector=vector.astype(float).tolist(), payload=payload)
+            return _SimplePoint(id=node_id, vector=vector.astype(float).tolist(), payload=point_payload)
         try:
             from qdrant_client.models import PointStruct
         except ImportError as exc:
@@ -134,7 +163,7 @@ class QdrantVectorStore(VectorStore):
         return PointStruct(
             id=node_id,
             vector=vector.astype(float).tolist(),
-            payload=payload,
+            payload=point_payload,
         )
 
     def _vector_params(self, dim: int):
@@ -186,6 +215,27 @@ def _record_vector(record: Any) -> list[float]:
     if vector is None:
         raise ServiceError(ErrorCode.STORAGE_LOAD_FAILED, "Qdrant point did not include a vector.")
     return list(vector)
+
+
+def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "kb_name",
+        "node_id",
+        "build_id",
+        "chunk_identity_key",
+        "manual_id",
+        "source_file",
+        "text_hash",
+    }
+    safe: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key not in allowed or value is None:
+            continue
+        if key == "node_id":
+            safe[key] = int(value)
+        else:
+            safe[key] = str(value)
+    return safe
 
 
 def _missing_dependency() -> InvalidConfigError:

@@ -91,6 +91,7 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 - Per-KB manifest is `.tagmemorag-library.json` with `schema_version`, `kb_name`, `pending_changes`, `last_successful_build_id`, and `updated_at`.
 - Incremental rebuild dirty state also lives in `.tagmemorag-library.json` under `dirty_manuals`, keyed by `manual_id` with `source_file`, `operation`, `updated_at`, and `checksum`. Older manifests without `dirty_manuals` remain loadable; if `pending_changes=true` and no dirty state exists, incremental rebuild must fall back to full rebuild with `fallback_reason=missing_dirty_state`.
 - Successful managed-library rebuilds may write `data/{kb_name}/chunk_identity.json` and `data/{kb_name}/rebuild_impact.json`. The identity map is a built artifact with `schema_version`, `kb_name`, `build_id`, parser settings, stable chunk identity keys, text hashes, node ids, vector rows, and metadata hashes. The impact report is operational metadata with counts and hashes/ids only; it must not include raw chunk text.
+- When `vector_store.provider=qdrant`, new points store safe payload fields only: `kb_name`, `node_id`, `build_id`, `chunk_identity_key`, `manual_id`, `source_file`, and `text_hash`. Raw chunk text, secrets, and embedding arrays outside the Qdrant vector itself must not be payload fields. Older Qdrant collections that only have `kb_name` and `node_id` payloads remain load-compatible.
 - `source_file` must be relative, non-empty, path traversal free, and resolve under the KB library root.
 - Supported source suffixes remain `.md`, `.txt`, and `.pdf`.
 - Write sidecars and manifests with `atomic_write()`. Uploaded source files must replace through a temp file in the target directory.
@@ -98,6 +99,8 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 - `status=disabled` and `status=archived` manuals stay listed but are skipped by `build_kb()`.
 - Mutation endpoints mark the manifest pending. Only successful library rebuild clears pending and records `last_successful_build_id`.
 - Managed library rebuilds support `mode=full|incremental|auto`. Full remains the compatibility default. Incremental rebuilds may reuse unchanged chunks/vectors but must rebuild final graph topology globally, save full graph/vector artifacts, swap only after save succeeds, and clear dirty state only in the success callback.
+- Qdrant-backed managed-library rebuilds must sync Qdrant before saving the new graph/meta artifacts. Full sync upserts all current node ids and then deletes explicit stale old node ids. Safe point-incremental sync may skip unchanged node ids only when compatible chunk identity data proves the same node id, text hash, and metadata hash; otherwise it must fall back to full sync with a structured `fallback_reason`. Stale deletes must run only after required current upserts succeed. Failed Qdrant sync must preserve the old `GraphState` and leave dirty state pending.
+- Qdrant sync summaries are additive metadata on rebuild tasks and persisted meta/impact artifacts: `provider`, `strategy`, `points_upserted`, `points_deleted`, `points_reused`, and `fallback_reason`.
 
 ### 4. Validation & Error Matrix
 

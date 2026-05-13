@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
+from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
     delete_manual,
@@ -21,6 +21,7 @@ from tagmemorag.manual_library import (
     validate_metadata,
 )
 from tagmemorag.state import AppState, build_kb, start_library_rebuild
+from tests.unit.test_storage_state import FakeQdrantClient
 
 
 @pytest.fixture
@@ -41,6 +42,15 @@ def _metadata(source_file: str = "coffee/cm1.md", manual_id: str = "cm1") -> dic
         "language": "zh-CN",
         "tags": ["Maintenance Task"],
     }
+
+
+def _persist_qdrant_baseline(state, cfg) -> None:
+    from tagmemorag.chunk_identity import build_chunk_identity_map, identity_path, save_chunk_identity
+    from tagmemorag.state import save_kb
+
+    save_kb(state, cfg)
+    save_chunk_identity(identity_path(state.kb_name, cfg), build_chunk_identity_map(state.graph, kb_name=state.kb_name, build_id=state.build_id, cfg=cfg))
+    mark_pending(state.kb_name, cfg, pending=False, build_id=state.build_id)
 
 
 def test_safe_source_path_rejects_traversal_and_unsupported_suffix(library_config):
@@ -213,3 +223,110 @@ def test_incremental_rebuild_falls_back_without_dirty_state(library_config, fake
     assert task.status == "done"
     assert task.effective_mode == "full"
     assert task.fallback_reason == "missing_dirty_state"
+
+
+@pytest.fixture
+def qdrant_library_config(monkeypatch, tmp_path) -> Settings:
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    return Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": 64},
+    )
+
+
+def test_qdrant_library_rebuild_full_sync_deletes_stale_points(qdrant_library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", qdrant_library_config)
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# B\nClean weekly.\n", qdrant_library_config)
+    old_state = build_kb(library_root("default", qdrant_library_config), "default", qdrant_library_config, embedder=fake_embedder)
+    _persist_qdrant_baseline(old_state, qdrant_library_config)
+    app = AppState(old_state)
+    delete_manual("default", "b", qdrant_library_config)
+
+    task = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="full")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.qdrant_sync["strategy"] == "full_sync"
+    assert task.qdrant_sync["points_deleted"] == 1
+    assert FakeQdrantClient.delete_calls[-1] == ("test_default", [1])
+    assert sorted(FakeQdrantClient.collections["test_default"]) == [0]
+    meta = json.loads((Path(qdrant_library_config.storage.data_dir) / "default" / "meta.json").read_text(encoding="utf-8"))
+    assert meta["qdrant_sync"]["points_deleted"] == 1
+    impact = json.loads((Path(qdrant_library_config.storage.data_dir) / "default" / "rebuild_impact.json").read_text(encoding="utf-8"))
+    assert impact["qdrant_sync"]["strategy"] == "full_sync"
+
+
+def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", qdrant_library_config)
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# B\nClean weekly.\n", qdrant_library_config)
+    old_state = build_kb(library_root("default", qdrant_library_config), "default", qdrant_library_config, embedder=fake_embedder)
+    _persist_qdrant_baseline(old_state, qdrant_library_config)
+    app = AppState(old_state)
+    FakeQdrantClient.upsert_calls.clear()
+    update_manual_metadata("default", "a", {"product_model": "A1"}, qdrant_library_config)
+
+    task = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.qdrant_sync == {
+        "provider": "qdrant",
+        "strategy": "point_incremental",
+        "points_upserted": 1,
+        "points_deleted": 0,
+        "points_reused": 1,
+        "fallback_reason": "",
+    }
+    assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
+    assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
+    assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == old_state.build_id
+
+
+def test_qdrant_incremental_sync_falls_back_without_identity(qdrant_library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", qdrant_library_config)
+    old_state = build_kb(library_root("default", qdrant_library_config), "default", qdrant_library_config, embedder=fake_embedder)
+    _persist_qdrant_baseline(old_state, qdrant_library_config)
+    app = AppState(old_state)
+    update_manual_metadata("default", "a", {"product_model": "A1"}, qdrant_library_config)
+    identity_file = Path(qdrant_library_config.storage.data_dir) / "default" / "chunk_identity.json"
+    identity_file.unlink()
+
+    task = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "incremental"
+    assert task.qdrant_sync["strategy"] == "full_sync"
+    assert task.qdrant_sync["fallback_reason"] == "missing_chunk_identity"
+
+
+def test_failed_qdrant_sync_keeps_pending_dirty_state(qdrant_library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", qdrant_library_config)
+    old_state = build_kb(library_root("default", qdrant_library_config), "default", qdrant_library_config, embedder=fake_embedder)
+    _persist_qdrant_baseline(old_state, qdrant_library_config)
+    app = AppState(old_state)
+    update_manual_metadata("default", "a", {"product_model": "A1"}, qdrant_library_config)
+    FakeQdrantClient.fail_next_upsert = True
+
+    task = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="full")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "failed"
+    assert app.get_current("default").build_id == old_state.build_id
+    assert load_manifest("default", qdrant_library_config).pending_changes is True
+    assert FakeQdrantClient.delete_calls == []

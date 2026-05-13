@@ -22,6 +22,9 @@ from tagmemorag.types import Anchor, Chunk
 
 class FakeQdrantClient:
     collections: dict[str, dict[int, SimpleNamespace]] = {}
+    upsert_calls: list[tuple[str, list[int]]] = []
+    delete_calls: list[tuple[str, list[int]]] = []
+    fail_next_upsert: bool = False
 
     def __init__(self, **_kwargs):
         pass
@@ -29,6 +32,9 @@ class FakeQdrantClient:
     @classmethod
     def reset(cls):
         cls.collections = {}
+        cls.upsert_calls = []
+        cls.delete_calls = []
+        cls.fail_next_upsert = False
 
     def get_collection(self, collection_name):
         if collection_name not in self.collections:
@@ -40,6 +46,10 @@ class FakeQdrantClient:
         self.vectors_config = vectors_config
 
     def upsert(self, collection_name, points):
+        if self.fail_next_upsert:
+            type(self).fail_next_upsert = False
+            raise RuntimeError("upsert failed")
+        self.upsert_calls.append((collection_name, [int(point.id) for point in points]))
         collection = self.collections.setdefault(collection_name, {})
         for point in points:
             collection[int(point.id)] = SimpleNamespace(
@@ -47,6 +57,13 @@ class FakeQdrantClient:
                 vector=list(point.vector),
                 payload=dict(point.payload or {}),
             )
+
+    def delete(self, collection_name, points_selector):
+        ids = [int(node_id) for node_id in points_selector]
+        self.delete_calls.append((collection_name, ids))
+        collection = self.collections.setdefault(collection_name, {})
+        for node_id in ids:
+            collection.pop(node_id, None)
 
     def retrieve(self, collection_name, ids, with_vectors=True, with_payload=False):
         collection = self.collections.get(collection_name, {})
@@ -128,6 +145,45 @@ def test_qdrant_vector_store_round_trip_and_search():
     assert store.get(20).tolist() == [0.0, 1.0]
     assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
     assert collection_name("tmr", "product/a") == "tmr_product-a"
+
+
+def test_qdrant_vector_store_update_payload_and_delete():
+    FakeQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=2,
+        url="http://qdrant:6333",
+        collection_prefix="tmr",
+        client_factory=FakeQdrantClient,
+    )
+
+    store.update(
+        np.array([1]),
+        np.array([[1.0, 0.0]], dtype=np.float32),
+        payloads=[
+            {
+                "build_id": "b1",
+                "chunk_identity_key": "sha256:key",
+                "manual_id": "m1",
+                "source_file": "manual.md",
+                "text_hash": "sha256:text",
+                "text": "must-not-be-stored",
+            }
+        ],
+    )
+    payload = FakeQdrantClient.collections["tmr_default"][1].payload
+
+    assert payload == {
+        "kb_name": "default",
+        "node_id": 1,
+        "build_id": "b1",
+        "chunk_identity_key": "sha256:key",
+        "manual_id": "m1",
+        "source_file": "manual.md",
+        "text_hash": "sha256:text",
+    }
+    store.delete([1])
+    assert 1 not in FakeQdrantClient.collections["tmr_default"]
 
 
 def test_anchor_reconcile_exact_fallback_and_unresolved(tmp_path, fake_embedder):

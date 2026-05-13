@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 import json
 import threading
 import time
@@ -11,7 +12,7 @@ import uuid
 import numpy as np
 import structlog
 
-from .chunk_identity import build_chunk_identity_map, identity_path, save_chunk_identity
+from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
 from .embedder import create_embedder
 from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
@@ -49,6 +50,7 @@ class RebuildTask:
     auto_decision_reason: str = ""
     chunk_identity_fallback_reason: str = ""
     impact_report: dict | None = None
+    qdrant_sync: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -69,6 +71,7 @@ class RebuildTask:
             "chunk_identity_fallback_reason": self.chunk_identity_fallback_reason,
             "impact_report": self.impact_report,
             "impact_summary": self.impact_report.get("summary") if isinstance(self.impact_report, dict) else None,
+            "qdrant_sync": self.qdrant_sync,
         }
 
 
@@ -211,7 +214,15 @@ class AppState:
                     is_library_rebuild=is_library_rebuild,
                     task=task,
                 )
-                save_kb(new_state, cfg)
+                if is_library_rebuild and cfg.vector_store.provider == "qdrant":
+                    qdrant_sync = sync_qdrant_for_rebuild(new_state, old_state, cfg, task)
+                    task.qdrant_sync = qdrant_sync.to_dict()
+                    new_state.meta["qdrant_sync"] = task.qdrant_sync
+                    if isinstance(task.impact_report, dict):
+                        task.impact_report["qdrant_sync"] = task.qdrant_sync
+                    _save_kb_metadata_artifacts(new_state, cfg)
+                else:
+                    save_kb(new_state, cfg)
                 if is_library_rebuild and task.status != "failed":
                     save_chunk_identity(identity_path(kb_name, cfg), build_chunk_identity_map(new_state.graph, kb_name=kb_name, build_id=new_state.build_id, cfg=cfg))
                     if isinstance(task.impact_report, dict):
@@ -223,6 +234,7 @@ class AppState:
                                 build_id=str(task.impact_report.get("build_id") or new_state.build_id),
                                 summary=dict(task.impact_report.get("summary") or {}),
                                 manuals=manuals,
+                                qdrant_sync=task.qdrant_sync,
                             ),
                         )
                 self.swap_kb(kb_name, new_state)
@@ -486,8 +498,6 @@ def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, ma
 
 
 def _full_rebuild_impact(kb_name: str, new_state: GraphState, old_state: GraphState | None, manifest) -> dict:
-    from .chunk_identity import entry_from_node
-
     old_keys_by_manual: dict[str, set[str]] = {}
     if old_state is not None:
         for node_id, node in old_state.graph.nodes(data=True):
@@ -518,11 +528,26 @@ def _full_rebuild_impact(kb_name: str, new_state: GraphState, old_state: GraphSt
 def save_kb(state: GraphState, cfg: Settings) -> None:
     root = _kb_dir(state.kb_name, cfg)
     JsonGraphStore(root / "graph.json").save(state.graph)
-    _vector_store(state.kb_name, cfg, dim=_vector_dim(state)).add(np.arange(state.vectors.shape[0]), state.vectors)
+    vector_store = _vector_store(state.kb_name, cfg, dim=_vector_dim(state))
+    ids = np.arange(state.vectors.shape[0])
+    if cfg.vector_store.provider == "qdrant":
+        vector_store.add(ids, state.vectors, payloads=_qdrant_payloads(state, cfg))
+    else:
+        vector_store.add(ids, state.vectors)
     JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
+    _save_meta(root, state.meta)
 
+
+def _save_kb_metadata_artifacts(state: GraphState, cfg: Settings) -> None:
+    root = _kb_dir(state.kb_name, cfg)
+    JsonGraphStore(root / "graph.json").save(state.graph)
+    JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
+    _save_meta(root, state.meta)
+
+
+def _save_meta(root: Path, meta: dict) -> None:
     def write_meta(tmp_path: Path) -> None:
-        tmp_path.write_text(json.dumps(state.meta, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     atomic_write(root / "meta.json", write_meta)
 
@@ -575,6 +600,119 @@ def _vector_dim(state: GraphState) -> int:
     if state.vectors.ndim == 2 and state.vectors.shape[1]:
         return int(state.vectors.shape[1])
     return int(state.meta.get("model_dim") or 0)
+
+
+@dataclass(frozen=True)
+class QdrantSyncSummary:
+    provider: str = "qdrant"
+    strategy: str = "skipped"
+    points_upserted: int = 0
+    points_deleted: int = 0
+    points_reused: int = 0
+    fallback_reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "strategy": self.strategy,
+            "points_upserted": self.points_upserted,
+            "points_deleted": self.points_deleted,
+            "points_reused": self.points_reused,
+            "fallback_reason": self.fallback_reason,
+        }
+
+
+def sync_qdrant_for_rebuild(
+    new_state: GraphState,
+    old_state: GraphState | None,
+    cfg: Settings,
+    task: RebuildTask | None = None,
+) -> QdrantSyncSummary:
+    vector_store = _vector_store(new_state.kb_name, cfg, dim=_vector_dim(new_state))
+    new_ids = np.arange(new_state.vectors.shape[0], dtype=np.int64)
+    old_ids = _state_node_ids(old_state)
+    stale_ids = sorted(old_ids - {int(node_id) for node_id in new_ids})
+    reusable_node_ids, fallback_reason = _qdrant_reusable_node_ids(new_state, old_state, cfg, task)
+    if fallback_reason:
+        upsert_ids = new_ids
+        strategy = "full_sync"
+        reused_count = 0
+    else:
+        upsert_ids = np.asarray([int(node_id) for node_id in new_ids if int(node_id) not in reusable_node_ids], dtype=np.int64)
+        strategy = "point_incremental"
+        reused_count = len(reusable_node_ids)
+
+    vector_store.update(upsert_ids, new_state.vectors[upsert_ids] if len(upsert_ids) else np.zeros((0, _vector_dim(new_state)), dtype=np.float32), payloads=_qdrant_payloads(new_state, cfg, upsert_ids))
+    vector_store.delete(stale_ids)
+    return QdrantSyncSummary(
+        strategy=strategy,
+        points_upserted=len(upsert_ids),
+        points_deleted=len(stale_ids),
+        points_reused=reused_count,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _state_node_ids(state: GraphState | None) -> set[int]:
+    if state is None:
+        return set()
+    return {int(node_id) for node_id in state.graph.nodes}
+
+
+def _qdrant_reusable_node_ids(
+    new_state: GraphState,
+    old_state: GraphState | None,
+    cfg: Settings,
+    task: RebuildTask | None,
+) -> tuple[set[int], str]:
+    if old_state is None:
+        return set(), "missing_old_state"
+    if task is None or task.effective_mode != "incremental":
+        return set(), "not_incremental_rebuild"
+    old_identity, reason = load_chunk_identity(new_state.kb_name, cfg)
+    if old_identity is None:
+        return set(), reason or "missing_chunk_identity"
+    if task.chunk_identity_fallback_reason:
+        return set(), task.chunk_identity_fallback_reason
+    old_by_key = old_identity.chunks
+    reusable: set[int] = set()
+    for node_id, node in new_state.graph.nodes(data=True):
+        entry = entry_from_node(int(node_id), node)
+        old_entry = old_by_key.get(entry.identity_key)
+        if old_entry is None:
+            continue
+        if old_entry.text_hash != entry.text_hash or old_entry.metadata_hash != entry.metadata_hash:
+            continue
+        if int(old_entry.node_id) != int(node_id):
+            return set(), "node_id_reassigned"
+        if int(node_id) not in old_state.graph:
+            return set(), "old_node_missing"
+        reusable.add(int(node_id))
+    if len(reusable) > new_state.graph.number_of_nodes():
+        return set(), "ambiguous_chunk_identity"
+    return reusable, ""
+
+
+def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[int] | None = None) -> list[dict[str, Any]]:
+    identity = build_chunk_identity_map(state.graph, kb_name=state.kb_name, build_id=state.build_id, cfg=cfg)
+    selected_ids = [int(node_id) for node_id in (ids if ids is not None else np.arange(state.vectors.shape[0]))]
+    payloads: list[dict[str, Any]] = []
+    by_node_id = {entry.node_id: entry for entry in identity.chunks.values()}
+    for node_id in selected_ids:
+        entry = by_node_id.get(node_id)
+        node = state.graph.nodes[node_id] if node_id in state.graph else {}
+        payloads.append(
+            {
+                "kb_name": state.kb_name,
+                "node_id": node_id,
+                "build_id": state.build_id,
+                "chunk_identity_key": entry.identity_key if entry is not None else "",
+                "manual_id": entry.manual_id if entry is not None else str(node.get("manual_id") or ""),
+                "source_file": entry.source_file if entry is not None else str(node.get("source_file") or ""),
+                "text_hash": entry.text_hash if entry is not None else "",
+            }
+        )
+    return payloads
 
 
 def _now() -> str:

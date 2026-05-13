@@ -43,14 +43,18 @@ class RebuildImpactReport:
     build_id: str
     summary: dict[str, int]
     manuals: list[ManualImpact] = field(default_factory=list)
+    qdrant_sync: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "kb_name": self.kb_name,
             "build_id": self.build_id,
             "summary": dict(self.summary),
             "manuals": [manual.to_dict() for manual in self.manuals],
         }
+        if self.qdrant_sync is not None:
+            data["qdrant_sync"] = dict(self.qdrant_sync)
+        return data
 
 
 def impact_path(kb_name: str, data_dir: str | Path) -> Path:
