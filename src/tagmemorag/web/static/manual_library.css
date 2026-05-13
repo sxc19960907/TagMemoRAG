@@ -136,6 +136,17 @@ textarea {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  align-items: end;
+}
+
+.rebuild-mode {
+  display: grid;
+  gap: 3px;
+}
+
+.rebuild-mode span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 main {

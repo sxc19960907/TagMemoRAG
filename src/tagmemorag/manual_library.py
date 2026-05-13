@@ -38,21 +38,58 @@ class ValidationMessage:
 
 
 @dataclass(frozen=True)
+class DirtyManual:
+    manual_id: str
+    source_file: str = ""
+    operation: str = "upsert"
+    updated_at: str = ""
+    checksum: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], *, manual_id: str) -> "DirtyManual":
+        return cls(
+            manual_id=str(data.get("manual_id") or manual_id),
+            source_file=str(data.get("source_file") or ""),
+            operation=str(data.get("operation") or "upsert"),
+            updated_at=str(data.get("updated_at") or ""),
+            checksum=str(data.get("checksum") or ""),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manual_id": self.manual_id,
+            "source_file": self.source_file,
+            "operation": self.operation,
+            "updated_at": self.updated_at,
+            "checksum": self.checksum,
+        }
+
+
+@dataclass(frozen=True)
 class ManualLibraryManifest:
     schema_version: str = MANIFEST_SCHEMA_VERSION
     kb_name: str = "default"
     pending_changes: bool = False
     last_successful_build_id: str = ""
     updated_at: str = ""
+    dirty_manuals: dict[str, DirtyManual] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, kb_name: str) -> "ManualLibraryManifest":
+        dirty_data = data.get("dirty_manuals")
+        dirty_manuals: dict[str, DirtyManual] = {}
+        if isinstance(dirty_data, dict):
+            for key, value in dirty_data.items():
+                if isinstance(value, dict):
+                    dirty = DirtyManual.from_dict(value, manual_id=str(key))
+                    dirty_manuals[dirty.manual_id] = dirty
         return cls(
             schema_version=str(data.get("schema_version") or MANIFEST_SCHEMA_VERSION),
             kb_name=str(data.get("kb_name") or kb_name),
             pending_changes=bool(data.get("pending_changes", False)),
             last_successful_build_id=str(data.get("last_successful_build_id") or ""),
             updated_at=str(data.get("updated_at") or ""),
+            dirty_manuals=dirty_manuals,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,6 +99,7 @@ class ManualLibraryManifest:
             "pending_changes": self.pending_changes,
             "last_successful_build_id": self.last_successful_build_id,
             "updated_at": self.updated_at,
+            "dirty_manuals": {key: value.to_dict() for key, value in sorted(self.dirty_manuals.items())},
         }
 
 
@@ -154,14 +192,51 @@ def save_manifest(manifest: ManualLibraryManifest, cfg: Settings) -> ManualLibra
     return updated
 
 
-def mark_pending(kb_name: str, cfg: Settings, *, pending: bool = True, build_id: str | None = None) -> ManualLibraryManifest:
+def mark_pending(
+    kb_name: str,
+    cfg: Settings,
+    *,
+    pending: bool = True,
+    build_id: str | None = None,
+    dirty: DirtyManual | dict[str, Any] | None = None,
+) -> ManualLibraryManifest:
     manifest = load_manifest(kb_name, cfg)
+    dirty_manuals = dict(manifest.dirty_manuals)
+    if dirty is not None:
+        dirty_obj = dirty if isinstance(dirty, DirtyManual) else DirtyManual.from_dict(dirty, manual_id=str(dirty.get("manual_id", "")))
+        dirty_manuals[dirty_obj.manual_id] = replace(dirty_obj, updated_at=dirty_obj.updated_at or _now())
+    if not pending:
+        dirty_manuals = {}
     updated = replace(
         manifest,
         pending_changes=pending,
         last_successful_build_id=build_id if build_id is not None else manifest.last_successful_build_id,
+        dirty_manuals=dirty_manuals,
     )
     return save_manifest(updated, cfg)
+
+
+def mark_dirty(
+    kb_name: str,
+    cfg: Settings,
+    *,
+    manual_id: str,
+    source_file: str = "",
+    operation: str,
+    checksum: str = "",
+) -> ManualLibraryManifest:
+    return mark_pending(
+        kb_name,
+        cfg,
+        pending=True,
+        dirty=DirtyManual(
+            manual_id=manual_id,
+            source_file=source_file,
+            operation=operation,
+            updated_at=_now(),
+            checksum=checksum,
+        ),
+    )
 
 
 def safe_source_path(kb_name: str, source_file: str, cfg: Settings) -> Path:
@@ -275,7 +350,14 @@ def upsert_manual(
         os.replace(tmp_path, source_path)
     finally:
         tmp_path.unlink(missing_ok=True)
-    mark_pending(kb_name, cfg, pending=True)
+    mark_dirty(
+        kb_name,
+        cfg,
+        manual_id=metadata.manual_id,
+        source_file=metadata.source_file,
+        operation="upsert",
+        checksum=checksum,
+    )
     return _record_from_paths(kb_name, root, source_path, metadata, load_manifest(kb_name, cfg), graph_state=None)
 
 
@@ -307,7 +389,14 @@ def update_manual_metadata(
         old_source.replace(new_source)
         metadata_sidecar_path(old_source).unlink(missing_ok=True)
     _write_metadata(metadata_sidecar_path(new_source), validation.normalized)
-    mark_pending(kb_name, cfg, pending=True)
+    mark_dirty(
+        kb_name,
+        cfg,
+        manual_id=manual_id,
+        source_file=validation.normalized.source_file,
+        operation="metadata_update",
+        checksum=validation.normalized.checksum,
+    )
     return _record_from_paths(kb_name, root, new_source, validation.normalized, load_manifest(kb_name, cfg), graph_state=None)
 
 
@@ -330,7 +419,14 @@ def replace_manual_file(
     finally:
         tmp_path.unlink(missing_ok=True)
     _write_metadata(metadata_sidecar_path(source_path), metadata)
-    mark_pending(kb_name, cfg, pending=True)
+    mark_dirty(
+        kb_name,
+        cfg,
+        manual_id=manual_id,
+        source_file=existing.source_file,
+        operation="file_replace",
+        checksum=checksum,
+    )
     return _record_from_paths(kb_name, library_root(kb_name, cfg), source_path, metadata, load_manifest(kb_name, cfg), graph_state=None)
 
 
@@ -342,7 +438,14 @@ def disable_manual(kb_name: str, manual_id: str, cfg: Settings, *, archived: boo
     metadata = replace(existing.metadata, status=status)
     source_path = safe_source_path(kb_name, existing.source_file, cfg)
     _write_metadata(metadata_sidecar_path(source_path), metadata)
-    mark_pending(kb_name, cfg, pending=True)
+    mark_dirty(
+        kb_name,
+        cfg,
+        manual_id=manual_id,
+        source_file=existing.source_file,
+        operation="archive" if archived else "disable",
+        checksum=metadata.checksum,
+    )
     return _record_from_paths(kb_name, library_root(kb_name, cfg), source_path, metadata, load_manifest(kb_name, cfg), graph_state=None)
 
 
@@ -356,7 +459,7 @@ def delete_manual(kb_name: str, manual_id: str, cfg: Settings) -> dict[str, Any]
     _ensure_under_root(sidecar_path, library_root(kb_name, cfg))
     source_path.unlink(missing_ok=True)
     sidecar_path.unlink(missing_ok=True)
-    mark_pending(kb_name, cfg, pending=True)
+    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=existing.source_file, operation="hard_delete", checksum=existing.checksum)
     return {"manual_id": manual_id, "status": "deleted", "rebuild_required": True}
 
 
@@ -419,6 +522,27 @@ def is_active_status(status: str) -> bool:
 
 def clear_pending_after_success(kb_name: str, cfg: Settings, build_id: str) -> ManualLibraryManifest:
     return mark_pending(kb_name, cfg, pending=False, build_id=build_id)
+
+
+def export_dirty_state(kb_name: str, cfg: Settings, *, graph_state: GraphState | None = None) -> list[dict[str, Any]]:
+    manifest = load_manifest(kb_name, cfg)
+    records = {record.manual_id: record for record in list_records(kb_name, cfg, graph_state=graph_state)}
+    rows: list[dict[str, Any]] = []
+    for manual_id, dirty in sorted(manifest.dirty_manuals.items()):
+        record = records.get(manual_id)
+        rows.append(
+            {
+                "manual_id": manual_id,
+                "source_file": dirty.source_file or (record.source_file if record else ""),
+                "operation": dirty.operation,
+                "updated_at": dirty.updated_at,
+                "checksum": dirty.checksum or (record.checksum if record else ""),
+                "status": record.status if record else "deleted",
+                "searchable": bool(record.searchable) if record else False,
+                "exists": bool(record.exists) if record else False,
+            }
+        )
+    return rows
 
 
 def _record_from_paths(

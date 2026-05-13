@@ -32,6 +32,14 @@
           <button id="open-bulk-import" type="button">Bulk Import</button>
           <button id="open-tag-governance" type="button">Tags</button>
           <button id="open-upload" type="button">Upload</button>
+          <label class="rebuild-mode">
+            <span>Mode</span>
+            <select id="rebuild-mode">
+              <option value="full">Full</option>
+              <option value="incremental">Incremental</option>
+              <option value="auto">Auto</option>
+            </select>
+          </label>
           <button id="rebuild-library" type="button" class="primary">Rebuild</button>
         </div>
       </header>
@@ -77,6 +85,7 @@
               <div>
                 <h2>Library</h2>
                 <p id="library-root">Root not loaded</p>
+                <p id="dirty-summary" class="muted">No dirty manuals</p>
               </div>
               <span id="manual-count" class="muted">0 manuals</span>
             </div>

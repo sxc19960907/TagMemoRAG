@@ -31,6 +31,8 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="suggest-upload-tags"' in body
     assert 'id="suggest-detail-tags"' in body
     assert 'id="bulk-preview-rows"' in body
+    assert 'id="rebuild-mode"' in body
+    assert 'id="dirty-summary"' in body
     assert 'id="open-tag-governance"' in body
     assert 'id="tag-stat-rows"' in body
     assert 'id="rewrite-preview-rows"' in body
@@ -54,6 +56,7 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "manual-library/bulk/import" in js.text
     assert "manual-library/tags/rewrite/preview" in js.text
     assert "manual-library/tags/policy" in js.text
+    assert "dirtyManualCount" in js.text
     assert "acceptAllSuggestions" in js.text
 
 

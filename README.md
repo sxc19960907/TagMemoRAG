@@ -174,7 +174,18 @@ Metadata/file changes mark the KB as `rebuild_required` but do not change the cu
 curl -X POST http://127.0.0.1:8000/manual-library/rebuild \
   -H "Authorization: Bearer tmr_live_..." \
   -H "Content-Type: application/json" \
-  -d '{"kb_name":"default"}'
+  -d '{"kb_name":"default","mode":"incremental"}'
+```
+
+`mode` can be `full`, `incremental`, or `auto`; the default remains `full` for compatibility. Incremental rebuilds use the dirty manual set in `.tagmemorag-library.json`, reuse unchanged chunks/vectors from the loaded KB, reuse unchanged chunk identities inside dirty manuals when `data/{kb}/chunk_identity.json` is compatible, parse/embed only new or changed dirty chunks, remove disabled/deleted dirty manuals, then rebuild graph topology globally before saving and swapping. `auto` chooses incremental only when dirty manual and estimated dirty chunk counts are within `manual_library.incremental_auto_max_dirty_manuals` and `manual_library.incremental_auto_max_dirty_chunks`; otherwise it performs a full rebuild and reports `auto_decision_reason`. If the old graph or dirty state is unavailable, the task falls back to a full rebuild by default and reports `requested_mode`, `effective_mode`, `dirty_manual_count`, `reused_chunk_count`, `embedded_chunk_count`, `fallback_reason`, `chunk_identity_fallback_reason`, and `impact_summary`. Set `allow_fallback=false` to fail strict incremental requests instead.
+
+Successful managed-library rebuilds write operational artifacts under `data/{kb}/`: `chunk_identity.json` for future chunk-level reuse and `rebuild_impact.json` for the latest non-textual added/removed/changed/reused/embedded counts. Export current dirty state with:
+
+```bash
+curl "http://127.0.0.1:8000/manual-library/dirty?kb_name=default&format=json" \
+  -H "Authorization: Bearer tmr_live_..."
+
+python -m tagmemorag manual-library dirty --kb default --format csv
 ```
 
 Other library operations:
@@ -187,6 +198,7 @@ Other library operations:
 | `DELETE /manuals/{manual_id}?kb_name=...&hard=true` | Hard delete source + sidecar; requires `admin` |
 | `POST /manual-library/bulk/preview` | Validate JSON/JSONL/CSV metadata and uploaded documents without writing |
 | `POST /manual-library/bulk/import` | Re-run preview and import selected valid rows |
+| `GET /manual-library/dirty` | Export current dirty manual state as JSON or CSV |
 | `GET /manual-library/tags` | Return governed tag facets, counts, and drift issues |
 | `PUT /manual-library/tags/policy` | Save `.tagmemorag-tags.json`; requires `rebuild` |
 | `POST /manual-library/tags/rewrite/preview` | Preview tag merge/rename without writing |
@@ -271,6 +283,7 @@ The same backend service is available through thin CLI helpers:
 ```bash
 python -m tagmemorag manual-bulk preview --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md
 python -m tagmemorag manual-bulk import --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md --selected-row 2
+python -m tagmemorag manual-library rebuild --kb default --mode incremental
 ```
 
 Use `mode=create_only` to reject existing `manual_id` or `source_file`. Use `mode=upsert` with `overwrite=true` for explicit updates. Use `mode=dry_run` for preview-only checks. Bulk imports mark the library as pending rebuild but do not make changes searchable until `POST /manual-library/rebuild` succeeds.

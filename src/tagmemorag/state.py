@@ -11,15 +11,18 @@ import uuid
 import numpy as np
 import structlog
 
+from .chunk_identity import build_chunk_identity_map, identity_path, save_chunk_identity
 from .config import Settings
 from .embedder import create_embedder
 from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
-from .manual_library import clear_pending_after_success, is_active_status
+from .incremental_rebuild import RebuildDetail, build_kb_incremental
+from .manual_library import clear_pending_after_success, is_active_status, load_manifest
 from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
 from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document
+from .rebuild_impact import ManualImpact, RebuildImpactReport, impact_path, make_impact_report, save_rebuild_impact
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
 from .storage.json_graph import JsonGraphStore
@@ -37,6 +40,15 @@ class RebuildTask:
     finished_at: str | None = None
     error: dict | None = None
     build_id: str | None = None
+    requested_mode: str = "full"
+    effective_mode: str = "full"
+    dirty_manual_count: int = 0
+    fallback_reason: str = ""
+    reused_chunk_count: int = 0
+    embedded_chunk_count: int = 0
+    auto_decision_reason: str = ""
+    chunk_identity_fallback_reason: str = ""
+    impact_report: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +59,16 @@ class RebuildTask:
             "finished_at": self.finished_at,
             "error": self.error,
             "build_id": self.build_id,
+            "requested_mode": self.requested_mode,
+            "effective_mode": self.effective_mode,
+            "dirty_manual_count": self.dirty_manual_count,
+            "fallback_reason": self.fallback_reason,
+            "reused_chunk_count": self.reused_chunk_count,
+            "embedded_chunk_count": self.embedded_chunk_count,
+            "auto_decision_reason": self.auto_decision_reason,
+            "chunk_identity_fallback_reason": self.chunk_identity_fallback_reason,
+            "impact_report": self.impact_report,
+            "impact_summary": self.impact_report.get("summary") if isinstance(self.impact_report, dict) else None,
         }
 
 
@@ -115,6 +137,9 @@ class AppState:
         cfg: Settings,
         embedder=None,
         on_success=None,
+        mode: str = "full",
+        allow_fallback: bool = True,
+        is_library_rebuild: bool = False,
     ) -> RebuildTask:
         with self._lock:
             if self.is_shutting_down:
@@ -129,14 +154,27 @@ class AppState:
             get_metrics().record_rebuild_rejected(kb_name=kb_name)
             raise RebuildInProgressError(running)
         task_id = str(uuid.uuid4())
-        task = RebuildTask(task_id=task_id, status="running", kb_name=kb_name, started_at=_now())
+        task = RebuildTask(
+            task_id=task_id,
+            status="running",
+            kb_name=kb_name,
+            started_at=_now(),
+            requested_mode=mode,
+            effective_mode="full" if mode == "full" else mode,
+        )
         self.rebuild_tasks[task_id] = task
         get_metrics().record_rebuild_started(kb_name=kb_name)
         get_metrics().set_rebuild_in_progress(kb_name=kb_name, value=1)
-        structlog.get_logger().info("rebuild_started", task_id=task_id, docs_dir=str(docs_dir), kb_name=kb_name)
+        structlog.get_logger().info(
+            "rebuild_started",
+            task_id=task_id,
+            docs_dir=str(docs_dir),
+            kb_name=kb_name,
+            requested_mode=mode,
+        )
         thread = threading.Thread(
             target=self._rebuild_worker,
-            args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock, on_success),
+            args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock, on_success, mode, allow_fallback, is_library_rebuild),
             daemon=True,
         )
         thread.start()
@@ -151,6 +189,9 @@ class AppState:
         embedder,
         rebuild_lock: threading.Lock,
         on_success,
+        mode: str,
+        allow_fallback: bool,
+        is_library_rebuild: bool,
     ) -> None:
         t0 = time.perf_counter()
         try:
@@ -159,9 +200,34 @@ class AppState:
                 "tagmemorag.rebuild",
                 **{"tagmemorag.kb_name": kb_name, "tagmemorag.x_trace_id": task.task_id},
             ):
-                new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
+                new_state = _build_for_rebuild(
+                    docs_dir,
+                    kb_name,
+                    cfg,
+                    embedder=embedder,
+                    old_state=old_state,
+                    mode=mode,
+                    allow_fallback=allow_fallback,
+                    is_library_rebuild=is_library_rebuild,
+                    task=task,
+                )
                 save_kb(new_state, cfg)
+                if is_library_rebuild and task.status != "failed":
+                    save_chunk_identity(identity_path(kb_name, cfg), build_chunk_identity_map(new_state.graph, kb_name=kb_name, build_id=new_state.build_id, cfg=cfg))
+                    if isinstance(task.impact_report, dict):
+                        manuals = [ManualImpact(**item) for item in task.impact_report.get("manuals", []) if isinstance(item, dict)]
+                        save_rebuild_impact(
+                            impact_path(kb_name, cfg.storage.data_dir),
+                            RebuildImpactReport(
+                                kb_name=str(task.impact_report.get("kb_name") or kb_name),
+                                build_id=str(task.impact_report.get("build_id") or new_state.build_id),
+                                summary=dict(task.impact_report.get("summary") or {}),
+                                manuals=manuals,
+                            ),
+                        )
                 self.swap_kb(kb_name, new_state)
+                if self.query_cache is not None:
+                    self.query_cache.clear(kb_name)
                 if on_success is not None:
                     on_success(new_state)
                 task.status = "done"
@@ -181,6 +247,10 @@ class AppState:
                     build_id=new_state.build_id,
                     duration_ms=round((time.perf_counter() - t0) * 1000.0, 3),
                     chunk_count=new_state.graph.number_of_nodes(),
+                    requested_mode=task.requested_mode,
+                    effective_mode=task.effective_mode,
+                    dirty_manual_count=task.dirty_manual_count,
+                    fallback_reason=task.fallback_reason,
                 )
         except Exception as exc:
             task.status = "failed"
@@ -276,6 +346,175 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         )
 
 
+def _build_for_rebuild(
+    docs_dir: str | Path,
+    kb_name: str,
+    cfg: Settings,
+    *,
+    embedder,
+    old_state: GraphState | None,
+    mode: str,
+    allow_fallback: bool,
+    is_library_rebuild: bool,
+    task: RebuildTask,
+) -> GraphState:
+    requested_mode = mode if mode in {"full", "incremental", "auto"} else "full"
+    embedder = embedder or create_embedder(
+        cfg.model.name,
+        cfg.model.device,
+        cfg.model.batch_size,
+        cfg.model.dim,
+        provider=cfg.model.provider,
+        base_url=cfg.model.base_url,
+        embeddings_url=cfg.model.embeddings_url,
+        api_key_env=cfg.model.api_key_env,
+        timeout_seconds=cfg.model.timeout_seconds,
+        dimensions=cfg.model.dimensions,
+        normalize=cfg.model.normalize,
+    )
+    manifest = load_manifest(kb_name, cfg) if is_library_rebuild else None
+    auto_decision_reason = ""
+    if is_library_rebuild and requested_mode == "auto" and manifest is not None:
+        effective_attempt, auto_decision_reason = _auto_incremental_decision(docs_dir, kb_name, cfg, manifest)
+        task.auto_decision_reason = auto_decision_reason
+    else:
+        effective_attempt = requested_mode == "incremental"
+    attempt_incremental = is_library_rebuild and effective_attempt
+    if attempt_incremental and manifest is not None:
+        result = build_kb_incremental(
+            docs_dir,
+            kb_name,
+            cfg,
+            embedder=embedder,
+            old_state=old_state,
+            manifest=manifest,
+            anchor_store=_anchor_store(kb_name, cfg),
+            allow_fallback=allow_fallback,
+            requested_mode=requested_mode,
+        )
+        detail = RebuildDetail(
+            requested_mode=result.detail.requested_mode,
+            effective_mode=result.detail.effective_mode,
+            dirty_manual_count=result.detail.dirty_manual_count,
+            fallback_reason=result.detail.fallback_reason,
+            reused_chunk_count=result.detail.reused_chunk_count,
+            embedded_chunk_count=result.detail.embedded_chunk_count,
+            auto_decision_reason=auto_decision_reason,
+            chunk_identity_fallback_reason=result.detail.chunk_identity_fallback_reason,
+            impact_report=result.detail.impact_report,
+        )
+        _apply_rebuild_detail(task, detail)
+        if result.state is not None:
+            set_span_attributes(
+                **{
+                    "tagmemorag.build_id": result.state.build_id,
+                    "tagmemorag.result_count": result.state.graph.number_of_nodes(),
+                }
+            )
+            return result.state
+    new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
+    fallback_reason = task.fallback_reason
+    dirty_count = len(manifest.dirty_manuals) if manifest is not None else 0
+    impact_report = _full_rebuild_impact(kb_name, new_state, old_state, manifest)
+    detail = RebuildDetail(
+        requested_mode=requested_mode,
+        effective_mode="full",
+        dirty_manual_count=dirty_count,
+        fallback_reason=fallback_reason,
+        embedded_chunk_count=new_state.graph.number_of_nodes(),
+        auto_decision_reason=auto_decision_reason,
+        impact_report=impact_report,
+    )
+    new_state.meta.update(
+        {
+            "rebuild_mode": detail.effective_mode,
+            "requested_mode": detail.requested_mode,
+            "reused_chunk_count": detail.reused_chunk_count,
+            "embedded_chunk_count": detail.embedded_chunk_count,
+            "dirty_manual_count": detail.dirty_manual_count,
+            "fallback_reason": detail.fallback_reason,
+            "auto_decision_reason": detail.auto_decision_reason,
+            "impact_report": impact_report,
+            "impact_summary": impact_report.get("summary") if isinstance(impact_report, dict) else None,
+        }
+    )
+    _apply_rebuild_detail(task, detail)
+    return new_state
+
+
+def _apply_rebuild_detail(task: RebuildTask, detail: RebuildDetail) -> None:
+    task.requested_mode = detail.requested_mode
+    task.effective_mode = detail.effective_mode
+    task.dirty_manual_count = detail.dirty_manual_count
+    task.fallback_reason = detail.fallback_reason
+    task.reused_chunk_count = detail.reused_chunk_count
+    task.embedded_chunk_count = detail.embedded_chunk_count
+    task.auto_decision_reason = detail.auto_decision_reason
+    task.chunk_identity_fallback_reason = detail.chunk_identity_fallback_reason
+    task.impact_report = detail.impact_report
+
+
+def _auto_incremental_decision(docs_dir: str | Path, kb_name: str, cfg: Settings, manifest) -> tuple[bool, str]:
+    dirty_manual_count = len(manifest.dirty_manuals)
+    if manifest.pending_changes and not manifest.dirty_manuals:
+        return False, "missing_dirty_state"
+    if not manifest.dirty_manuals:
+        return False, "empty_dirty_state"
+    if dirty_manual_count > cfg.manual_library.incremental_auto_max_dirty_manuals:
+        return False, "auto_dirty_manual_threshold_exceeded"
+    dirty_chunk_estimate = _estimate_dirty_chunks(docs_dir, kb_name, cfg, manifest)
+    if dirty_chunk_estimate > cfg.manual_library.incremental_auto_max_dirty_chunks:
+        return False, "auto_dirty_chunk_threshold_exceeded"
+    return True, "auto_thresholds_within_limit"
+
+
+def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, manifest) -> int:
+    docs_root = Path(docs_dir)
+    total = 0
+    seen_manual_ids: set[str] = set()
+    for dirty in manifest.dirty_manuals.values():
+        if dirty.operation in {"disable", "archive", "hard_delete"} or not dirty.source_file:
+            continue
+        path = docs_root / dirty.source_file
+        if not path.exists():
+            continue
+        metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
+        if not is_active_status(metadata.status):
+            continue
+        total += len(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root, metadata=metadata.to_node_attrs()))
+    return total
+
+
+def _full_rebuild_impact(kb_name: str, new_state: GraphState, old_state: GraphState | None, manifest) -> dict:
+    from .chunk_identity import entry_from_node
+
+    old_keys_by_manual: dict[str, set[str]] = {}
+    if old_state is not None:
+        for node_id, node in old_state.graph.nodes(data=True):
+            entry = entry_from_node(int(node_id), node)
+            if entry.manual_id:
+                old_keys_by_manual.setdefault(entry.manual_id, set()).add(entry.identity_key)
+    new_keys_by_manual: dict[str, set[str]] = {}
+    for node_id, node in new_state.graph.nodes(data=True):
+        entry = entry_from_node(int(node_id), node)
+        if entry.manual_id:
+            new_keys_by_manual.setdefault(entry.manual_id, set()).add(entry.identity_key)
+    old_identity_keys = {key for keys in old_keys_by_manual.values() for key in keys}
+    new_identity_keys = {key for keys in new_keys_by_manual.values() for key in keys}
+    report = make_impact_report(
+        kb_name=kb_name,
+        build_id=new_state.build_id,
+        manifest=manifest,
+        old_identity_keys=old_identity_keys,
+        new_identity_keys=new_identity_keys,
+        reused_identity_keys=set(),
+        embedded_identity_keys=new_identity_keys,
+        old_keys_by_manual=old_keys_by_manual,
+        new_keys_by_manual=new_keys_by_manual,
+    )
+    return report.to_dict()
+
+
 def save_kb(state: GraphState, cfg: Settings) -> None:
     root = _kb_dir(state.kb_name, cfg)
     JsonGraphStore(root / "graph.json").save(state.graph)
@@ -342,7 +581,15 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def start_library_rebuild(app_state: AppState, kb_name: str, cfg: Settings, embedder=None) -> RebuildTask:
+def start_library_rebuild(
+    app_state: AppState,
+    kb_name: str,
+    cfg: Settings,
+    embedder=None,
+    *,
+    mode: str = "full",
+    allow_fallback: bool = True,
+) -> RebuildTask:
     from .manual_library import library_root
 
     docs_dir = library_root(kb_name, cfg)
@@ -350,4 +597,13 @@ def start_library_rebuild(app_state: AppState, kb_name: str, cfg: Settings, embe
     def clear_pending(new_state: GraphState) -> None:
         clear_pending_after_success(kb_name, cfg, new_state.build_id)
 
-    return app_state.start_rebuild(docs_dir, kb_name, cfg, embedder=embedder, on_success=clear_pending)
+    return app_state.start_rebuild(
+        docs_dir,
+        kb_name,
+        cfg,
+        embedder=embedder,
+        on_success=clear_pending,
+        mode=mode,
+        allow_fallback=allow_fallback,
+        is_library_rebuild=True,
+    )

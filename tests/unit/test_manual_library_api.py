@@ -63,6 +63,9 @@ def test_manual_validate_upload_list_conflict_and_update(tmp_path, fake_embedder
     assert listing["manuals"][0]["manual_id"] == "cm1"
     assert listing["manuals"][0]["searchable"] is False
     assert listing["manuals"][0]["rebuild_required"] is True
+    assert listing["pending_changes"] is True
+    assert listing["dirty_manual_count"] == 1
+    assert listing["dirty_manuals"][0]["manual_id"] == "cm1"
 
     update = client.patch(
         "/manuals/cm1/metadata",
@@ -71,6 +74,15 @@ def test_manual_validate_upload_list_conflict_and_update(tmp_path, fake_embedder
     assert update.status_code == 200
     assert update.json()["record"]["product_model"] == "CM1"
     assert update.json()["record"]["tags"] == ["steam-wand"]
+
+    dirty = client.get("/manual-library/dirty", params={"kb_name": "default"})
+    assert dirty.status_code == 200
+    assert dirty.json()["dirty_manuals"][0]["manual_id"] == "cm1"
+    assert dirty.json()["dirty_manuals"][0]["status"] == "active"
+
+    dirty_csv = client.get("/manual-library/dirty", params={"kb_name": "default", "format": "csv"})
+    assert dirty_csv.status_code == 200
+    assert "manual_id,source_file,operation" in dirty_csv.text
 
 
 def test_manual_disable_hard_delete_and_library_rebuild(tmp_path, fake_embedder):
@@ -82,14 +94,18 @@ def test_manual_disable_hard_delete_and_library_rebuild(tmp_path, fake_embedder)
         files={"file": ("cm1.md", b"# Use\nClean weekly.\n", "text/markdown")},
     )
 
-    rebuild = client.post("/manual-library/rebuild", json={"kb_name": "default"})
+    rebuild = client.post("/manual-library/rebuild", json={"kb_name": "default", "mode": "incremental"})
     assert rebuild.status_code == 202
+    assert rebuild.json()["requested_mode"] == "incremental"
     task_id = rebuild.json()["task_id"]
     for _ in range(50):
         task = client.get(f"/rebuild/{task_id}").json()
         if task["status"] != "running":
             break
     assert task["status"] == "done"
+    assert task["effective_mode"] in {"full", "incremental"}
+    assert "dirty_manual_count" in task
+    assert "impact_summary" in task
     built = client.get("/manual-library", params={"kb_name": "default"}).json()["manuals"][0]
     assert built["searchable"] is True
     assert built["chunk_count"] == 1

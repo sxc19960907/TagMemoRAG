@@ -105,6 +105,8 @@ class CacheConfig(BaseModel):
 class ManualLibraryConfig(BaseModel):
     root_dir: str = "product_manuals"
     allow_overwrite: bool = False
+    incremental_auto_max_dirty_manuals: int = 20
+    incremental_auto_max_dirty_chunks: int = 500
 
 
 class MetricsConfig(BaseModel):

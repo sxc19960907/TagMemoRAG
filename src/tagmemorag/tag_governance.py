@@ -15,7 +15,7 @@ from .manual_library import (
     ValidationMessage,
     library_root,
     list_records,
-    mark_pending,
+    mark_dirty,
     metadata_to_dict,
     safe_source_path,
 )
@@ -554,7 +554,14 @@ def commit_tag_rewrite(
         policy = _policy_with_aliases(kb_name, cfg, preview, alias_mode=policy_alias_mode or ("synonym" if mode == "merge" else "deprecated"))
         save_tag_policy(kb_name, cfg, policy)
     if updated:
-        mark_pending(kb_name, cfg, pending=True)
+        for change in preview.changes:
+            mark_dirty(
+                kb_name,
+                cfg,
+                manual_id=change.manual_id,
+                source_file=change.source_file,
+                operation="metadata_update",
+            )
     return TagRewriteResult(
         preview=preview,
         updated_count=updated,

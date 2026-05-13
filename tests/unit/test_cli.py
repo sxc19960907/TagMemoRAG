@@ -188,6 +188,13 @@ manual_library:
     assert result["imported_count"] == 1
     assert (tmp_path / "manuals" / "default" / "coffee" / "cm1.md").exists()
 
+    assert cli.main(["manual-library", "dirty", "--config", str(config)]) == 0
+    dirty = json.loads(capsys.readouterr().out)
+    assert dirty["dirty_manuals"][0]["manual_id"] == "cm1"
+
+    assert cli.main(["manual-library", "dirty", "--config", str(config), "--format", "csv"]) == 0
+    assert "manual_id,source_file,operation" in capsys.readouterr().out
+
 
 def test_cli_feedback_workflow(tmp_path, capsys):
     config = tmp_path / "config.yaml"

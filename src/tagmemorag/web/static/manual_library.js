@@ -5,6 +5,9 @@ const state = {
   kbName: config.defaultKbName || "default",
   apiToken: sessionStorage.getItem("tagmemoragApiToken") || "",
   manuals: [],
+  dirtyManuals: [],
+  dirtyManualCount: 0,
+  pendingChanges: false,
   selectedManualId: null,
   libraryRoot: "",
   filters: { text: "", status: "all", searchable: "all", pending: "all" },
@@ -40,6 +43,7 @@ const el = {
   empty: document.getElementById("table-empty"),
   count: document.getElementById("manual-count"),
   root: document.getElementById("library-root"),
+  dirtySummary: document.getElementById("dirty-summary"),
   filterText: document.getElementById("filter-text"),
   filterStatus: document.getElementById("filter-status"),
   filterSearchable: document.getElementById("filter-searchable"),
@@ -56,6 +60,7 @@ const el = {
   disableManual: document.getElementById("disable-manual"),
   hardDeleteConfirm: document.getElementById("hard-delete-confirm"),
   hardDelete: document.getElementById("hard-delete"),
+  rebuildMode: document.getElementById("rebuild-mode"),
   uploadDialog: document.getElementById("upload-dialog"),
   openUpload: document.getElementById("open-upload"),
   closeUpload: document.getElementById("close-upload"),
@@ -449,11 +454,17 @@ async function loadManuals() {
     });
     state.manuals = body.manuals || [];
     state.libraryRoot = body.library_root || "";
+    state.dirtyManuals = body.dirty_manuals || [];
+    state.dirtyManualCount = Number(body.dirty_manual_count || 0);
+    state.pendingChanges = Boolean(body.pending_changes);
     if (state.selectedManualId && !selectedManual()) state.selectedManualId = null;
     setStatus(`Loaded ${state.manuals.length} manuals from ${state.kbName}.`, "success");
   } catch (error) {
     state.manuals = [];
     state.libraryRoot = "";
+    state.dirtyManuals = [];
+    state.dirtyManualCount = 0;
+    state.pendingChanges = false;
     setStatus(error.message, "error");
   } finally {
     state.loading = false;
@@ -631,6 +642,10 @@ function render() {
 function renderTable() {
   const rows = filteredManuals();
   el.root.textContent = state.libraryRoot ? `Root ${state.libraryRoot}` : "Root not loaded";
+  const dirtyLabels = state.dirtyManuals.slice(0, 4).map((manual) => `${manual.manual_id}:${manual.operation}`);
+  el.dirtySummary.textContent = state.pendingChanges
+    ? `${state.dirtyManualCount} dirty manual${state.dirtyManualCount === 1 ? "" : "s"}${dirtyLabels.length ? ` | ${dirtyLabels.join(", ")}` : ""}`
+    : "No dirty manuals";
   el.count.textContent = `${rows.length} of ${state.manuals.length} manuals`;
   el.rows.innerHTML = "";
   rows.forEach((manual) => {
@@ -961,7 +976,7 @@ el.rebuild.addEventListener("click", async () => {
     const task = await apiFetch("/manual-library/rebuild", {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ kb_name: state.kbName }),
+      body: JSON.stringify({ kb_name: state.kbName, mode: el.rebuildMode.value }),
     });
     pollRebuild(task.task_id);
   } catch (error) {
@@ -983,7 +998,8 @@ async function pollRebuild(taskId) {
       el.rebuild.disabled = false;
       state.rebuildTask = null;
       if (task.status === "done") {
-        setStatus(`Rebuild completed for ${task.kb_name || state.kbName}.`, "success");
+        const mode = task.effective_mode ? ` (${task.effective_mode}${task.fallback_reason ? `, fallback: ${task.fallback_reason}` : ""})` : "";
+        setStatus(`Rebuild completed for ${task.kb_name || state.kbName}${mode}.`, "success");
       } else {
         setStatus(`Rebuild failed: ${task.error || JSON.stringify(task)}`, "error");
       }

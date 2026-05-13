@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+import csv
 import hashlib
 import json
 import sys
 import time
+from io import StringIO
 from typing import cast
 import uuid
 
@@ -33,8 +35,10 @@ from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_im
 from .manual_library import (
     delete_manual,
     disable_manual,
+    export_dirty_state,
     library_root,
     list_records,
+    load_manifest,
     replace_manual_file,
     update_manual_metadata,
     upsert_manual,
@@ -207,6 +211,8 @@ class ManualTagSuggestRequest(BaseModel):
 
 class ManualLibraryRebuildRequest(BaseModel):
     kb_name: str = "default"
+    mode: str = "full"
+    allow_fallback: bool = True
 
 
 class TagPolicyUpdateRequest(BaseModel):
@@ -1106,6 +1112,7 @@ def list_manual_library(
     ensure_kb_access(api_key, kb_name)
     graph_state = app_state.kbs.get(kb_name)
     records = list_records(kb_name, settings, graph_state=graph_state)
+    manifest = load_manifest(kb_name, settings)
     if manual_id is not None:
         records = [record for record in records if record.manual_id == manual_id]
         if not records:
@@ -1113,8 +1120,32 @@ def list_manual_library(
     return {
         "kb_name": kb_name,
         "library_root": str(library_root(kb_name, settings)),
+        "pending_changes": manifest.pending_changes,
+        "dirty_manual_count": len(manifest.dirty_manuals),
+        "dirty_manuals": [dirty.to_dict() for dirty in manifest.dirty_manuals.values()],
         "manuals": [record.to_dict() for record in records],
     }
+
+
+@app.get("/manual-library/dirty")
+def get_manual_library_dirty(
+    kb_name: str = "default",
+    format: str = "json",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    if format not in {"json", "csv"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "format must be json or csv.", {"format": format})
+    rows = export_dirty_state(kb_name, settings, graph_state=app_state.kbs.get(kb_name))
+    if format == "csv":
+        output = StringIO()
+        fieldnames = ["manual_id", "source_file", "operation", "updated_at", "checksum", "status", "searchable", "exists"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+        return Response(output.getvalue(), media_type="text/csv")
+    return {"kb_name": kb_name, "dirty_manual_count": len(rows), "dirty_manuals": rows}
 
 
 @app.get("/manual-library/tags")
@@ -1199,7 +1230,16 @@ def rebuild_manual_library(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, request.kb_name)
-    task = start_library_rebuild(app_state, request.kb_name, settings, embedder=embedder)
+    if request.mode not in {"full", "incremental", "auto"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "rebuild mode must be full, incremental, or auto.", {"mode": request.mode})
+    task = start_library_rebuild(
+        app_state,
+        request.kb_name,
+        settings,
+        embedder=embedder,
+        mode=request.mode,
+        allow_fallback=request.allow_fallback,
+    )
     return task.to_dict()
 
 

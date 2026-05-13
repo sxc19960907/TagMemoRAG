@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 import secrets
 import sys
+import time
 
 import uvicorn
 
@@ -15,6 +17,7 @@ from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
+from .manual_library import export_dirty_state
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -22,7 +25,7 @@ from .retrieval_feedback import (
     preview_eval_promotion,
     review_feedback,
 )
-from .state import build_kb, load_kb, save_kb
+from .state import AppState, build_kb, load_kb, save_kb, start_library_rebuild
 from .tag_governance import (
     commit_tag_rewrite,
     load_tag_policy,
@@ -107,6 +110,18 @@ def main(argv: list[str] | None = None) -> int:
     _add_bulk_args(bulk_preview, include_import_args=False)
     bulk_import = manual_bulk_sub.add_parser("import")
     _add_bulk_args(bulk_import, include_import_args=True)
+
+    manual_library = sub.add_parser("manual-library")
+    manual_library_sub = manual_library.add_subparsers(dest="manual_library_command", required=True)
+    library_rebuild = manual_library_sub.add_parser("rebuild")
+    library_rebuild.add_argument("--kb", default="default")
+    library_rebuild.add_argument("--config", default="config.yaml")
+    library_rebuild.add_argument("--mode", choices=["full", "incremental", "auto"], default="full")
+    library_rebuild.add_argument("--no-fallback", action="store_true")
+    library_dirty = manual_library_sub.add_parser("dirty")
+    library_dirty.add_argument("--kb", default="default")
+    library_dirty.add_argument("--config", default="config.yaml")
+    library_dirty.add_argument("--format", choices=["json", "csv"], default="json")
 
     tag = sub.add_parser("tag")
     tag_sub = tag.add_subparsers(dest="tag_command", required=True)
@@ -285,6 +300,43 @@ def main(argv: list[str] | None = None) -> int:
             selected_rows=set(args.selected_row) if args.selected_row else None,
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "manual-library" and args.manual_library_command == "rebuild":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        embedder = _create_embedder_from_config(cfg)
+        try:
+            current = load_kb(args.kb, cfg)
+        except Exception:
+            current = None
+        app_state = AppState(current)
+        task = start_library_rebuild(
+            app_state,
+            args.kb,
+            cfg,
+            embedder=embedder,
+            mode=args.mode,
+            allow_fallback=not args.no_fallback,
+        )
+        while task.status == "running":
+            time.sleep(0.05)
+        print(json.dumps(task.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if task.status == "done" else 1
+    if args.command == "manual-library" and args.manual_library_command == "dirty":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        try:
+            graph_state = load_kb(args.kb, cfg)
+        except Exception:
+            graph_state = None
+        rows = export_dirty_state(args.kb, cfg, graph_state=graph_state)
+        if args.format == "csv":
+            fieldnames = ["manual_id", "source_file", "operation", "updated_at", "checksum", "status", "searchable", "exists"]
+            writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        else:
+            print(json.dumps({"kb_name": args.kb, "dirty_manual_count": len(rows), "dirty_manuals": rows}, ensure_ascii=False, indent=2))
         return 0
     if args.command == "tag" and args.tag_command == "stats":
         cfg = load_config(args.config)
