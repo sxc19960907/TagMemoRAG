@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-13-m22-qdrant-operations-documentation-inspection-tools/research/code-context.md", "reason": "M22 Qdrant operations code context"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guidelines index for Qdrant inspection/API/CLI work"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module placement and dependency direction for optional inspection helper"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and no-live-network defaults for Qdrant work"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Structured service errors for inspection failures"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe observability fields and Qdrant logging constraints"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "CLI/config/storage/report data-flow thinking"}
