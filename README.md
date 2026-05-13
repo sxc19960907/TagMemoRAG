@@ -503,4 +503,10 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | **M4** | Prometheus metrics, OpenTelemetry traces |
 | **M5** | Manual metadata sidecars, filters, facets, tag-aware search boosts |
 | **M6** | File-backed managed manual library, upload/update/disable/delete, library rebuild |
+| **M7** | Server-rendered manual library admin UI |
+| **M8** | Deterministic tag suggestion API and admin UI workflow |
+| **M9** | Batch import/validation and production manual library ergonomics |
+| **M10** | Tag governance, synonym mapping, and usage analytics |
+| **M11** | Retrieval quality feedback loop and eval dataset growth |
+| **M12** | Incremental manual rebuild/update path |
 | **post-v1** | Faiss/Qdrant vector backend, HA multi-replica, incremental updates |
