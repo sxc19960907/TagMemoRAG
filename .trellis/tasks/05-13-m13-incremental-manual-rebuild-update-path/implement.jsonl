@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist for M13"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundary guidance for incremental rebuild service"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "File-backed manifest, graph, vector, and atomic write conventions"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Structured fallback and validation error behavior"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe rebuild logging and metrics fields"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and forbidden-pattern guidance"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and code-reuse thinking guides"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/research/code-context.md", "reason": "M13 code context and integration points"}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m6-manual-library-management/design.md", "reason": "Managed manual library manifest and rebuild contracts"}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m9-qdrant-vector-backend/design.md", "reason": "Vector backend persistence constraints"}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m12-retrieval-quality-feedback-eval-growth/design.md", "reason": "Eval/feedback compatibility context"}

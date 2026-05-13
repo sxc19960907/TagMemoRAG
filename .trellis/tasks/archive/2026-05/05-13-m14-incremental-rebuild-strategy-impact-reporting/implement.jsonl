@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend conventions for M14"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Chunk identity and impact report persistence contracts"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Structured fallback and API errors"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe rebuild observability fields"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and layer-boundary requirements"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and code-reuse thinking guides"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/prd.md", "reason": "M13 base incremental rebuild requirements"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/design.md", "reason": "M13 base incremental rebuild design"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/implement.md", "reason": "M13 completion notes and deferred enhancements"}

@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify durable artifact contracts"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify fallback/API error shape"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify safe observability"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests and compatibility"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Review cross-layer/reuse concerns"}
+{"file": ".trellis/tasks/05-13-m14-incremental-rebuild-strategy-impact-reporting/prd.md", "reason": "M14 requirements"}
+{"file": ".trellis/tasks/05-13-m14-incremental-rebuild-strategy-impact-reporting/design.md", "reason": "M14 design"}
+{"file": ".trellis/tasks/05-13-m14-incremental-rebuild-strategy-impact-reporting/implement.md", "reason": "M14 implementation checklist"}
