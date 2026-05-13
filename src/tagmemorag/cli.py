@@ -17,7 +17,7 @@ from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
-from .manual_library import export_dirty_state
+from .manual_library import build_dirty_state_report
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -346,14 +346,15 @@ def main(argv: list[str] | None = None) -> int:
             graph_state = load_kb(args.kb, cfg)
         except Exception:
             graph_state = None
-        rows = export_dirty_state(args.kb, cfg, graph_state=graph_state)
+        report = build_dirty_state_report(args.kb, cfg, graph_state=graph_state)
+        rows = report["dirty_manuals"]
         if args.format == "csv":
             fieldnames = ["manual_id", "source_file", "operation", "updated_at", "checksum", "status", "searchable", "exists"]
             writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
         else:
-            print(json.dumps({"kb_name": args.kb, "dirty_manual_count": len(rows), "dirty_manuals": rows}, ensure_ascii=False, indent=2))
+            print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "tag" and args.tag_command == "stats":
         cfg = load_config(args.config)

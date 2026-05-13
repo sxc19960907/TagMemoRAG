@@ -524,6 +524,73 @@ def clear_pending_after_success(kb_name: str, cfg: Settings, build_id: str) -> M
     return mark_pending(kb_name, cfg, pending=False, build_id=build_id)
 
 
+def build_rebuild_operations_summary(
+    *,
+    kb_name: str,
+    cfg: Settings,
+    task: Any | None = None,
+    graph_state: GraphState | None = None,
+    manifest: ManualLibraryManifest | None = None,
+) -> dict[str, Any]:
+    manifest = manifest if manifest is not None else load_manifest(kb_name, cfg)
+    current_build_id = graph_state.build_id if graph_state is not None else ""
+    qdrant_sync = _low_cardinality_qdrant_sync(
+        getattr(task, "qdrant_sync", None) if task is not None else _meta_dict(graph_state).get("qdrant_sync")
+    )
+    fallback_reason = str(getattr(task, "fallback_reason", "") or "")
+    chunk_identity_fallback_reason = str(getattr(task, "chunk_identity_fallback_reason", "") or "")
+    summary = {
+        "task_id": str(getattr(task, "task_id", "") or ""),
+        "status": str(getattr(task, "status", "") or ""),
+        "requested_mode": str(getattr(task, "requested_mode", "") or ""),
+        "effective_mode": str(getattr(task, "effective_mode", "") or ""),
+        "fallback_reason": fallback_reason,
+        "auto_decision_reason": str(getattr(task, "auto_decision_reason", "") or ""),
+        "dirty_manual_count": int(getattr(task, "dirty_manual_count", len(manifest.dirty_manuals)) or 0),
+        "reused_chunk_count": int(getattr(task, "reused_chunk_count", 0) or 0),
+        "embedded_chunk_count": int(getattr(task, "embedded_chunk_count", 0) or 0),
+        "chunk_identity_fallback_reason": chunk_identity_fallback_reason,
+        "qdrant_sync": qdrant_sync,
+        "current_build_id": current_build_id,
+        "last_successful_build_id": manifest.last_successful_build_id or current_build_id,
+        "pending_changes": manifest.pending_changes,
+    }
+    summary["recovery_hint"] = _primary_recovery_hint(
+        status=summary["status"],
+        pending_changes=manifest.pending_changes,
+        provider=cfg.vector_store.provider,
+        qdrant_sync=qdrant_sync,
+        fallback_reason=fallback_reason,
+        chunk_identity_fallback_reason=chunk_identity_fallback_reason,
+    )
+    return summary
+
+
+def build_dirty_state_report(kb_name: str, cfg: Settings, *, graph_state: GraphState | None = None) -> dict[str, Any]:
+    manifest = load_manifest(kb_name, cfg)
+    last_impact = _load_last_impact_summary(kb_name, cfg)
+    last_qdrant_sync = _low_cardinality_qdrant_sync(
+        last_impact.get("qdrant_sync") if last_impact else _meta_dict(graph_state).get("qdrant_sync")
+    )
+    return {
+        "kb_name": kb_name,
+        "pending_changes": manifest.pending_changes,
+        "dirty_manual_count": len(manifest.dirty_manuals),
+        "dirty_manuals": export_dirty_state(kb_name, cfg, graph_state=graph_state),
+        "current_build_id": graph_state.build_id if graph_state is not None else "",
+        "last_successful_build_id": manifest.last_successful_build_id or (graph_state.build_id if graph_state is not None else ""),
+        "last_impact_summary": last_impact.get("summary") if last_impact else None,
+        "last_qdrant_sync": last_qdrant_sync,
+        "recovery_actions": _recovery_actions(manifest.pending_changes, cfg.vector_store.provider, last_qdrant_sync),
+        "operations_summary": build_rebuild_operations_summary(
+            kb_name=kb_name,
+            cfg=cfg,
+            graph_state=graph_state,
+            manifest=manifest,
+        ),
+    }
+
+
 def export_dirty_state(kb_name: str, cfg: Settings, *, graph_state: GraphState | None = None) -> list[dict[str, Any]]:
     manifest = load_manifest(kb_name, cfg)
     records = {record.manual_id: record for record in list_records(kb_name, cfg, graph_state=graph_state)}
@@ -543,6 +610,67 @@ def export_dirty_state(kb_name: str, cfg: Settings, *, graph_state: GraphState |
             }
         )
     return rows
+
+
+def _meta_dict(graph_state: GraphState | None) -> dict[str, Any]:
+    return graph_state.meta if graph_state is not None and isinstance(graph_state.meta, dict) else {}
+
+
+def _load_last_impact_summary(kb_name: str, cfg: Settings) -> dict[str, Any] | None:
+    path = Path(cfg.storage.data_dir) / kb_name / "rebuild_impact.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _low_cardinality_qdrant_sync(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return {
+        "provider": str(value.get("provider") or "qdrant"),
+        "strategy": str(value.get("strategy") or ""),
+        "points_upserted": int(value.get("points_upserted") or 0),
+        "points_deleted": int(value.get("points_deleted") or 0),
+        "points_reused": int(value.get("points_reused") or 0),
+        "fallback_reason": str(value.get("fallback_reason") or ""),
+    }
+
+
+def _primary_recovery_hint(
+    *,
+    status: str,
+    pending_changes: bool,
+    provider: str,
+    qdrant_sync: dict[str, Any] | None,
+    fallback_reason: str,
+    chunk_identity_fallback_reason: str,
+) -> str:
+    if not pending_changes and status in {"", "done"}:
+        return "none"
+    if provider == "qdrant" and status == "failed":
+        return "check_qdrant_then_retry"
+    if provider == "qdrant" and qdrant_sync and qdrant_sync.get("fallback_reason"):
+        return "force_full_rebuild"
+    if fallback_reason or chunk_identity_fallback_reason:
+        return "force_full_rebuild"
+    if pending_changes:
+        return "retry_incremental" if status == "failed" else "inspect_dirty"
+    return "none"
+
+
+def _recovery_actions(pending_changes: bool, provider: str, last_qdrant_sync: dict[str, Any] | None) -> list[str]:
+    if not pending_changes:
+        return []
+    actions = ["inspect_dirty", "retry_incremental", "force_full_rebuild"]
+    if provider == "qdrant":
+        actions.append("check_qdrant_then_retry")
+        if last_qdrant_sync is None or last_qdrant_sync.get("fallback_reason"):
+            actions.append("switch_to_npz_or_restore_qdrant")
+    return actions
 
 
 def _record_from_paths(

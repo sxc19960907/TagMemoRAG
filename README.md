@@ -180,7 +180,7 @@ curl -X POST http://127.0.0.1:8000/manual-library/rebuild \
   -d '{"kb_name":"default","mode":"incremental"}'
 ```
 
-`mode` can be `full`, `incremental`, or `auto`; the default remains `full` for compatibility. Incremental rebuilds use the dirty manual set in `.tagmemorag-library.json`, reuse unchanged chunks/vectors from the loaded KB, reuse unchanged chunk identities inside dirty manuals when `data/{kb}/chunk_identity.json` is compatible, parse/embed only new or changed dirty chunks, remove disabled/deleted dirty manuals, then rebuild graph topology globally before saving and swapping. `auto` chooses incremental only when dirty manual and estimated dirty chunk counts are within `manual_library.incremental_auto_max_dirty_manuals` and `manual_library.incremental_auto_max_dirty_chunks`; otherwise it performs a full rebuild and reports `auto_decision_reason`. If the old graph or dirty state is unavailable, the task falls back to a full rebuild by default and reports `requested_mode`, `effective_mode`, `dirty_manual_count`, `reused_chunk_count`, `embedded_chunk_count`, `fallback_reason`, `chunk_identity_fallback_reason`, `impact_summary`, and, for Qdrant-backed library rebuilds, `qdrant_sync`. Set `allow_fallback=false` to fail strict incremental requests instead.
+`mode` can be `full`, `incremental`, or `auto`; the default remains `full` for compatibility. Incremental rebuilds use the dirty manual set in `.tagmemorag-library.json`, reuse unchanged chunks/vectors from the loaded KB, reuse unchanged chunk identities inside dirty manuals when `data/{kb}/chunk_identity.json` is compatible, parse/embed only new or changed dirty chunks, remove disabled/deleted dirty manuals, then rebuild graph topology globally before saving and swapping. `auto` chooses incremental only when dirty manual and estimated dirty chunk counts are within `manual_library.incremental_auto_max_dirty_manuals` and `manual_library.incremental_auto_max_dirty_chunks`; otherwise it performs a full rebuild and reports `auto_decision_reason`. If the old graph or dirty state is unavailable, the task falls back to a full rebuild by default and reports `requested_mode`, `effective_mode`, `dirty_manual_count`, `reused_chunk_count`, `embedded_chunk_count`, `fallback_reason`, `chunk_identity_fallback_reason`, `impact_summary`, `operations_summary`, and, for Qdrant-backed library rebuilds, `qdrant_sync`. Set `allow_fallback=false` to fail strict incremental requests instead.
 
 Successful managed-library rebuilds write operational artifacts under `data/{kb}/`: `chunk_identity.json` for future chunk-level reuse and `rebuild_impact.json` for the latest non-textual added/removed/changed/reused/embedded counts. With `vector_store.provider=qdrant`, the impact and task metadata also include `qdrant_sync` counts for points upserted, deleted, and reused/skipped, plus any fallback reason. Export current dirty state with:
 
@@ -190,6 +190,30 @@ curl "http://127.0.0.1:8000/manual-library/dirty?kb_name=default&format=json" \
 
 python -m tagmemorag manual-library dirty --kb default --format csv
 ```
+
+The JSON dirty response is also the operator status view. It includes `pending_changes`, dirty manual rows with `searchable` and `exists`, `current_build_id`, `last_successful_build_id`, `last_impact_summary`, low-cardinality Qdrant sync counts, `recovery_actions`, and an `operations_summary`. The CSV format keeps the stable dirty-manual columns for compact operational exports.
+
+Rebuild recovery runbook:
+
+1. Inspect pending state:
+
+   ```bash
+   python -m tagmemorag manual-library dirty --kb default --format json
+   ```
+
+2. For transient failures with `recovery_hint=retry_incremental`, rerun:
+
+   ```bash
+   python -m tagmemorag manual-library rebuild --kb default --mode incremental
+   ```
+
+3. If `chunk_identity_fallback_reason`, Qdrant uncertainty, or `recovery_hint=force_full_rebuild` appears, force a full rebuild:
+
+   ```bash
+   python -m tagmemorag manual-library rebuild --kb default --mode full
+   ```
+
+4. If Qdrant remains unavailable, switch the config to `vector_store.provider=npz`, restart/reload, and rebuild after Qdrant is restored.
 
 Other library operations:
 

@@ -33,9 +33,9 @@ from .logging_setup import configure_logging
 from .manuals import metadata_from_node
 from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import (
+    build_dirty_state_report,
     delete_manual,
     disable_manual,
-    export_dirty_state,
     library_root,
     list_records,
     load_manifest,
@@ -1161,7 +1161,8 @@ def get_manual_library_dirty(
     ensure_kb_access(api_key, kb_name)
     if format not in {"json", "csv"}:
         raise ServiceError(ErrorCode.INVALID_INPUT, "format must be json or csv.", {"format": format})
-    rows = export_dirty_state(kb_name, settings, graph_state=app_state.kbs.get(kb_name))
+    report = build_dirty_state_report(kb_name, settings, graph_state=app_state.kbs.get(kb_name))
+    rows = report["dirty_manuals"]
     if format == "csv":
         output = StringIO()
         fieldnames = ["manual_id", "source_file", "operation", "updated_at", "checksum", "status", "searchable", "exists"]
@@ -1169,7 +1170,7 @@ def get_manual_library_dirty(
         writer.writeheader()
         writer.writerows(rows)
         return Response(output.getvalue(), media_type="text/csv")
-    return {"kb_name": kb_name, "dirty_manual_count": len(rows), "dirty_manuals": rows}
+    return report
 
 
 @app.get("/manual-library/tags")

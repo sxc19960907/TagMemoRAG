@@ -53,7 +53,7 @@ class RebuildTask:
     qdrant_sync: dict | None = None
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "task_id": self.task_id,
             "status": self.status,
             "kb_name": self.kb_name,
@@ -73,6 +73,10 @@ class RebuildTask:
             "impact_summary": self.impact_report.get("summary") if isinstance(self.impact_report, dict) else None,
             "qdrant_sync": self.qdrant_sync,
         }
+        summary = getattr(self, "operations_summary", None)
+        if callable(summary):
+            data["operations_summary"] = summary()
+        return data
 
 
 @dataclass
@@ -738,7 +742,7 @@ def start_library_rebuild(
     def clear_pending(new_state: GraphState) -> None:
         clear_pending_after_success(kb_name, cfg, new_state.build_id)
 
-    return app_state.start_rebuild(
+    task = app_state.start_rebuild(
         docs_dir,
         kb_name,
         cfg,
@@ -748,3 +752,15 @@ def start_library_rebuild(
         allow_fallback=allow_fallback,
         is_library_rebuild=True,
     )
+    from .manual_library import build_rebuild_operations_summary
+
+    def operations_summary() -> dict[str, Any]:
+        return build_rebuild_operations_summary(
+            kb_name=kb_name,
+            cfg=cfg,
+            task=task,
+            graph_state=app_state.kbs.get(kb_name),
+        )
+
+    task.operations_summary = operations_summary  # type: ignore[attr-defined]
+    return task

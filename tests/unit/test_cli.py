@@ -280,6 +280,9 @@ manual_library:
 
     assert cli.main(["manual-library", "dirty", "--config", str(config)]) == 0
     dirty = json.loads(capsys.readouterr().out)
+    assert dirty["pending_changes"] is True
+    assert dirty["recovery_actions"] == ["inspect_dirty", "retry_incremental", "force_full_rebuild"]
+    assert dirty["operations_summary"]["recovery_hint"] == "inspect_dirty"
     assert dirty["dirty_manuals"][0]["manual_id"] == "cm1"
 
     assert cli.main(["manual-library", "dirty", "--config", str(config), "--format", "csv"]) == 0

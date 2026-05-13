@@ -10,6 +10,7 @@ import pytest
 from tagmemorag.config import ManualLibraryConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
+    build_dirty_state_report,
     delete_manual,
     disable_manual,
     library_root,
@@ -488,6 +489,26 @@ def test_failed_qdrant_sync_keeps_pending_dirty_state(qdrant_library_config, fak
     assert app.get_current("default").build_id == old_state.build_id
     assert load_manifest("default", qdrant_library_config).pending_changes is True
     assert FakeQdrantClient.delete_calls == []
+    summary = task.to_dict()["operations_summary"]
+    assert summary["status"] == "failed"
+    assert summary["current_build_id"] == old_state.build_id
+    assert summary["pending_changes"] is True
+    assert summary["recovery_hint"] == "check_qdrant_then_retry"
+    report = build_dirty_state_report("default", qdrant_library_config, graph_state=app.get_current("default"))
+    assert "check_qdrant_then_retry" in report["recovery_actions"]
+
+    FakeQdrantClient.fail_next_upsert = False
+    recovery = start_library_rebuild(app, "default", qdrant_library_config, embedder=fake_embedder, mode="full")
+    for _ in range(100):
+        if recovery.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert recovery.status == "done"
+    assert recovery.effective_mode == "full"
+    assert load_manifest("default", qdrant_library_config).pending_changes is False
+    assert app.get_current("default").build_id == recovery.build_id
+    assert recovery.to_dict()["operations_summary"]["recovery_hint"] == "none"
 
 
 def test_failed_reused_payload_refresh_blocks_stale_delete_and_graph_swap(monkeypatch, tmp_path):

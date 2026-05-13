@@ -77,8 +77,13 @@ def test_manual_validate_upload_list_conflict_and_update(tmp_path, fake_embedder
 
     dirty = client.get("/manual-library/dirty", params={"kb_name": "default"})
     assert dirty.status_code == 200
-    assert dirty.json()["dirty_manuals"][0]["manual_id"] == "cm1"
-    assert dirty.json()["dirty_manuals"][0]["status"] == "active"
+    dirty_body = dirty.json()
+    assert dirty_body["pending_changes"] is True
+    assert dirty_body["current_build_id"] == ""
+    assert dirty_body["recovery_actions"] == ["inspect_dirty", "retry_incremental", "force_full_rebuild"]
+    assert dirty_body["operations_summary"]["recovery_hint"] == "inspect_dirty"
+    assert dirty_body["dirty_manuals"][0]["manual_id"] == "cm1"
+    assert dirty_body["dirty_manuals"][0]["status"] == "active"
 
     dirty_csv = client.get("/manual-library/dirty", params={"kb_name": "default", "format": "csv"})
     assert dirty_csv.status_code == 200
@@ -106,6 +111,10 @@ def test_manual_disable_hard_delete_and_library_rebuild(tmp_path, fake_embedder)
     assert task["effective_mode"] in {"full", "incremental"}
     assert "dirty_manual_count" in task
     assert "impact_summary" in task
+    assert task["operations_summary"]["status"] == "done"
+    assert task["operations_summary"]["current_build_id"] == task["build_id"]
+    assert task["operations_summary"]["pending_changes"] is False
+    assert task["operations_summary"]["recovery_hint"] == "none"
     built = client.get("/manual-library", params={"kb_name": "default"}).json()["manuals"][0]
     assert built["searchable"] is True
     assert built["chunk_count"] == 1
