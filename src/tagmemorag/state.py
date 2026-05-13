@@ -15,9 +15,10 @@ from .config import Settings
 from .embedder import create_embedder
 from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
+from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
-from .parser import parse_document
+from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
 from .storage.json_graph import JsonGraphStore
@@ -201,8 +202,21 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             normalize=cfg.model.normalize,
         )
         chunks = []
-        for path in sorted([*docs_root.rglob("*.md"), *docs_root.rglob("*.txt")]):
-            chunks.extend(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root))
+        document_paths = (
+            p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
+        )
+        seen_manual_ids: set[str] = set()
+        for path in sorted(document_paths):
+            metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
+            chunks.extend(
+                parse_document(
+                    path,
+                    cfg.parser.max_chars,
+                    cfg.parser.min_chars,
+                    root_dir=docs_root,
+                    metadata=metadata.to_node_attrs(),
+                )
+            )
         texts = [chunk.text for chunk in chunks]
         emb_t0 = time.perf_counter()
         try:

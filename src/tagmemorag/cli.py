@@ -14,7 +14,7 @@ from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .state import build_kb, load_kb, save_kb
-from .wave_searcher import wave_search
+from .wave_searcher import filter_node_ids, wave_search
 
 
 def _create_embedder_from_config(cfg):
@@ -47,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--kb", default="default")
     search.add_argument("--top-k", type=int, default=None)
     search.add_argument("--config", default="config.yaml")
+    search.add_argument("--brand", default=None)
+    search.add_argument("--category", default=None)
+    search.add_argument("--model", default=None)
+    search.add_argument("--language", default=None)
+    search.add_argument("--tag", action="append", default=[])
 
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default=None)
@@ -94,7 +99,24 @@ def main(argv: list[str] | None = None) -> int:
         emb = _create_embedder_from_config(cfg)
         state = load_kb(args.kb, cfg)
         query_vec = emb.encode_query(args.question)
-        results = wave_search(query_vec, state.graph, state.vectors, state.anchors, top_k=args.top_k or cfg.search.top_k)
+        filters = {
+            "brand": args.brand,
+            "product_category": args.category,
+            "product_model": args.model,
+            "language": args.language,
+            "tags": args.tag,
+        }
+        results = wave_search(
+            query_vec,
+            state.graph,
+            state.vectors,
+            state.anchors,
+            top_k=args.top_k or cfg.search.top_k,
+            eligible_node_ids=filter_node_ids(state.graph, filters),
+            filters=filters,
+            metadata_field_boost=cfg.search.metadata_field_boost,
+            tag_boost=cfg.search.tag_boost,
+        )
         print(json.dumps({"build_id": state.build_id, "results": [r.to_dict() for r in results]}, ensure_ascii=False, indent=2))
         return 0
     if args.command == "serve":

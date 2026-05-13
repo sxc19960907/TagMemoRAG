@@ -22,6 +22,7 @@ class Chunk:
     level: int
     start_line: int
     source_file: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -65,6 +66,15 @@ class Result:
     source_file: str
     start_line: int
     anchor_key: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    manual_id: str = ""
+    manual_title: str = ""
+    brand: str = ""
+    product_category: str = ""
+    product_model: str = ""
+    language: str = ""
+    version: str = ""
+    tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +86,15 @@ class Result:
             "source_file": self.source_file,
             "start_line": self.start_line,
             "anchor_key": self.anchor_key,
+            "metadata": self.metadata,
+            "manual_id": self.manual_id,
+            "manual_title": self.manual_title,
+            "brand": self.brand,
+            "product_category": self.product_category,
+            "product_model": self.product_model,
+            "language": self.language,
+            "version": self.version,
+            "tags": self.tags,
         }
 
 

@@ -41,6 +41,21 @@ def _matches(
     for needle in expectation.text_contains:
         if needle not in result.text:
             return False
+    if expectation.metadata and not _metadata_matches(result.metadata, expectation.metadata):
+        return False
+    return True
+
+
+def _metadata_matches(actual: dict, expected: dict) -> bool:
+    for key, expected_value in expected.items():
+        actual_value = actual.get(key)
+        if isinstance(expected_value, list):
+            if not isinstance(actual_value, list):
+                return False
+            if not all(item in actual_value for item in expected_value):
+                return False
+        elif actual_value != expected_value:
+            return False
     return True
 
 

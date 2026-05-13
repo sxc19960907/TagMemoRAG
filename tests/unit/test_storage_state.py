@@ -18,12 +18,24 @@ from tagmemorag.types import Anchor, Chunk
 
 
 def test_storage_round_trip(tmp_path):
-    chunks = [Chunk("蒸汽功能", "蒸汽", ("操作", "蒸汽"), 2, 1, "x.md")]
+    chunks = [
+        Chunk(
+            "蒸汽功能",
+            "蒸汽",
+            ("操作", "蒸汽"),
+            2,
+            1,
+            "x.md",
+            metadata={"manual_id": "manual-x", "title": "Manual X", "product_category": "coffee", "tags": ["steam"]},
+        )
+    ]
     vectors = np.array([[1.0, 0.0]], dtype=np.float32)
     graph = build_graph(chunks, vectors)
     JsonGraphStore(tmp_path / "graph.json").save(graph)
     loaded_graph = JsonGraphStore(tmp_path / "graph.json").load()
     assert loaded_graph.nodes[0]["text"] == "蒸汽功能"
+    assert loaded_graph.nodes[0]["manual_id"] == "manual-x"
+    assert loaded_graph.nodes[0]["metadata"]["tags"] == ["steam"]
     NpzVectorStore(tmp_path / "vectors.npz").add(np.array([0]), vectors)
     _, loaded_vectors = NpzVectorStore(tmp_path / "vectors.npz").load()
     np.testing.assert_array_equal(vectors, loaded_vectors)
@@ -84,13 +96,53 @@ def test_build_save_load_kb(tmp_path, test_config, fake_embedder):
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    (docs / "manual.metadata.json").write_text(
+        json.dumps(
+            {
+                "manual_id": "coffee-manual",
+                "title": "Coffee Manual",
+                "source_file": "manual.md",
+                "product_category": "coffee",
+                "language": "zh-CN",
+                "tags": ["Steam"],
+            }
+        ),
+        encoding="utf-8",
+    )
     state = build_kb(docs, "default", test_config, embedder=fake_embedder)
     save_kb(state, test_config)
     loaded = load_kb("default", test_config)
     assert loaded.graph.number_of_nodes() == state.graph.number_of_nodes()
     assert loaded.vectors.shape == state.vectors.shape
+    assert loaded.graph.nodes[0]["manual_id"] == "coffee-manual"
+    assert loaded.graph.nodes[0]["metadata"]["tags"] == ["steam"]
     meta = json.loads((tmp_path / "data" / "default" / "meta.json").read_text())
     assert meta["schema_version"] == "1"
+
+
+def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fake_embedder):
+    class FakePdfPage:
+        def extract_text(self):
+            return "冷藏室温度设置与冰箱噪音排查。"
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [FakePdfPage()]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "fridge.pdf").write_bytes(b"%PDF fake")
+
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+
+    assert state.graph.number_of_nodes() == 1
+    node = state.graph.nodes[0]
+    assert node["source_file"] == "fridge.pdf"
+    assert node["manual_id"] == "fridge"
+    assert node["product_category"] == "unknown"
+    assert node["header"] == "Page 1"
+    assert "冷藏室温度" in node["text"]
 
 
 def test_rebuild_keeps_old_state_until_done(tmp_path, test_config, fake_embedder):

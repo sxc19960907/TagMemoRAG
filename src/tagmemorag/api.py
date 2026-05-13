@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import hashlib
+import json
 import sys
 import time
 import uuid
@@ -24,13 +25,14 @@ from .config import Settings, load_config
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
+from .manuals import metadata_from_node
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .state import AppState, load_kb
 from .storage.json_anchor import JsonAnchorStore
 from .types import GraphState
-from .wave_searcher import wave_search
+from .wave_searcher import filter_node_ids, normalize_filters, wave_search
 
 settings = load_config()
 app_state = AppState()
@@ -124,6 +126,26 @@ class SearchRequest(BaseModel):
     amplitude_cutoff: float | None = None
     aggregate: str | None = None
     kb_name: str = "default"
+    filters: "SearchFilters | None" = None
+
+
+class SearchFilters(BaseModel):
+    manual_id: str | None = None
+    brand: str | None = None
+    product_category: str | None = None
+    product_model: str | None = None
+    language: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+    def to_filter_dict(self) -> dict[str, object]:
+        return {
+            "manual_id": self.manual_id,
+            "brand": self.brand,
+            "product_category": self.product_category,
+            "product_model": self.product_model,
+            "language": self.language,
+            "tags": self.tags,
+        }
 
 
 class RebuildRequest(BaseModel):
@@ -214,6 +236,8 @@ def _search_param_values(request: SearchRequest) -> dict[str, object]:
 
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
+    filter_dict = request.filters.to_filter_dict() if request.filters else {}
+    canonical_filters = normalize_filters(filter_dict)
     parts = [
         request.kb_name,
         state.build_id,
@@ -225,6 +249,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         str(params["decay"]),
         str(params["amplitude_cutoff"]),
         str(params["aggregate"]),
+        json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -442,6 +467,8 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
+        filter_dict = request.filters.to_filter_dict() if request.filters else {}
+        eligible_node_ids = filter_node_ids(state.graph, filter_dict)
         results = wave_search(
             query_vec,
             state.graph,
@@ -453,6 +480,10 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             decay=float(params["decay"]),
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=aggregate,  # type: ignore[arg-type]
+            eligible_node_ids=eligible_node_ids,
+            filters=filter_dict,
+            metadata_field_boost=settings.search.metadata_field_boost,
+            tag_boost=settings.search.tag_boost,
         )
     search_time_ms = (time.perf_counter() - t0) * 1000.0
     trace_id = str(getattr(http_request.state, "trace_id", ""))
@@ -569,6 +600,59 @@ def graph_info(
         "anchors_version": state.anchors_version,
         "meta": state.meta,
         "unresolved_anchors": [anchor.to_dict() for anchor in state.unresolved_anchors],
+    }
+
+
+@app.get("/manuals")
+def list_manuals(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    state = app_state.get_current(kb_name)
+    manuals: dict[str, dict[str, object]] = {}
+    facets: dict[str, set[str]] = {
+        "brand": set(),
+        "product_category": set(),
+        "product_model": set(),
+        "language": set(),
+        "tags": set(),
+    }
+    for _, node in state.graph.nodes(data=True):
+        metadata = metadata_from_node(node)
+        manual_id = str(metadata.get("manual_id", "")).strip()
+        if not manual_id:
+            continue
+        entry = manuals.setdefault(
+            manual_id,
+            {
+                "manual_id": manual_id,
+                "title": str(metadata.get("title", "")),
+                "source_file": str(metadata.get("source_file", "")),
+                "brand": str(metadata.get("brand", "")),
+                "product_category": str(metadata.get("product_category", "")),
+                "product_name": str(metadata.get("product_name", "")),
+                "product_model": str(metadata.get("product_model", "")),
+                "language": str(metadata.get("language", "")),
+                "version": str(metadata.get("version", "")),
+                "tags": list(metadata.get("tags", [])) if isinstance(metadata.get("tags", []), list) else [],
+                "chunk_count": 0,
+            },
+        )
+        entry["chunk_count"] = int(entry["chunk_count"]) + 1
+        for field in ("brand", "product_category", "product_model", "language"):
+            value = str(metadata.get(field, "")).strip()
+            if value:
+                facets[field].add(value)
+        tags = metadata.get("tags", [])
+        if isinstance(tags, list):
+            facets["tags"].update(str(tag) for tag in tags if str(tag).strip())
+    return {
+        "kb_name": state.kb_name,
+        "build_id": state.build_id,
+        "manuals": sorted(manuals.values(), key=lambda item: str(item["manual_id"])),
+        "facets": {key: sorted(values) for key, values in facets.items()},
     }
 
 

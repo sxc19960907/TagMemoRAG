@@ -4,6 +4,7 @@ import networkx as nx
 import numpy as np
 
 from .config import GraphConfig
+from .manuals import MANUAL_METADATA_FIELDS
 from .types import Chunk, compute_anchor_key
 
 
@@ -11,16 +12,21 @@ def build_graph(chunks: list[Chunk], embeddings: np.ndarray, cfg: GraphConfig | 
     cfg = cfg or GraphConfig()
     graph = nx.Graph()
     for idx, chunk in enumerate(chunks):
-        graph.add_node(
-            idx,
-            text=chunk.text,
-            header=chunk.header,
-            path=list(chunk.path),
-            level=chunk.level,
-            start_line=chunk.start_line,
-            source_file=chunk.source_file,
-            anchor_key=compute_anchor_key(chunk.path, chunk.header, chunk.text),
-        )
+        metadata = dict(chunk.metadata)
+        node_attrs = {
+            "text": chunk.text,
+            "header": chunk.header,
+            "path": list(chunk.path),
+            "level": chunk.level,
+            "start_line": chunk.start_line,
+            "source_file": chunk.source_file,
+            "anchor_key": compute_anchor_key(chunk.path, chunk.header, chunk.text),
+            "metadata": metadata,
+        }
+        for field in MANUAL_METADATA_FIELDS:
+            if field in metadata:
+                node_attrs[field] = metadata[field]
+        graph.add_node(idx, **node_attrs)
 
     if len(chunks) == 0:
         return graph

@@ -22,10 +22,42 @@ pip install -e ".[dev]"
 python -m tagmemorag build --docs docs/ --kb default --config config.yaml
 ```
 
+`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). PDF support extracts embedded text; scanned image-only PDFs need OCR before indexing.
+
+Manual metadata can live next to each source file as `<manual>.metadata.json`:
+
+```json
+{
+  "manual_id": "gorenje-nrk6192-zh-cn-v1",
+  "title": "Gorenje NRK6192 refrigerator manual",
+  "source_file": "fridge/gorenje-nrk6192.zh-CN.v1.pdf",
+  "brand": "Gorenje",
+  "product_category": "fridge",
+  "product_name": "NRK6192",
+  "product_model": "NRK6192",
+  "language": "zh-CN",
+  "version": "v1",
+  "tags": ["temperature-setting", "troubleshooting"]
+}
+```
+
+If no sidecar exists, TagMemoRAG creates fallback metadata from the relative path, filename, parent directory, and `language="unknown"`.
+
 ### 2. Search from CLI
 
 ```bash
 python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
+```
+
+Filtered search narrows retrieval before WAVE propagation:
+
+```bash
+python -m tagmemorag search "冰箱温度怎么调" \
+  --kb fridge \
+  --category fridge \
+  --model NRK6192 \
+  --language zh-CN \
+  --tag temperature-setting
 ```
 
 ### 3. Start the API server
@@ -52,11 +84,17 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
   "steps": 3,
   "decay": 0.7,
   "aggregate": "max",
-  "kb_name": "default"
+  "kb_name": "default",
+  "filters": {
+    "product_category": "fridge",
+    "product_model": "NRK6192",
+    "language": "zh-CN",
+    "tags": ["temperature-setting"]
+  }
 }
 ```
 
-Response includes `build_id`, `search_time_ms`, and a `results` array — each result has `node_id / score / text / header / path / source_file / anchor_key`.
+Response includes `build_id`, `search_time_ms`, and a `results` array. Each result has the existing `node_id / score / text / header / path / source_file / anchor_key` fields plus manual metadata such as `manual_id`, `manual_title`, `brand`, `product_category`, `product_model`, `language`, `version`, and `tags`.
 The response also includes `cache: "hit" | "miss"`.
 
 ### `POST /rebuild`
@@ -76,6 +114,35 @@ Anchors survive rebuilds via stable `anchor_key` (sha256 of path+header+text pre
 ### `GET /graph_info`
 
 Returns node/edge counts, `build_id`, `meta`, and any `unresolved_anchors`.
+
+### `GET /manuals`
+
+Returns the manuals discovered in a loaded KB plus available metadata facets for UI filters:
+
+```json
+{
+  "kb_name": "fridge",
+  "build_id": "202605...",
+  "manuals": [
+    {
+      "manual_id": "gorenje-nrk6192-zh-cn-v1",
+      "title": "Gorenje NRK6192 refrigerator manual",
+      "product_category": "fridge",
+      "product_model": "NRK6192",
+      "language": "zh-CN",
+      "tags": ["temperature-setting"],
+      "chunk_count": 12
+    }
+  ],
+  "facets": {
+    "brand": ["Gorenje"],
+    "product_category": ["fridge"],
+    "product_model": ["NRK6192"],
+    "language": ["zh-CN"],
+    "tags": ["temperature-setting"]
+  }
+}
+```
 
 ### Authentication
 
@@ -148,6 +215,8 @@ search:
   decay: 0.7
   amplitude_cutoff: 0.01
   aggregate: max          # max | sum
+  metadata_field_boost: 0.05
+  tag_boost: 0.03
 
 anchor:
   default_boost: 2.0

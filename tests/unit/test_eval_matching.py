@@ -32,12 +32,25 @@ def test_match_expectations_basename_fallback_requires_unique_candidate():
         match_expectations(results, expected, case_id="case-1")
 
 
+def test_match_expectations_supports_metadata_fields():
+    result = _result(
+        text="冷藏室温度可以调节。",
+        metadata={"manual_id": "fridge-manual", "product_category": "fridge", "tags": ["temperature-setting"]},
+    )
+    expected = (ExpectedResult(metadata={"manual_id": "fridge-manual", "tags": ["temperature-setting"]}),)
+    missing = (ExpectedResult(metadata={"manual_id": "fridge-manual", "tags": ["maintenance"]}),)
+
+    assert match_expectations([result], expected, case_id="case-1") == [{0}]
+    assert match_expectations([result], missing, case_id="case-1") == [set()]
+
+
 def _result(
     *,
     source_file: str = "coffee.md",
     header: str = "h",
     text: str = "text",
     anchor_key: str = "anchor",
+    metadata: dict | None = None,
 ) -> Result:
     return Result(
         node_id=1,
@@ -48,4 +61,5 @@ def _result(
         source_file=source_file,
         start_line=1,
         anchor_key=anchor_key,
+        metadata=metadata or {},
     )

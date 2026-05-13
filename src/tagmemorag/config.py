@@ -37,6 +37,8 @@ class SearchConfig(BaseModel):
     amplitude_cutoff: float = 0.01
     aggregate: Literal["max", "sum"] = "max"
     propagation_boost: float = 1.0
+    metadata_field_boost: float = 0.05
+    tag_boost: float = 0.03
 
 
 class ParserConfig(BaseModel):

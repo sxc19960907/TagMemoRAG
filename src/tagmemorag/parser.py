@@ -2,15 +2,34 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from typing import Any
+
+from pypdf import PdfReader
 
 from .types import Chunk
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+SUPPORTED_DOCUMENT_SUFFIXES = {".md", ".txt", ".pdf"}
 
 
-def parse_document(path: str | Path, max_chars: int = 500, min_chars: int = 50, root_dir: str | Path | None = None) -> list[Chunk]:
+def parse_document(
+    path: str | Path,
+    max_chars: int = 500,
+    min_chars: int = 50,
+    root_dir: str | Path | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> list[Chunk]:
     file_path = Path(path)
     source_file = str(file_path.relative_to(root_dir)) if root_dir else file_path.name
+    chunk_metadata = dict(metadata or {})
+    if file_path.suffix.lower() == ".pdf":
+        return _parse_pdf(
+            file_path,
+            source_file=source_file,
+            max_chars=max_chars,
+            min_chars=min_chars,
+            metadata=chunk_metadata,
+        )
     text = file_path.read_text(encoding="utf-8")
     if not text.strip():
         return []
@@ -41,6 +60,7 @@ def parse_document(path: str | Path, max_chars: int = 500, min_chars: int = 50, 
                 level=current_level,
                 start_line=current_start,
                 source_file=source_file,
+                metadata=dict(chunk_metadata),
             )
         )
         current_lines = []
@@ -64,6 +84,35 @@ def parse_document(path: str | Path, max_chars: int = 500, min_chars: int = 50, 
     return _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
 
 
+def _parse_pdf(
+    file_path: Path,
+    *,
+    source_file: str,
+    max_chars: int,
+    min_chars: int,
+    metadata: dict[str, Any],
+) -> list[Chunk]:
+    reader = PdfReader(str(file_path))
+    raw_chunks: list[Chunk] = []
+    for index, page in enumerate(reader.pages, 1):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        header = f"Page {index}"
+        raw_chunks.append(
+            Chunk(
+                text=text,
+                header=header,
+                path=(header,),
+                level=1,
+                start_line=1,
+                source_file=source_file,
+                metadata=dict(metadata),
+            )
+        )
+    return _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+
+
 def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[Chunk]:
     split_chunks: list[Chunk] = []
     for chunk in chunks:
@@ -80,6 +129,7 @@ def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[C
                     level=chunk.level,
                     start_line=chunk.start_line + offset,
                     source_file=chunk.source_file,
+                    metadata=dict(chunk.metadata),
                 )
             )
 
@@ -94,6 +144,7 @@ def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[C
                 level=prev.level,
                 start_line=prev.start_line,
                 source_file=prev.source_file,
+                metadata=dict(prev.metadata),
             )
         else:
             merged.append(chunk)

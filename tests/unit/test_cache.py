@@ -52,3 +52,28 @@ def test_cache_key_is_sensitive_to_kb_build_anchors_and_params():
         req,
         GraphState(graph=graph, vectors=np.zeros((0, 64)), build_id="build-a", kb_name="kb-a", anchors_version=2),
     )
+
+
+def test_cache_key_includes_canonical_filters():
+    graph = nx.Graph()
+    state = GraphState(graph=graph, vectors=np.zeros((0, 64)), build_id="build-a", kb_name="kb-a", anchors_version=1)
+    base = _compute_cache_key(SearchRequest(question="a", kb_name="kb-a"), state)
+    filtered = _compute_cache_key(
+        SearchRequest(
+            question="a",
+            kb_name="kb-a",
+            filters={"product_category": "Fridge", "tags": ["Temperature Setting", "Maintenance"]},
+        ),
+        state,
+    )
+    same_filtered = _compute_cache_key(
+        SearchRequest(
+            question="a",
+            kb_name="kb-a",
+            filters={"product_category": "fridge", "tags": ["maintenance", "temperature-setting"]},
+        ),
+        state,
+    )
+
+    assert base != filtered
+    assert filtered == same_filtered

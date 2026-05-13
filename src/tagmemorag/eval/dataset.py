@@ -17,6 +17,7 @@ class ExpectedResult:
     header: str | None = None
     anchor_key: str | None = None
     text_contains: tuple[str, ...] = ()
+    metadata: dict[str, Any] | None = None
     weight: float = 1.0
 
 
@@ -125,11 +126,12 @@ def _parse_expected(raw: Any, case_id: str, suite_path: Path, line_number: int) 
         header=_optional_string(raw.get("header")),
         anchor_key=_optional_string(raw.get("anchor_key")),
         text_contains=text_contains,
+        metadata=_optional_metadata(raw.get("metadata"), case_id, suite_path, line_number),
         weight=float(raw.get("weight", 1.0)),
     )
     if expected.weight <= 0:
         raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} relevant weight must be positive")
-    if not (expected.source_file or expected.header or expected.anchor_key or expected.text_contains):
+    if not (expected.source_file or expected.header or expected.anchor_key or expected.text_contains or expected.metadata):
         raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} relevant entry must include at least one matcher field")
     return expected
 
@@ -146,6 +148,14 @@ def _optional_string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_metadata(value: Any, case_id: str, suite_path: Path, line_number: int) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not value:
+        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} metadata must be a non-empty object")
+    return dict(value)
 
 
 def _optional_threshold(raw: dict[str, Any], key: str, suite_path: Path, line_number: int, case_id: str) -> float | None:
