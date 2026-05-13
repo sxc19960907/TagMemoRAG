@@ -6,6 +6,7 @@ import hashlib
 import json
 import sys
 import time
+from typing import cast
 import uuid
 
 from pathlib import Path
@@ -28,6 +29,7 @@ from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
 from .manuals import metadata_from_node
+from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import (
     delete_manual,
     disable_manual,
@@ -769,6 +771,84 @@ async def upload_manual(
     return {"record": record.to_dict(), "rebuild_required": True, "rebuild_task": task.to_dict() if task else None}
 
 
+@app.post("/manual-library/bulk/preview")
+async def preview_manual_bulk_import(
+    kb_name: str = Form("default"),
+    metadata_format: str = Form("json"),
+    metadata: str = Form(""),
+    mode: str = Form("create_only"),
+    overwrite: bool = Form(False),
+    metadata_file: UploadFile | None = File(None),
+    files: list[UploadFile] | None = File(None),
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
+    uploaded = await _bulk_uploaded_files(files)
+    preview = preview_bulk_import(
+        kb_name,
+        metadata_text,
+        metadata_format,
+        uploaded,
+        settings,
+        mode=_parse_bulk_mode(mode),
+        overwrite=overwrite,
+    )
+    structlog.get_logger().info(
+        "manual_bulk_preview",
+        kb_name=kb_name,
+        row_count=len(preview.candidates),
+        error_count=preview.error_count,
+        warning_count=preview.warning_count,
+        create_count=preview.create_count,
+        update_count=preview.update_count,
+    )
+    return preview.to_dict()
+
+
+@app.post("/manual-library/bulk/import")
+async def import_manual_bulk(
+    kb_name: str = Form("default"),
+    metadata_format: str = Form("json"),
+    metadata: str = Form(""),
+    mode: str = Form("create_only"),
+    overwrite: bool = Form(False),
+    selected_rows: str = Form(""),
+    trigger_rebuild: bool = Form(False),
+    metadata_file: UploadFile | None = File(None),
+    files: list[UploadFile] | None = File(None),
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
+    uploaded = await _bulk_uploaded_files(files)
+    result = commit_bulk_import(
+        kb_name,
+        metadata_text,
+        metadata_format,
+        uploaded,
+        settings,
+        mode=_parse_bulk_mode(mode),
+        overwrite=overwrite,
+        selected_rows=_parse_selected_rows(selected_rows),
+    )
+    task = start_library_rebuild(app_state, kb_name, settings, embedder=embedder) if trigger_rebuild and result.imported_count else None
+    structlog.get_logger().info(
+        "manual_bulk_import",
+        kb_name=kb_name,
+        row_count=len(result.preview.candidates) if result.preview else 0,
+        imported_count=result.imported_count,
+        failed_count=result.failed_count,
+        skipped_count=result.skipped_count,
+    )
+    body = result.to_dict()
+    body["rebuild_required"] = result.pending_rebuild
+    body["rebuild_task"] = task.to_dict() if task else None
+    return body
+
+
 @app.patch("/manuals/{manual_id}/metadata")
 def patch_manual_metadata(
     manual_id: str,
@@ -895,3 +975,48 @@ def _parse_metadata_form(metadata: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be a JSON object.")
     return parsed
+
+
+async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:
+    if metadata_file is not None:
+        content = await metadata_file.read()
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ServiceError(ErrorCode.INVALID_INPUT, "metadata_file must be UTF-8 text.", {"error": str(exc)}) from exc
+    if not metadata.strip():
+        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata or metadata_file is required.")
+    return metadata
+
+
+async def _bulk_uploaded_files(files: list[UploadFile] | None) -> list[BulkUploadedFile]:
+    uploaded: list[BulkUploadedFile] = []
+    for file in files or []:
+        if not file.filename:
+            continue
+        uploaded.append(BulkUploadedFile(filename=file.filename, content=await file.read()))
+    return uploaded
+
+
+def _parse_selected_rows(selected_rows: str) -> set[int] | None:
+    if not selected_rows.strip():
+        return None
+    try:
+        parsed = json.loads(selected_rows)
+    except json.JSONDecodeError as exc:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.", {"error": str(exc)}) from exc
+    if not isinstance(parsed, list):
+        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.")
+    rows: set[int] = set()
+    for item in parsed:
+        try:
+            rows.add(int(item))
+        except (TypeError, ValueError) as exc:
+            raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must contain only row numbers.", {"value": item}) from exc
+    return rows
+
+
+def _parse_bulk_mode(mode: str) -> BulkImportMode:
+    if mode not in {"create_only", "upsert", "dry_run"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create_only, upsert, or dry_run.", {"mode": mode})
+    return cast(BulkImportMode, mode)

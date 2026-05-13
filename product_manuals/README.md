@@ -63,3 +63,41 @@ product_manuals/default/.tagmemorag-library.json
 Use `POST /manuals/validate` to check metadata before writing, `POST /manuals` to upload a document plus sidecar metadata, and `GET /manual-library?kb_name=default` to list managed manuals. Uploads and metadata edits set a pending-change marker; they are not searchable until `POST /manual-library/rebuild` completes successfully.
 
 Disable a manual by setting `status` to `disabled` through the API or sidecar. Disabled and archived manuals stay on disk for audit/recovery, remain visible in `GET /manual-library`, and are skipped by future builds. Hard delete removes both the source file and sidecar and is constrained to the configured library root.
+
+## Bulk Import Metadata
+
+Use `POST /manual-library/bulk/preview` before writing a batch. The preview detects unsafe paths, unsupported suffixes, missing file/metadata pairs, duplicate `manual_id`, duplicate `source_file`, and existing-library conflicts. Only rows without `severity=error` can be imported with `POST /manual-library/bulk/import`.
+
+CSV template:
+
+```csv
+manual_id,title,source_file,brand,product_category,product_name,product_model,language,version,tags,status,notes
+cm1,CM1 Manual,coffee/cm1.md,Acme,coffee,CM1,CM1,zh-CN,v1,"maintenance, steam-wand",active,
+```
+
+CSV tags are split on comma, semicolon, or newline, trimmed, and normalized to lower-kebab-case.
+
+JSON example:
+
+```json
+[
+  {
+    "manual_id": "cm1",
+    "title": "CM1 Manual",
+    "source_file": "coffee/cm1.md",
+    "product_category": "coffee",
+    "language": "zh-CN",
+    "tags": ["maintenance", "steam-wand"],
+    "status": "active"
+  }
+]
+```
+
+JSONL uses one metadata object per line. Bulk modes are `create_only`, `upsert`, and `dry_run`; upsert requires explicit `overwrite=true`. A successful import writes source files plus sidecars under the managed library root and marks the KB pending rebuild.
+
+CLI preview/import helpers use the same backend rules:
+
+```bash
+python -m tagmemorag manual-bulk preview --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md
+python -m tagmemorag manual-bulk import --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md --selected-row 2
+```

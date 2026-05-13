@@ -11,6 +11,8 @@ const state = {
   rebuildTask: null,
   loading: false,
   suggestions: { upload: [], detail: [] },
+  bulkPreview: null,
+  bulkFilters: { severity: "all", action: "all", status: "", tag: "" },
 };
 
 const fields = [
@@ -61,6 +63,20 @@ const el = {
   suggestUploadTags: document.getElementById("suggest-upload-tags"),
   acceptAllUploadTags: document.getElementById("accept-all-upload-tags"),
   validateUpload: document.getElementById("validate-upload"),
+  bulkDialog: document.getElementById("bulk-dialog"),
+  openBulk: document.getElementById("open-bulk-import"),
+  closeBulk: document.getElementById("close-bulk-import"),
+  bulkForm: document.getElementById("bulk-form"),
+  bulkMessages: document.getElementById("bulk-messages"),
+  bulkSummary: document.getElementById("bulk-summary"),
+  bulkRows: document.getElementById("bulk-preview-rows"),
+  bulkPreview: document.getElementById("bulk-preview"),
+  bulkImportSelected: document.getElementById("bulk-import-selected"),
+  bulkSelectAll: document.getElementById("bulk-select-all"),
+  bulkFilterSeverity: document.getElementById("bulk-filter-severity"),
+  bulkFilterAction: document.getElementById("bulk-filter-action"),
+  bulkFilterStatus: document.getElementById("bulk-filter-status"),
+  bulkFilterTag: document.getElementById("bulk-filter-tag"),
   rebuild: document.getElementById("rebuild-library"),
 };
 
@@ -177,6 +193,135 @@ function showMessages(container, messages, kind = "") {
     div.textContent = typeof message === "string" ? message : `${message.field || "metadata"}: ${message.message}`;
     container.appendChild(div);
   });
+}
+
+function bulkFormData(includeSelectedRows = false) {
+  const data = new FormData(el.bulkForm);
+  const form = new FormData();
+  form.set("kb_name", state.kbName);
+  form.set("metadata_format", data.get("metadata_format") || "csv");
+  form.set("metadata", data.get("metadata") || "");
+  form.set("mode", data.get("mode") || "create_only");
+  form.set("overwrite", data.get("overwrite") ? "true" : "false");
+  form.set("trigger_rebuild", data.get("trigger_rebuild") ? "true" : "false");
+  const metadataFile = data.get("metadata_file");
+  if (metadataFile && metadataFile.name) form.set("metadata_file", metadataFile);
+  for (const file of data.getAll("files")) {
+    if (file && file.name) form.append("files", file);
+  }
+  if (includeSelectedRows) form.set("selected_rows", JSON.stringify(selectedBulkRows()));
+  return form;
+}
+
+function filteredBulkRows() {
+  const rows = state.bulkPreview?.rows || [];
+  const status = state.bulkFilters.status.toLowerCase();
+  const tag = state.bulkFilters.tag.toLowerCase();
+  return rows.filter((row) => {
+    if (state.bulkFilters.severity !== "all" && row.severity !== state.bulkFilters.severity) return false;
+    if (state.bulkFilters.action !== "all" && row.action !== state.bulkFilters.action) return false;
+    if (status && !String(row.status || "").toLowerCase().includes(status)) return false;
+    if (tag && !String(row.tag || "").toLowerCase().includes(tag)) return false;
+    return true;
+  });
+}
+
+function renderBulkPreview() {
+  const preview = state.bulkPreview;
+  el.bulkRows.innerHTML = "";
+  if (!preview) {
+    el.bulkSummary.textContent = "No preview loaded.";
+    el.bulkSelectAll.checked = false;
+    el.bulkSelectAll.disabled = true;
+    el.bulkImportSelected.disabled = true;
+    return;
+  }
+  const summary = preview.summary || {};
+  el.bulkSummary.textContent = [
+    `${summary.valid_count || 0} valid`,
+    `${summary.error_count || 0} errors`,
+    `${summary.warning_count || 0} warnings`,
+    `${summary.create_count || 0} create`,
+    `${summary.update_count || 0} update`,
+    `${summary.skip_count || 0} skip`,
+  ].join(" | ");
+  const errorRows = new Set((preview.rows || []).filter((row) => row.severity === "error").map((row) => Number(row.row)));
+  const readyRows = new Set((preview.rows || []).filter((row) => row.code === "READY" && row.action !== "skip").map((row) => Number(row.row)));
+  filteredBulkRows().forEach((row) => {
+    const selectable = readyRows.has(Number(row.row)) && !errorRows.has(Number(row.row));
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="checkbox" data-bulk-row="${Number(row.row)}" ${selectable ? "checked" : "disabled"}></td>
+      <td>${escapeHtml(row.row)}</td>
+      <td>${escapeHtml(row.manual_id)}</td>
+      <td>${escapeHtml(row.source_file)}</td>
+      <td>${escapeHtml(row.tag)}</td>
+      <td>${escapeHtml(row.status)}</td>
+      <td>${badge(row.action, row.action === "conflict" || row.action === "invalid" ? "warn" : "ok")}</td>
+      <td>${badge(row.severity, row.severity === "error" ? "warn" : row.severity === "info" ? "ok" : "off")}</td>
+      <td>${escapeHtml(row.message)}</td>
+    `;
+    el.bulkRows.appendChild(tr);
+  });
+  el.bulkSelectAll.disabled = readyRows.size === 0;
+  el.bulkSelectAll.checked = readyRows.size > 0 && selectedBulkRows().length === readyRows.size;
+  el.bulkImportSelected.disabled = readyRows.size === 0;
+}
+
+function selectedBulkRows() {
+  return [...el.bulkRows.querySelectorAll("input[data-bulk-row]:checked")]
+    .map((input) => Number(input.dataset.bulkRow))
+    .filter((row) => Number.isFinite(row) && row > 0);
+}
+
+async function previewBulkImport() {
+  el.bulkPreview.disabled = true;
+  showMessages(el.bulkMessages, ["Previewing bulk import..."]);
+  try {
+    const body = await apiFetch("/manual-library/bulk/preview", {
+      method: "POST",
+      headers: headers(false),
+      body: bulkFormData(false),
+    });
+    state.bulkPreview = body;
+    showMessages(el.bulkMessages, body.summary?.error_count ? ["Preview has rows that need attention."] : ["Preview is ready."], body.summary?.error_count ? "error" : "success");
+    renderBulkPreview();
+  } catch (error) {
+    state.bulkPreview = null;
+    showMessages(el.bulkMessages, [error.message], "error");
+    renderBulkPreview();
+  } finally {
+    el.bulkPreview.disabled = false;
+  }
+}
+
+async function importBulkSelected() {
+  const rows = selectedBulkRows();
+  if (!rows.length) {
+    showMessages(el.bulkMessages, ["Select at least one valid row to import."], "error");
+    return;
+  }
+  el.bulkImportSelected.disabled = true;
+  try {
+    const body = await apiFetch("/manual-library/bulk/import", {
+      method: "POST",
+      headers: headers(false),
+      body: bulkFormData(true),
+    });
+    state.bulkPreview = body.preview || state.bulkPreview;
+    const message = body.rebuild_task
+      ? `Imported ${body.imported_count} rows and started rebuild.`
+      : `Imported ${body.imported_count} rows. Rebuild is required before they are searchable.`;
+    setStatus(message, "warn");
+    showMessages(el.bulkMessages, [message], body.failed_count ? "error" : "success");
+    if (body.rebuild_task) pollRebuild(body.rebuild_task.task_id);
+    await loadManuals();
+    renderBulkPreview();
+  } catch (error) {
+    showMessages(el.bulkMessages, [error.message], "error");
+  } finally {
+    el.bulkImportSelected.disabled = false;
+  }
 }
 
 function suggestionNodes(scope) {
@@ -562,6 +707,36 @@ el.openUpload.addEventListener("click", () => {
 
 el.closeUpload.addEventListener("click", () => el.uploadDialog.close());
 
+el.openBulk.addEventListener("click", () => {
+  state.bulkPreview = null;
+  el.bulkMessages.innerHTML = "";
+  renderBulkPreview();
+  if (typeof el.bulkDialog.showModal === "function") el.bulkDialog.showModal();
+  else el.bulkDialog.setAttribute("open", "");
+});
+
+el.closeBulk.addEventListener("click", () => el.bulkDialog.close());
+
+el.bulkPreview.addEventListener("click", previewBulkImport);
+el.bulkImportSelected.addEventListener("click", importBulkSelected);
+el.bulkSelectAll.addEventListener("input", () => {
+  for (const input of el.bulkRows.querySelectorAll("input[data-bulk-row]:not(:disabled)")) {
+    input.checked = el.bulkSelectAll.checked;
+  }
+});
+
+[
+  [el.bulkFilterSeverity, "severity"],
+  [el.bulkFilterAction, "action"],
+  [el.bulkFilterStatus, "status"],
+  [el.bulkFilterTag, "tag"],
+].forEach(([node, key]) => {
+  node.addEventListener("input", () => {
+    state.bulkFilters[key] = node.value;
+    renderBulkPreview();
+  });
+});
+
 el.validateUpload.addEventListener("click", async () => {
   try {
     const mode = new FormData(el.uploadForm).get("overwrite") ? "upsert" : "create";
@@ -646,4 +821,5 @@ async function pollRebuild(taskId) {
 }
 
 renderDetail();
+renderBulkPreview();
 loadManuals();

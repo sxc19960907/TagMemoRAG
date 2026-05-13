@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import secrets
 import sys
 
@@ -13,6 +14,7 @@ from .embedder import create_embedder
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
+from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .state import build_kb, load_kb, save_kb
 from .wave_searcher import filter_node_ids, wave_search
 
@@ -83,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
     generate_key.add_argument("--kb", default="*")
     generate_key.add_argument("--rate", type=int, default=60)
     generate_key.add_argument("--prefix", default="tmr_live_")
+
+    manual_bulk = sub.add_parser("manual-bulk")
+    manual_bulk_sub = manual_bulk.add_subparsers(dest="manual_bulk_command", required=True)
+    bulk_preview = manual_bulk_sub.add_parser("preview")
+    _add_bulk_args(bulk_preview, include_import_args=False)
+    bulk_import = manual_bulk_sub.add_parser("import")
+    _add_bulk_args(bulk_import, include_import_args=True)
 
     args = parser.parse_args(argv)
     if args.command == "build":
@@ -189,7 +198,60 @@ def main(argv: list[str] | None = None) -> int:
         print("# Give this plaintext key to the client once:")
         print(plaintext)
         return 0
+    if args.command == "manual-bulk" and args.manual_bulk_command == "preview":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        metadata_text = _read_text_file(args.metadata)
+        uploaded = _read_bulk_files(args.file)
+        preview = preview_bulk_import(
+            args.kb,
+            metadata_text,
+            args.metadata_format,
+            uploaded,
+            cfg,
+            mode=args.mode,
+            overwrite=args.overwrite,
+        )
+        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "manual-bulk" and args.manual_bulk_command == "import":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        metadata_text = _read_text_file(args.metadata)
+        uploaded = _read_bulk_files(args.file)
+        result = commit_bulk_import(
+            args.kb,
+            metadata_text,
+            args.metadata_format,
+            uploaded,
+            cfg,
+            mode=args.mode,
+            overwrite=args.overwrite,
+            selected_rows=set(args.selected_row) if args.selected_row else None,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 0
     return 1
+
+
+def _add_bulk_args(parser: argparse.ArgumentParser, *, include_import_args: bool) -> None:
+    parser.add_argument("--kb", default="default")
+    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--metadata", required=True, help="Path to JSON, JSONL, or CSV metadata.")
+    parser.add_argument("--metadata-format", choices=["json", "jsonl", "csv"], default="csv")
+    parser.add_argument("--file", action="append", default=[], help="Manual source document path. Repeat for many files.")
+    parser.add_argument("--mode", choices=["create_only", "upsert", "dry_run"], default="create_only")
+    parser.add_argument("--overwrite", action="store_true")
+    if include_import_args:
+        parser.add_argument("--selected-row", action="append", type=int, default=[])
+
+
+def _read_text_file(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+def _read_bulk_files(paths: list[str]) -> list[BulkUploadedFile]:
+    return [BulkUploadedFile(filename=Path(path).name, content=Path(path).read_bytes()) for path in paths]
 
 
 if __name__ == "__main__":

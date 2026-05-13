@@ -185,8 +185,46 @@ Other library operations:
 | `PUT /manuals/{manual_id}/file` | Replace the source document |
 | `DELETE /manuals/{manual_id}?kb_name=...` | Disable a manual for future rebuilds |
 | `DELETE /manuals/{manual_id}?kb_name=...&hard=true` | Hard delete source + sidecar; requires `admin` |
+| `POST /manual-library/bulk/preview` | Validate JSON/JSONL/CSV metadata and uploaded documents without writing |
+| `POST /manual-library/bulk/import` | Re-run preview and import selected valid rows |
 
 Create/update/disable/rebuild require the `rebuild` scope plus KB allowlist access. Hard delete also requires `admin`. `status=disabled` or `status=archived` sidecars are skipped by future builds while remaining visible in the managed library list.
+
+Bulk import accepts metadata as JSON array, JSONL, or CSV. Recommended CSV columns:
+
+```csv
+manual_id,title,source_file,brand,product_category,product_name,product_model,language,version,tags,status,notes
+cm1,CM1 Manual,coffee/cm1.md,Acme,coffee,CM1,CM1,zh-CN,v1,"maintenance, steam-wand",active,
+```
+
+Preview first, then import. Preview rows include `manual_id`, `source_file`, `tag`, `status`, `action`, `severity`, and a message. `action` is one of `create`, `update`, `skip`, `conflict`, or `invalid`; `severity=error` rows cannot be imported.
+
+```bash
+curl -X POST http://127.0.0.1:8000/manual-library/bulk/preview \
+  -H "Authorization: Bearer tmr_live_..." \
+  -F kb_name=default \
+  -F metadata_format=csv \
+  -F metadata_file=@manuals.csv \
+  -F files=@product_manuals/default/coffee/cm1.md
+
+curl -X POST http://127.0.0.1:8000/manual-library/bulk/import \
+  -H "Authorization: Bearer tmr_live_..." \
+  -F kb_name=default \
+  -F metadata_format=csv \
+  -F metadata_file=@manuals.csv \
+  -F mode=create_only \
+  -F selected_rows='[2]' \
+  -F files=@product_manuals/default/coffee/cm1.md
+```
+
+The same backend service is available through thin CLI helpers:
+
+```bash
+python -m tagmemorag manual-bulk preview --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md
+python -m tagmemorag manual-bulk import --metadata manuals.csv --metadata-format csv --file product_manuals/default/coffee/cm1.md --selected-row 2
+```
+
+Use `mode=create_only` to reject existing `manual_id` or `source_file`. Use `mode=upsert` with `overwrite=true` for explicit updates. Use `mode=dry_run` for preview-only checks. Bulk imports mark the library as pending rebuild but do not make changes searchable until `POST /manual-library/rebuild` succeeds.
 
 Suggest tags for an upload or edit draft without writing files:
 
@@ -207,7 +245,7 @@ Start the same FastAPI service, then open:
 http://127.0.0.1:8000/admin/manual-library
 ```
 
-Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
+Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, previews/imports bulk CSV/JSON/JSONL batches, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 

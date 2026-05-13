@@ -137,3 +137,53 @@ def test_cli_auth_generate_key_outputs_hash_and_plaintext(capsys):
     assert '"hash": "sha256:' in out
     assert '"scopes": [' in out
     assert "tmr_live_" in out
+
+
+def test_cli_manual_bulk_preview_and_import(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+""",
+        encoding="utf-8",
+    )
+    metadata = tmp_path / "manuals.csv"
+    metadata.write_text(
+        "manual_id,title,source_file,product_category,language,tags\n"
+        "cm1,CM1 Manual,coffee/cm1.md,coffee,zh-CN,maintenance\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "cm1.md"
+    source.write_text("# Use\nClean weekly.\n", encoding="utf-8")
+
+    assert cli.main(["manual-bulk", "preview", "--config", str(config), "--metadata", str(metadata), "--file", str(source)]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["summary"]["valid_count"] == 1
+    assert preview["rows"][0]["action"] == "create"
+
+    assert (
+        cli.main(
+            [
+                "manual-bulk",
+                "import",
+                "--config",
+                str(config),
+                "--metadata",
+                str(metadata),
+                "--file",
+                str(source),
+                "--selected-row",
+                "2",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["imported_count"] == 1
+    assert (tmp_path / "manuals" / "default" / "coffee" / "cm1.md").exists()

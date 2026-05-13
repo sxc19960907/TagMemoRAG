@@ -29,6 +29,7 @@
           <input id="api-token" type="password" autocomplete="off" placeholder="Bearer token">
         </label>
         <div class="top-actions">
+          <button id="open-bulk-import" type="button">Bulk Import</button>
           <button id="open-upload" type="button">Upload</button>
           <button id="rebuild-library" type="button" class="primary">Rebuild</button>
         </div>
@@ -205,6 +206,84 @@
         <div class="button-row">
           <button type="button" id="validate-upload">Validate</button>
           <button type="submit" class="primary">Upload</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="bulk-dialog" class="bulk-dialog">
+      <form id="bulk-form" class="upload-form">
+        <div class="dialog-header">
+          <h2>Bulk Import</h2>
+          <button type="button" id="close-bulk-import" aria-label="Close">x</button>
+        </div>
+        <div class="field-grid">
+          <label><span>Metadata format</span>
+            <select name="metadata_format">
+              <option value="csv">csv</option>
+              <option value="json">json</option>
+              <option value="jsonl">jsonl</option>
+            </select>
+          </label>
+          <label><span>Mode</span>
+            <select name="mode">
+              <option value="create_only">create_only</option>
+              <option value="upsert">upsert</option>
+              <option value="dry_run">dry_run</option>
+            </select>
+          </label>
+        </div>
+        <label><span>Metadata file</span><input name="metadata_file" type="file" accept=".csv,.json,.jsonl,text/csv,application/json"></label>
+        <label><span>Metadata text</span><textarea name="metadata" rows="8" spellcheck="false" placeholder="manual_id,title,source_file,product_category,language,tags"></textarea></label>
+        <label><span>Documents</span><input name="files" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" multiple></label>
+        <div class="toggles">
+          <label><input name="overwrite" type="checkbox"> Approve overwrite/upsert</label>
+          <label><input name="trigger_rebuild" type="checkbox"> Trigger rebuild after import</label>
+        </div>
+        <div class="bulk-filters" aria-label="Bulk preview filters">
+          <label><span>Severity</span>
+            <select id="bulk-filter-severity">
+              <option value="all">All</option>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </label>
+          <label><span>Action</span>
+            <select id="bulk-filter-action">
+              <option value="all">All</option>
+              <option value="create">Create</option>
+              <option value="update">Update</option>
+              <option value="skip">Skip</option>
+              <option value="conflict">Conflict</option>
+              <option value="invalid">Invalid</option>
+            </select>
+          </label>
+          <label><span>Status</span><input id="bulk-filter-status" placeholder="active"></label>
+          <label><span>Tag</span><input id="bulk-filter-tag" placeholder="maintenance"></label>
+        </div>
+        <div id="bulk-messages" class="messages"></div>
+        <div class="bulk-summary" id="bulk-summary">No preview loaded.</div>
+        <div class="table-wrap bulk-table-wrap">
+          <table class="bulk-table">
+            <thead>
+              <tr>
+                <th><input id="bulk-select-all" type="checkbox" aria-label="Select all valid rows"></th>
+                <th>Row</th>
+                <th>Manual ID</th>
+                <th>Source</th>
+                <th>Tag</th>
+                <th>Status</th>
+                <th>Action</th>
+                <th>Severity</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-preview-rows"></tbody>
+          </table>
+        </div>
+        <div class="button-row">
+          <button type="button" id="bulk-preview">Preview</button>
+          <button type="button" id="bulk-import-selected" class="primary">Import selected valid rows</button>
         </div>
       </form>
     </dialog>

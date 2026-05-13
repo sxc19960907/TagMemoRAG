@@ -172,7 +172,8 @@ main {
   color: var(--warn);
 }
 
-.filters {
+.filters,
+.bulk-filters {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 150px 150px 150px;
   gap: 10px;
@@ -426,9 +427,45 @@ summary {
   gap: 8px;
 }
 
+.bulk-dialog {
+  width: min(1120px, calc(100vw - 28px));
+}
+
 dialog {
   width: min(760px, calc(100vw - 28px));
   padding: 0;
+}
+
+.bulk-dialog {
+  width: min(1120px, calc(100vw - 28px));
+}
+
+.bulk-summary {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  color: var(--muted);
+  padding: 8px 9px;
+}
+
+.bulk-table-wrap {
+  max-height: min(42vh, 430px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.bulk-table {
+  min-width: 980px;
+}
+
+.bulk-table td,
+.bulk-table th {
+  padding: 7px 8px;
+}
+
+.bulk-table input[type="checkbox"] {
+  min-height: 0;
+  width: auto;
 }
 
 dialog::backdrop {
@@ -446,6 +483,7 @@ dialog::backdrop {
 @media (max-width: 1100px) {
   .topbar,
   .filters,
+  .bulk-filters,
   .workspace {
     grid-template-columns: 1fr;
   }
