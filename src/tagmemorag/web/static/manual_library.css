@@ -209,6 +209,15 @@ dialog {
   font-size: 17px;
 }
 
+.pane-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.pane-header.compact {
+  padding: 9px 10px;
+}
+
 .pane-header p {
   margin: 3px 0 0;
   color: var(--muted);
@@ -440,6 +449,53 @@ dialog {
   width: min(1120px, calc(100vw - 28px));
 }
 
+.tag-dialog {
+  width: min(1320px, calc(100vw - 28px));
+}
+
+.tag-summary {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  color: var(--muted);
+  padding: 8px 9px;
+}
+
+.tag-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tag-grid section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tag-grid section > label,
+.tag-grid section > .field-grid,
+.tag-grid section > .toggles,
+.tag-grid section > .messages,
+.tag-grid section > .button-row {
+  margin: 10px;
+}
+
+.tag-table-wrap {
+  max-height: min(32vh, 330px);
+  border-top: 1px solid var(--line);
+}
+
+.tag-table {
+  min-width: 680px;
+}
+
+.tag-table td,
+.tag-table th {
+  padding: 7px 8px;
+}
+
 .bulk-summary {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -484,6 +540,7 @@ dialog::backdrop {
   .topbar,
   .filters,
   .bulk-filters,
+  .tag-grid,
   .workspace {
     grid-template-columns: 1fr;
   }

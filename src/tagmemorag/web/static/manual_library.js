@@ -13,6 +13,8 @@ const state = {
   suggestions: { upload: [], detail: [] },
   bulkPreview: null,
   bulkFilters: { severity: "all", action: "all", status: "", tag: "" },
+  tagReport: null,
+  rewritePreview: null,
 };
 
 const fields = [
@@ -66,6 +68,25 @@ const el = {
   bulkDialog: document.getElementById("bulk-dialog"),
   openBulk: document.getElementById("open-bulk-import"),
   closeBulk: document.getElementById("close-bulk-import"),
+  tagDialog: document.getElementById("tag-dialog"),
+  openTag: document.getElementById("open-tag-governance"),
+  closeTag: document.getElementById("close-tag-governance"),
+  tagSummary: document.getElementById("tag-summary"),
+  tagPolicyJson: document.getElementById("tag-policy-json"),
+  tagStatRows: document.getElementById("tag-stat-rows"),
+  tagIssueRows: document.getElementById("tag-issue-rows"),
+  tagMessages: document.getElementById("tag-messages"),
+  refreshTagReport: document.getElementById("refresh-tag-report"),
+  saveTagPolicy: document.getElementById("save-tag-policy"),
+  rewriteSourceTags: document.getElementById("rewrite-source-tags"),
+  rewriteTargetTag: document.getElementById("rewrite-target-tag"),
+  rewriteMode: document.getElementById("rewrite-mode"),
+  rewriteAliasMode: document.getElementById("rewrite-alias-mode"),
+  rewriteUpdatePolicy: document.getElementById("rewrite-update-policy"),
+  rewriteMessages: document.getElementById("rewrite-messages"),
+  rewritePreviewRows: document.getElementById("rewrite-preview-rows"),
+  previewTagRewrite: document.getElementById("preview-tag-rewrite"),
+  commitTagRewrite: document.getElementById("commit-tag-rewrite"),
   bulkForm: document.getElementById("bulk-form"),
   bulkMessages: document.getElementById("bulk-messages"),
   bulkSummary: document.getElementById("bulk-summary"),
@@ -440,6 +461,146 @@ async function loadManuals() {
   }
 }
 
+async function loadTagReport() {
+  showMessages(el.tagMessages, ["Loading tag report..."]);
+  try {
+    const body = await apiFetch(`/manual-library/tags?kb_name=${encodeURIComponent(state.kbName)}`, {
+      headers: headers(false),
+    });
+    state.tagReport = body;
+    state.rewritePreview = null;
+    el.tagPolicyJson.value = JSON.stringify(body.policy || {}, null, 2);
+    renderTagGovernance();
+    showMessages(el.tagMessages, ["Tag report loaded."], "success");
+  } catch (error) {
+    state.tagReport = null;
+    renderTagGovernance();
+    showMessages(el.tagMessages, [error.message], "error");
+  }
+}
+
+function renderTagGovernance() {
+  const stats = state.tagReport?.stats || [];
+  const issues = state.tagReport?.issues || [];
+  const summary = state.tagReport?.summary || {};
+  el.tagSummary.textContent = state.tagReport
+    ? `${summary.tag_count || 0} tags | ${summary.issue_count || 0} drift issues | ${summary.warning_count || 0} warnings | ${summary.error_count || 0} errors`
+    : "No tag report loaded.";
+  el.tagStatRows.innerHTML = "";
+  stats.forEach((stat) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(stat.tag)}</td>
+      <td>${escapeHtml(stat.canonical_tag)}</td>
+      <td>${badge(stat.state, stat.state === "canonical" ? "ok" : stat.state === "unknown" ? "warn" : "off")}</td>
+      <td>${escapeHtml(stat.manual_count)}</td>
+      <td>${escapeHtml(stat.active_manual_count)}</td>
+      <td>${escapeHtml(stat.graph_count)}</td>
+    `;
+    el.tagStatRows.appendChild(tr);
+  });
+  el.tagIssueRows.innerHTML = "";
+  issues.forEach((issue) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${badge(issue.severity, issue.severity === "error" ? "warn" : issue.severity === "info" ? "ok" : "off")}</td>
+      <td>${escapeHtml(issue.code)}</td>
+      <td>${escapeHtml(issue.tag)}</td>
+      <td>${escapeHtml(issue.canonical_tag)}</td>
+      <td>${escapeHtml(issue.count)}</td>
+      <td>${escapeHtml(issue.message)}</td>
+    `;
+    el.tagIssueRows.appendChild(tr);
+  });
+  renderRewritePreview();
+}
+
+function rewritePayload() {
+  const sourceTags = tagsFromText(el.rewriteSourceTags.value);
+  const payload = {
+    kb_name: state.kbName,
+    source_tags: sourceTags,
+    target_tag: el.rewriteTargetTag.value.trim(),
+    mode: el.rewriteMode.value,
+    update_policy: el.rewriteUpdatePolicy.checked,
+  };
+  if (el.rewriteAliasMode.value) payload.policy_alias_mode = el.rewriteAliasMode.value;
+  return payload;
+}
+
+function renderRewritePreview() {
+  el.rewritePreviewRows.innerHTML = "";
+  const changes = state.rewritePreview?.changes || [];
+  changes.forEach((change) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(change.manual_id)}</td>
+      <td>${escapeHtml(tagsToText(change.before_tags))}</td>
+      <td>${escapeHtml(tagsToText(change.after_tags))}</td>
+    `;
+    el.rewritePreviewRows.appendChild(tr);
+  });
+  el.commitTagRewrite.disabled = changes.length === 0;
+}
+
+async function saveTagPolicy() {
+  try {
+    const policy = JSON.parse(el.tagPolicyJson.value || "{}");
+    const body = await apiFetch("/manual-library/tags/policy", {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify({ kb_name: state.kbName, policy }),
+    });
+    el.tagPolicyJson.value = JSON.stringify(body.policy || {}, null, 2);
+    showMessages(el.tagMessages, ["Policy saved."], "success");
+    await loadTagReport();
+  } catch (error) {
+    showMessages(el.tagMessages, [error.message], "error");
+  }
+}
+
+async function previewTagRewrite() {
+  try {
+    const body = await apiFetch("/manual-library/tags/rewrite/preview", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(rewritePayload()),
+    });
+    state.rewritePreview = body;
+    showMessages(
+      el.rewriteMessages,
+      [`${body.affected_count || 0} manuals affected. Rebuild required after commit.`],
+      body.issues?.some((issue) => issue.severity === "error") ? "error" : "success",
+    );
+    renderRewritePreview();
+  } catch (error) {
+    state.rewritePreview = null;
+    renderRewritePreview();
+    showMessages(el.rewriteMessages, [error.message], "error");
+  }
+}
+
+async function commitTagRewrite() {
+  if (!state.rewritePreview?.affected_count) {
+    showMessages(el.rewriteMessages, ["Preview a rewrite with affected manuals first."], "error");
+    return;
+  }
+  try {
+    const body = await apiFetch("/manual-library/tags/rewrite", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(rewritePayload()),
+    });
+    state.rewritePreview = body;
+    showMessages(el.rewriteMessages, [`Updated ${body.updated_count || 0} manuals. Rebuild is required.`], "success");
+    setStatus("Tag rewrite committed. Rebuild is required before search reflects the change.", "warn");
+    await loadManuals();
+    await loadTagReport();
+  } catch (error) {
+    showMessages(el.rewriteMessages, [error.message], "error");
+  }
+}
+
 function filteredManuals() {
   const text = state.filters.text.toLowerCase();
   return state.manuals.filter((manual) => {
@@ -716,6 +877,22 @@ el.openBulk.addEventListener("click", () => {
 });
 
 el.closeBulk.addEventListener("click", () => el.bulkDialog.close());
+
+el.openTag.addEventListener("click", () => {
+  el.tagMessages.innerHTML = "";
+  el.rewriteMessages.innerHTML = "";
+  state.rewritePreview = null;
+  renderRewritePreview();
+  if (typeof el.tagDialog.showModal === "function") el.tagDialog.showModal();
+  else el.tagDialog.setAttribute("open", "");
+  loadTagReport();
+});
+
+el.closeTag.addEventListener("click", () => el.tagDialog.close());
+el.refreshTagReport.addEventListener("click", loadTagReport);
+el.saveTagPolicy.addEventListener("click", saveTagPolicy);
+el.previewTagRewrite.addEventListener("click", previewTagRewrite);
+el.commitTagRewrite.addEventListener("click", commitTagRewrite);
 
 el.bulkPreview.addEventListener("click", previewBulkImport);
 el.bulkImportSelected.addEventListener("click", importBulkSelected);

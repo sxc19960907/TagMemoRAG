@@ -8,6 +8,7 @@ from typing import Any, Iterable, Sequence
 
 from .manual_library import ManualLibraryRecord
 from .manuals import MANUAL_METADATA_FIELDS, normalize_tag
+from .tag_governance import TagPolicy, resolve_tag
 from .types import GraphState
 
 DEFAULT_LIMIT = 8
@@ -81,8 +82,9 @@ def suggest_tags(
     graph_state: GraphState | None = None,
     text_sample: str = "",
     limit: int = DEFAULT_LIMIT,
+    tag_policy: TagPolicy | None = None,
 ) -> tuple[list[TagSuggestion], list[str]]:
-    existing_tags = _collect_existing_tags(records, graph_state)
+    existing_tags = _collect_existing_tags(records, graph_state, tag_policy=tag_policy)
     draft_tags = {
         tag
         for raw in _as_list(metadata.get("tags"))
@@ -105,17 +107,23 @@ def suggest_tags(
         source_tags = _source_candidates(source, value)
         draft_tokens.update(_tokens(value))
         for tag in source_tags:
-            _add_candidate(candidates, tag, source)
+            _add_candidate(candidates, tag, source, tag_policy=tag_policy)
 
     if graph_state is not None:
         for tag in _graph_facet_tags(graph_state):
             if tag in draft_tokens:
-                _add_candidate(candidates, tag, "graph_facets")
+                _add_candidate(candidates, tag, "graph_facets", tag_policy=tag_policy)
 
     for tag, count in existing_tags.items():
         if tag in draft_tokens or _token_overlap(tag, draft_tokens) >= 0.67:
             candidate = _add_candidate(candidates, tag, "existing_tags")
             candidate.existing_count = count
+
+    if tag_policy is not None:
+        for raw_tag in draft_tags:
+            resolution = resolve_tag(raw_tag, tag_policy)
+            if resolution.state == "synonym" and resolution.canonical_tag not in draft_tags:
+                _add_candidate(candidates, resolution.canonical_tag, "tag_policy")
 
     suggestions: list[TagSuggestion] = []
     for candidate in candidates.values():
@@ -140,8 +148,16 @@ def suggest_tags(
     return suggestions[: max(0, int(limit))], sorted(existing_tags)
 
 
-def _add_candidate(candidates: dict[str, _Candidate], raw_tag: str, source: str) -> _Candidate:
-    tag = normalize_tag(raw_tag)
+def _add_candidate(
+    candidates: dict[str, _Candidate],
+    raw_tag: str,
+    source: str,
+    *,
+    tag_policy: TagPolicy | None = None,
+) -> _Candidate:
+    tag = _canonical_candidate_tag(raw_tag, tag_policy)
+    if not tag:
+        return _Candidate(tag="")
     candidate = candidates.setdefault(tag, _Candidate(tag=tag))
     candidate.sources.add(source)
     return candidate
@@ -171,16 +187,32 @@ def _token_list(value: str) -> list[str]:
     return [part for part in normalized.split("-") if part]
 
 
-def _collect_existing_tags(records: Sequence[ManualLibraryRecord], graph_state: GraphState | None) -> Counter[str]:
+def _collect_existing_tags(
+    records: Sequence[ManualLibraryRecord],
+    graph_state: GraphState | None,
+    *,
+    tag_policy: TagPolicy | None = None,
+) -> Counter[str]:
     tags: Counter[str] = Counter()
     for record in records:
         for tag in record.metadata.tags:
-            if normalized := normalize_tag(tag):
+            if normalized := _canonical_candidate_tag(tag, tag_policy):
                 tags[normalized] += 1
     if graph_state is not None:
         for tag in _graph_facet_tags(graph_state):
-            tags[tag] += 1
+            if normalized := _canonical_candidate_tag(tag, tag_policy):
+                tags[normalized] += 1
     return tags
+
+
+def _canonical_candidate_tag(raw_tag: str, tag_policy: TagPolicy | None) -> str:
+    tag = normalize_tag(raw_tag)
+    if not tag or tag_policy is None:
+        return tag
+    resolution = resolve_tag(tag, tag_policy)
+    if resolution.state == "deprecated":
+        return ""
+    return resolution.canonical_tag or tag
 
 
 def _graph_facet_tags(graph_state: GraphState) -> set[str]:
@@ -246,6 +278,8 @@ def _reason(sources: Iterable[str], existing_count: int) -> str:
         parts.append("matches the text sample")
     if "graph_facets" in source_set:
         parts.append("matches loaded KB facets")
+    if "tag_policy" in source_set:
+        parts.append("matches the tag governance policy")
     if not parts:
         parts.append("Matches the draft manual")
     reason = " and ".join(parts)

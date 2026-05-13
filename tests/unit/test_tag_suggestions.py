@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.manual_library import list_records, upsert_manual
+from tagmemorag.tag_governance import save_tag_policy
 from tagmemorag.tag_suggestions import suggest_tags
 
 
@@ -103,3 +104,46 @@ def test_existing_kb_tag_preferred_when_it_overlaps_draft_text(tmp_path):
 
     assert suggestions[0].tag == "steam-wand"
     assert suggestions[0].score > 0.6
+
+
+def test_suggest_tags_prefers_policy_canonical_and_hides_deprecated(tmp_path):
+    cfg = _settings(tmp_path)
+    policy = save_tag_policy(
+        "default",
+        cfg,
+        {
+            "canonical_tags": [{"tag": "maintenance"}],
+            "synonyms": {"cleaning": "maintenance"},
+            "deprecated_tags": {"maintainance": {"replacement": "maintenance"}},
+        },
+    )
+    upsert_manual(
+        "default",
+        {
+            "manual_id": "cm0",
+            "title": "Cleaning",
+            "source_file": "coffee/cm0.md",
+            "product_category": "coffee",
+            "tags": ["cleaning", "maintainance"],
+        },
+        b"# Clean\n",
+        cfg,
+    )
+
+    suggestions, existing_tags = suggest_tags(
+        {
+            "manual_id": "cm1",
+            "title": "Coffee cleaning",
+            "source_file": "coffee/cm1.md",
+            "product_category": "coffee",
+            "tags": ["cleaning"],
+        },
+        records=list_records("default", cfg),
+        tag_policy=policy,
+        limit=5,
+    )
+
+    tags = [item.tag for item in suggestions]
+    assert "maintenance" in tags
+    assert "maintainance" not in tags
+    assert existing_tags == ["maintenance"]

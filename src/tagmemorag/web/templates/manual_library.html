@@ -30,6 +30,7 @@
         </label>
         <div class="top-actions">
           <button id="open-bulk-import" type="button">Bulk Import</button>
+          <button id="open-tag-governance" type="button">Tags</button>
           <button id="open-upload" type="button">Upload</button>
           <button id="rebuild-library" type="button" class="primary">Rebuild</button>
         </div>
@@ -285,6 +286,113 @@
           <button type="button" id="bulk-preview">Preview</button>
           <button type="button" id="bulk-import-selected" class="primary">Import selected valid rows</button>
         </div>
+      </form>
+    </dialog>
+
+    <dialog id="tag-dialog" class="tag-dialog">
+      <form id="tag-form" class="upload-form">
+        <div class="dialog-header">
+          <h2>Tag Governance</h2>
+          <button type="button" id="close-tag-governance" aria-label="Close">x</button>
+        </div>
+        <div class="tag-summary" id="tag-summary">No tag report loaded.</div>
+        <div class="tag-grid">
+          <section>
+            <div class="pane-header compact">
+              <div>
+                <h3>Facets</h3>
+                <p>Library tags and searchable graph counts</p>
+              </div>
+            </div>
+            <div class="table-wrap tag-table-wrap">
+              <table class="tag-table">
+                <thead>
+                  <tr>
+                    <th>Tag</th>
+                    <th>Canonical</th>
+                    <th>State</th>
+                    <th>Manuals</th>
+                    <th>Active</th>
+                    <th>Graph</th>
+                  </tr>
+                </thead>
+                <tbody id="tag-stat-rows"></tbody>
+              </table>
+            </div>
+          </section>
+          <section>
+            <div class="pane-header compact">
+              <div>
+                <h3>Drift</h3>
+                <p>Warnings before rebuild or taxonomy churn spreads</p>
+              </div>
+            </div>
+            <div class="table-wrap tag-table-wrap">
+              <table class="tag-table">
+                <thead>
+                  <tr>
+                    <th>Severity</th>
+                    <th>Code</th>
+                    <th>Tag</th>
+                    <th>Canonical</th>
+                    <th>Count</th>
+                    <th>Message</th>
+                  </tr>
+                </thead>
+                <tbody id="tag-issue-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="tag-grid">
+          <section>
+            <label><span>Policy JSON</span><textarea id="tag-policy-json" rows="15" spellcheck="false"></textarea></label>
+            <div class="button-row">
+              <button type="button" id="refresh-tag-report">Refresh</button>
+              <button type="button" id="save-tag-policy" class="primary">Save policy</button>
+            </div>
+          </section>
+          <section>
+            <div class="field-grid">
+              <label><span>Source tags</span><input id="rewrite-source-tags" placeholder="cleaning, maintainance"></label>
+              <label><span>Target tag</span><input id="rewrite-target-tag" placeholder="maintenance"></label>
+              <label><span>Mode</span>
+                <select id="rewrite-mode">
+                  <option value="merge">merge</option>
+                  <option value="rename">rename</option>
+                </select>
+              </label>
+              <label><span>Policy alias</span>
+                <select id="rewrite-alias-mode">
+                  <option value="">default</option>
+                  <option value="synonym">synonym</option>
+                  <option value="deprecated">deprecated</option>
+                </select>
+              </label>
+            </div>
+            <div class="toggles">
+              <label><input id="rewrite-update-policy" type="checkbox"> Update policy aliases</label>
+            </div>
+            <div id="rewrite-messages" class="messages"></div>
+            <div class="table-wrap tag-table-wrap">
+              <table class="tag-table">
+                <thead>
+                  <tr>
+                    <th>Manual ID</th>
+                    <th>Before</th>
+                    <th>After</th>
+                  </tr>
+                </thead>
+                <tbody id="rewrite-preview-rows"></tbody>
+              </table>
+            </div>
+            <div class="button-row">
+              <button type="button" id="preview-tag-rewrite">Preview rewrite</button>
+              <button type="button" id="commit-tag-rewrite" class="primary">Commit rewrite</button>
+            </div>
+          </section>
+        </div>
+        <div id="tag-messages" class="messages"></div>
       </form>
     </dialog>
 

@@ -58,11 +58,49 @@ The API-managed workflow stores manuals under `product_manuals/{kb_name}/` by de
 product_manuals/default/coffee/cm1.md
 product_manuals/default/coffee/cm1.metadata.json
 product_manuals/default/.tagmemorag-library.json
+product_manuals/default/.tagmemorag-tags.json
 ```
 
 Use `POST /manuals/validate` to check metadata before writing, `POST /manuals` to upload a document plus sidecar metadata, and `GET /manual-library?kb_name=default` to list managed manuals. Uploads and metadata edits set a pending-change marker; they are not searchable until `POST /manual-library/rebuild` completes successfully.
 
 Disable a manual by setting `status` to `disabled` through the API or sidecar. Disabled and archived manuals stay on disk for audit/recovery, remain visible in `GET /manual-library`, and are skipped by future builds. Hard delete removes both the source file and sidecar and is constrained to the configured library root.
+
+## Tag Governance
+
+Each managed KB can define canonical tags, synonyms, and deprecated tags in `.tagmemorag-tags.json`:
+
+```json
+{
+  "schema_version": "1",
+  "kb_name": "default",
+  "policy_mode": "advisory",
+  "canonical_tags": [
+    {"tag": "maintenance", "label": "Maintenance", "description": "Cleaning and routine care"}
+  ],
+  "synonyms": {
+    "cleaning": "maintenance",
+    "clean": "maintenance"
+  },
+  "deprecated_tags": {
+    "maintainance": {"replacement": "maintenance", "reason": "Misspelling"}
+  }
+}
+```
+
+Use `advisory` mode for warnings or `strict` mode to reject unknown/deprecated tags during validation and bulk preview. Synonyms still validate as warnings with their canonical replacement.
+
+Tag workflow:
+
+```bash
+python -m tagmemorag tag stats --kb default
+python -m tagmemorag tag rewrite-preview --kb default --source-tag cleaning --target-tag maintenance
+python -m tagmemorag tag rewrite --kb default --source-tag cleaning --target-tag maintenance --update-policy
+python -m tagmemorag tag policy --kb default --file tag-policy.json
+```
+
+Rewrite preview shows affected manuals and before/after tag sets without writing. Rewrite commit updates sidecars atomically, dedupes tags, can add source tags as policy aliases, and marks the KB pending rebuild. Rebuild after commit so the searchable graph matches the managed library.
+
+Drift issues from `GET /manual-library/tags` mean sidecars use synonyms/deprecated/unknown tags, tags look like likely duplicates, or loaded graph tags differ from current sidecars.
 
 ## Bulk Import Metadata
 

@@ -20,6 +20,7 @@ from .manual_library import (
 )
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, normalize_tag
 from .parser import SUPPORTED_DOCUMENT_SUFFIXES
+from .tag_governance import TagPolicy, load_tag_policy
 
 BulkImportMode = Literal["create_only", "upsert", "dry_run"]
 BulkPreviewAction = Literal["create", "update", "skip", "conflict", "invalid"]
@@ -172,8 +173,10 @@ def preview_bulk_import(
     *,
     mode: BulkImportMode = "create_only",
     overwrite: bool = False,
+    tag_policy: TagPolicy | None = None,
 ) -> BulkImportPreview:
     _validate_mode(mode)
+    policy = tag_policy if tag_policy is not None else load_tag_policy(kb_name, cfg)
     candidates = tuple(_match_files(parse_metadata(metadata_text, metadata_format), uploaded_files))
     issues: list[BulkPreviewIssue] = []
 
@@ -190,6 +193,7 @@ def preview_bulk_import(
             metadata_to_dict(candidate.metadata) or {},
             cfg,
             mode="upsert" if mode in {"upsert", "dry_run"} else "create",
+            tag_policy=policy,
         )
         for message in validation.messages:
             issues.append(_issue_from_message(candidate, message))
@@ -231,6 +235,7 @@ def commit_bulk_import(
     overwrite: bool = False,
     selected_rows: set[int] | None = None,
 ) -> BulkImportResult:
+    policy = load_tag_policy(kb_name, cfg)
     preview = preview_bulk_import(
         kb_name,
         metadata_text,
@@ -239,6 +244,7 @@ def commit_bulk_import(
         cfg,
         mode=mode,
         overwrite=overwrite,
+        tag_policy=policy,
     )
     if mode == "dry_run":
         return BulkImportResult(

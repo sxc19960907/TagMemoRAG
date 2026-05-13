@@ -185,6 +185,7 @@ def validate_metadata(
     *,
     mode: Literal["create", "update", "upsert"] = "create",
     current_manual_id: str | None = None,
+    tag_policy: Any | None = None,
 ) -> MetadataValidationResult:
     messages: list[ValidationMessage] = []
     try:
@@ -229,7 +230,12 @@ def validate_metadata(
                 {"manual_id": normalized.manual_id, "source_file": duplicate.source_file},
             )
         )
-    return MetadataValidationResult(valid=not messages, normalized=normalized, messages=tuple(messages))
+    if tag_policy is not None:
+        from .tag_governance import governance_validation_messages
+
+        messages.extend(governance_validation_messages(normalized.tags, tag_policy))
+    blocking_messages = [message for message in messages if message.detail.get("severity") != "warning"]
+    return MetadataValidationResult(valid=not blocking_messages, normalized=normalized, messages=tuple(messages))
 
 
 def upsert_manual(

@@ -187,8 +187,57 @@ Other library operations:
 | `DELETE /manuals/{manual_id}?kb_name=...&hard=true` | Hard delete source + sidecar; requires `admin` |
 | `POST /manual-library/bulk/preview` | Validate JSON/JSONL/CSV metadata and uploaded documents without writing |
 | `POST /manual-library/bulk/import` | Re-run preview and import selected valid rows |
+| `GET /manual-library/tags` | Return governed tag facets, counts, and drift issues |
+| `PUT /manual-library/tags/policy` | Save `.tagmemorag-tags.json`; requires `rebuild` |
+| `POST /manual-library/tags/rewrite/preview` | Preview tag merge/rename without writing |
+| `POST /manual-library/tags/rewrite` | Commit tag merge/rename and mark rebuild pending |
 
 Create/update/disable/rebuild require the `rebuild` scope plus KB allowlist access. Hard delete also requires `admin`. `status=disabled` or `status=archived` sidecars are skipped by future builds while remaining visible in the managed library list.
+
+Tag governance is optional and file-backed per KB at `manual_library.root_dir/{kb_name}/.tagmemorag-tags.json`:
+
+```json
+{
+  "schema_version": "1",
+  "kb_name": "default",
+  "policy_mode": "advisory",
+  "canonical_tags": [
+    {"tag": "maintenance", "label": "Maintenance", "description": "Cleaning and routine care"}
+  ],
+  "synonyms": {
+    "cleaning": "maintenance",
+    "clean": "maintenance"
+  },
+  "deprecated_tags": {
+    "maintainance": {"replacement": "maintenance", "reason": "Misspelling"}
+  }
+}
+```
+
+When policy exists, validation and bulk preview warn on synonyms, deprecated tags, and unknown tags; `policy_mode=strict` turns unknown/deprecated tags into errors. Suggestions prefer canonical tags, and search filters accept synonyms by resolving them at the API/CLI boundary. Existing sidecars are never rewritten by validation or search. Use rewrite preview first, then commit:
+
+```bash
+curl -X POST http://127.0.0.1:8000/manual-library/tags/rewrite/preview \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","source_tags":["cleaning"],"target_tag":"maintenance","mode":"merge"}'
+
+curl -X POST http://127.0.0.1:8000/manual-library/tags/rewrite \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","source_tags":["cleaning"],"target_tag":"maintenance","mode":"merge","update_policy":true}'
+```
+
+CLI helpers use the same service layer:
+
+```bash
+python -m tagmemorag tag stats --kb default
+python -m tagmemorag tag policy --kb default --file tag-policy.json
+python -m tagmemorag tag rewrite-preview --kb default --source-tag cleaning --target-tag maintenance
+python -m tagmemorag tag rewrite --kb default --source-tag cleaning --target-tag maintenance --update-policy
+```
+
+Tag drift means the library and policy disagree, or the currently loaded graph no longer matches sidecars. After a successful rewrite, rebuild the managed library before relying on tag filters in search.
 
 Bulk import accepts metadata as JSON array, JSONL, or CSV. Recommended CSV columns:
 
@@ -245,7 +294,7 @@ Start the same FastAPI service, then open:
 http://127.0.0.1:8000/admin/manual-library
 ```
 
-Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, previews/imports bulk CSV/JSON/JSONL batches, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
+Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, previews/imports bulk CSV/JSON/JSONL batches, edits sidecars, replaces source files, disables or hard deletes manuals, opens tag governance facets/drift/policy/rewrite controls, and triggers/polls managed library rebuilds.
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 

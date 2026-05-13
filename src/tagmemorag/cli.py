@@ -16,6 +16,14 @@ from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .state import build_kb, load_kb, save_kb
+from .tag_governance import (
+    commit_tag_rewrite,
+    load_tag_policy,
+    resolve_tags_for_search,
+    save_tag_policy,
+    tag_usage_report,
+    preview_tag_rewrite,
+)
 from .wave_searcher import filter_node_ids, wave_search
 
 
@@ -93,6 +101,20 @@ def main(argv: list[str] | None = None) -> int:
     bulk_import = manual_bulk_sub.add_parser("import")
     _add_bulk_args(bulk_import, include_import_args=True)
 
+    tag = sub.add_parser("tag")
+    tag_sub = tag.add_subparsers(dest="tag_command", required=True)
+    tag_stats = tag_sub.add_parser("stats")
+    tag_stats.add_argument("--kb", default="default")
+    tag_stats.add_argument("--config", default="config.yaml")
+    tag_policy = tag_sub.add_parser("policy")
+    tag_policy.add_argument("--kb", default="default")
+    tag_policy.add_argument("--config", default="config.yaml")
+    tag_policy.add_argument("--file", default=None, help="Write policy from JSON file; omit to print current policy.")
+    tag_preview = tag_sub.add_parser("rewrite-preview")
+    _add_tag_rewrite_args(tag_preview, include_commit_args=False)
+    tag_commit = tag_sub.add_parser("rewrite")
+    _add_tag_rewrite_args(tag_commit, include_commit_args=True)
+
     args = parser.parse_args(argv)
     if args.command == "build":
         cfg = load_config(args.config)
@@ -113,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             "product_category": args.category,
             "product_model": args.model,
             "language": args.language,
-            "tags": args.tag,
+            "tags": resolve_tags_for_search(args.tag, load_tag_policy(args.kb, cfg)),
         }
         results = wave_search(
             query_vec,
@@ -231,6 +253,45 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "tag" and args.tag_command == "stats":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        try:
+            graph_state = load_kb(args.kb, cfg)
+        except Exception:
+            graph_state = None
+        print(json.dumps(tag_usage_report(args.kb, cfg, graph_state=graph_state), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "tag" and args.tag_command == "policy":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        if args.file:
+            policy_data = json.loads(_read_text_file(args.file))
+            policy = save_tag_policy(args.kb, cfg, policy_data)
+        else:
+            policy = load_tag_policy(args.kb, cfg)
+        print(json.dumps(policy.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "tag" and args.tag_command == "rewrite-preview":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        preview = preview_tag_rewrite(args.kb, cfg, source_tags=args.source_tag, target_tag=args.target_tag, mode=args.mode)
+        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "tag" and args.tag_command == "rewrite":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        result = commit_tag_rewrite(
+            args.kb,
+            cfg,
+            source_tags=args.source_tag,
+            target_tag=args.target_tag,
+            mode=args.mode,
+            update_policy=args.update_policy,
+            policy_alias_mode=args.policy_alias_mode,
+        )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 0
     return 1
 
 
@@ -244,6 +305,17 @@ def _add_bulk_args(parser: argparse.ArgumentParser, *, include_import_args: bool
     parser.add_argument("--overwrite", action="store_true")
     if include_import_args:
         parser.add_argument("--selected-row", action="append", type=int, default=[])
+
+
+def _add_tag_rewrite_args(parser: argparse.ArgumentParser, *, include_commit_args: bool) -> None:
+    parser.add_argument("--kb", default="default")
+    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--source-tag", action="append", required=True)
+    parser.add_argument("--target-tag", required=True)
+    parser.add_argument("--mode", choices=["merge", "rename"], default="merge")
+    if include_commit_args:
+        parser.add_argument("--update-policy", action="store_true")
+        parser.add_argument("--policy-alias-mode", choices=["synonym", "deprecated"], default=None)
 
 
 def _read_text_file(path: str) -> str:

@@ -46,6 +46,14 @@ from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
+from .tag_governance import (
+    commit_tag_rewrite,
+    load_tag_policy,
+    resolve_tags_for_search,
+    save_tag_policy,
+    tag_usage_report,
+    preview_tag_rewrite,
+)
 from .types import GraphState
 from .wave_searcher import filter_node_ids, normalize_filters, wave_search
 
@@ -194,6 +202,20 @@ class ManualLibraryRebuildRequest(BaseModel):
     kb_name: str = "default"
 
 
+class TagPolicyUpdateRequest(BaseModel):
+    kb_name: str = "default"
+    policy: dict[str, object]
+
+
+class TagRewriteRequest(BaseModel):
+    kb_name: str = "default"
+    source_tags: list[str]
+    target_tag: str
+    mode: str = "merge"
+    update_policy: bool = False
+    policy_alias_mode: str | None = None
+
+
 class AnchorRequest(BaseModel):
     node_id: int
     label: str
@@ -290,7 +312,7 @@ def _search_param_values(request: SearchRequest) -> dict[str, object]:
 
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
-    filter_dict = request.filters.to_filter_dict() if request.filters else {}
+    filter_dict = _governed_filter_dict(request.kb_name, request.filters)
     canonical_filters = normalize_filters(filter_dict)
     parts = [
         request.kb_name,
@@ -521,7 +543,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict = request.filters.to_filter_dict() if request.filters else {}
+        filter_dict = _governed_filter_dict(request.kb_name, request.filters)
         eligible_node_ids = filter_node_ids(state.graph, filter_dict)
         results = wave_search(
             query_vec,
@@ -725,6 +747,7 @@ def validate_manual_metadata(
         settings,
         mode=request.mode,  # type: ignore[arg-type]
         current_manual_id=request.current_manual_id,
+        tag_policy=load_tag_policy(request.kb_name, settings),
     )
     return result.to_dict()
 
@@ -738,12 +761,14 @@ def suggest_manual_tags(
     ensure_kb_access(api_key, request.kb_name)
     graph_state = app_state.kbs.get(request.kb_name)
     records = list_records(request.kb_name, settings, graph_state=graph_state)
+    policy = load_tag_policy(request.kb_name, settings)
     suggestions, existing_tags = suggest_tags(
         dict(request.metadata),
         records=records,
         graph_state=graph_state,
         text_sample=request.text_sample,
         limit=request.limit,
+        tag_policy=policy,
     )
     return {
         "kb_name": request.kb_name,
@@ -923,6 +948,81 @@ def list_manual_library(
     }
 
 
+@app.get("/manual-library/tags")
+def get_manual_library_tags(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    graph_state = app_state.kbs.get(kb_name)
+    return tag_usage_report(kb_name, settings, graph_state=graph_state)
+
+
+@app.put("/manual-library/tags/policy")
+def put_manual_library_tag_policy(
+    request: TagPolicyUpdateRequest,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    policy = save_tag_policy(request.kb_name, settings, request.policy)
+    structlog.get_logger().info(
+        "tag_governance_policy_update",
+        kb_name=request.kb_name,
+        canonical_count=len(policy.canonical_tags),
+        synonym_count=len(policy.synonyms),
+        deprecated_count=len(policy.deprecated_tags),
+    )
+    return {"kb_name": request.kb_name, "policy": policy.to_dict()}
+
+
+@app.post("/manual-library/tags/rewrite/preview")
+def preview_manual_library_tag_rewrite(
+    request: TagRewriteRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    mode = _parse_rewrite_mode(request.mode)
+    preview = preview_tag_rewrite(
+        request.kb_name,
+        settings,
+        source_tags=request.source_tags,
+        target_tag=request.target_tag,
+        mode=mode,
+    )
+    return preview.to_dict()
+
+
+@app.post("/manual-library/tags/rewrite")
+def commit_manual_library_tag_rewrite(
+    request: TagRewriteRequest,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    mode = _parse_rewrite_mode(request.mode)
+    alias_mode = _parse_alias_mode(request.policy_alias_mode)
+    result = commit_tag_rewrite(
+        request.kb_name,
+        settings,
+        source_tags=request.source_tags,
+        target_tag=request.target_tag,
+        mode=mode,
+        update_policy=request.update_policy,
+        policy_alias_mode=alias_mode,
+    )
+    structlog.get_logger().info(
+        "tag_governance_rewrite",
+        kb_name=request.kb_name,
+        operation=mode,
+        updated_count=result.updated_count,
+        failed_count=len(result.failures),
+    )
+    return result.to_dict()
+
+
 @app.post("/manual-library/rebuild", status_code=202)
 def rebuild_manual_library(
     request: ManualLibraryRebuildRequest,
@@ -975,6 +1075,31 @@ def _parse_metadata_form(metadata: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be a JSON object.")
     return parsed
+
+
+def _parse_rewrite_mode(value: str):
+    mode = value.strip().lower()
+    if mode not in {"merge", "rename"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be merge or rename.", {"mode": value})
+    return mode
+
+
+def _parse_alias_mode(value: str | None):
+    if value is None or not str(value).strip():
+        return None
+    mode = str(value).strip().lower()
+    if mode not in {"synonym", "deprecated"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "policy_alias_mode must be synonym or deprecated.", {"policy_alias_mode": value})
+    return mode
+
+
+def _governed_filter_dict(kb_name: str, filters: SearchFilters | None) -> dict[str, object]:
+    filter_dict = filters.to_filter_dict() if filters else {}
+    tags = filter_dict.get("tags")
+    if isinstance(tags, list) and tags:
+        policy = load_tag_policy(kb_name, settings)
+        filter_dict["tags"] = resolve_tags_for_search([str(tag) for tag in tags], policy)
+    return filter_dict
 
 
 async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:
