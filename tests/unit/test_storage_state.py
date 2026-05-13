@@ -25,6 +25,7 @@ class FakeQdrantClient:
     upsert_calls: list[tuple[str, list[int]]] = []
     set_payload_calls: list[tuple[str, list[int], dict]] = []
     delete_calls: list[tuple[str, list[int]]] = []
+    search_calls: list[tuple[str, int, list[int]]] = []
     fail_next_upsert: bool = False
     fail_next_search: bool = False
 
@@ -37,6 +38,7 @@ class FakeQdrantClient:
         cls.upsert_calls = []
         cls.set_payload_calls = []
         cls.delete_calls = []
+        cls.search_calls = []
         cls.fail_next_upsert = False
         cls.fail_next_search = False
 
@@ -89,7 +91,9 @@ class FakeQdrantClient:
             vector = np.asarray(record.vector, dtype=np.float32)
             scored.append(SimpleNamespace(id=int(node_id), score=float(vector @ query)))
         scored.sort(key=lambda item: (-item.score, item.id))
-        return scored[:limit]
+        selected = scored[:limit]
+        self.search_calls.append((collection_name, int(limit), [int(item.id) for item in selected]))
+        return selected
 
     def retrieve(self, collection_name, ids, with_vectors=True, with_payload=False):
         collection = self.collections.get(collection_name, {})

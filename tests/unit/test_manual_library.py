@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 import time
 
+import numpy as np
 import pytest
 
-from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ManualLibraryConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
     delete_manual,
@@ -20,8 +21,34 @@ from tagmemorag.manual_library import (
     upsert_manual,
     validate_metadata,
 )
+from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import AppState, build_kb, start_library_rebuild
 from tests.unit.test_storage_state import FakeQdrantClient
+
+
+class KeywordEmbedder:
+    model_name = "keyword-embedder"
+    dim = 4
+
+    def encode_batch(self, texts):
+        return np.asarray([self._encode_one(text) for text in texts], dtype=np.float32)
+
+    def encode_query(self, text):
+        return self._encode_one(text)
+
+    def _encode_one(self, text):
+        lowered = text.lower()
+        vec = np.zeros(self.dim, dtype=np.float32)
+        if "alpha" in lowered:
+            vec[0] = 1.0
+        if "bravo" in lowered:
+            vec[1] = 1.0
+        if "charlie" in lowered:
+            vec[2] = 1.0
+        if "delta" in lowered:
+            vec[3] = 1.0
+        norm = np.linalg.norm(vec)
+        return vec / norm if norm else vec
 
 
 @pytest.fixture
@@ -290,6 +317,87 @@ def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake
     assert FakeQdrantClient.set_payload_calls[-1][0:2] == ("test_default", [1])
     assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
     assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == app.get_current("default").build_id
+
+
+def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_path):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        search=SearchConfig(ann_preselect_enabled=True, ann_candidate_k=2, source_k=2, steps=0),
+        model={"dim": KeywordEmbedder.dim},
+    )
+    embedder = KeywordEmbedder()
+    upsert_manual(
+        "default",
+        _metadata("coffee/a.md", "a"),
+        b"# Reused\nalpha stable reusable chunk.\n# Changed\ncharlie original chunk.\n",
+        cfg,
+    )
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# Removed\ndelta stale chunk.\n", cfg)
+    old_state = build_kb(library_root("default", cfg), "default", cfg, embedder=embedder)
+    _persist_qdrant_baseline(old_state, cfg)
+    old_reused_vector = list(FakeQdrantClient.collections["test_default"][0].vector)
+    app = AppState(old_state)
+    FakeQdrantClient.upsert_calls.clear()
+    FakeQdrantClient.set_payload_calls.clear()
+    FakeQdrantClient.delete_calls.clear()
+
+    (library_root("default", cfg) / "coffee" / "a.md").write_text(
+        "# Reused\nalpha stable reusable chunk.\n# Changed\nbravo changed chunk.\n",
+        encoding="utf-8",
+    )
+    mark_pending("default", cfg, dirty={"manual_id": "a", "source_file": "coffee/a.md", "operation": "file_replace"})
+    delete_manual("default", "b", cfg)
+    task = start_library_rebuild(app, "default", cfg, embedder=embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "incremental"
+    assert task.qdrant_sync == {
+        "provider": "qdrant",
+        "strategy": "point_incremental",
+        "points_upserted": 1,
+        "points_deleted": 1,
+        "points_reused": 1,
+        "fallback_reason": "",
+    }
+    current_state = app.get_current("default")
+    collection = FakeQdrantClient.collections["test_default"]
+    assert sorted(collection) == [0, 1]
+    assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [1])
+    assert FakeQdrantClient.set_payload_calls[-1][0:2] == ("test_default", [0])
+    assert FakeQdrantClient.delete_calls[-1] == ("test_default", [2])
+    assert collection[0].vector == old_reused_vector
+    assert collection[0].payload["build_id"] == current_state.build_id
+    assert collection[1].payload["build_id"] == current_state.build_id
+
+    collection[0].vector = [0.0, 1.0, 0.0, 0.0]
+    collection[1].vector = [1.0, 0.0, 0.0, 0.0]
+    execution = execute_search(
+        state=current_state,
+        query_vec=embedder.encode_query("alpha"),
+        settings=cfg,
+        top_k=2,
+        source_k=2,
+        steps=0,
+        decay=cfg.search.decay,
+        amplitude_cutoff=cfg.search.amplitude_cutoff,
+        aggregate=cfg.search.aggregate,
+    )
+
+    current_node_ids = set(current_state.graph.nodes)
+    assert execution.strategy == "ann_preselect_then_wave"
+    assert execution.ann_candidate_count == 2
+    assert set(FakeQdrantClient.search_calls[-1][2]) <= current_node_ids
+    assert 2 not in FakeQdrantClient.search_calls[-1][2]
+    assert [result.node_id for result in execution.results] == [0, 1]
+    assert execution.results[0].text.startswith("Reused")
 
 
 def test_qdrant_incremental_sync_falls_back_without_identity(qdrant_library_config, fake_embedder):

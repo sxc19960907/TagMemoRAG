@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify storage and Qdrant sync contracts remain documented and satisfied."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review test coverage and dependency boundaries."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check observability fields remain safe and low-cardinality."}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m15-qdrant-point-level-incremental-updates/next-steps.md", "reason": "Confirm M17 closes the planned M15/M16 integration follow-up."}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m16-qdrant-ann-preselection/prd.md", "reason": "Confirm ANN final-ranking and fallback contracts are preserved."}
+{"file": ".trellis/tasks/05-13-m17-qdrant-incremental-ann-integration-regression/prd.md", "reason": "Review against M17 acceptance criteria."}
+{"file": ".trellis/tasks/05-13-m17-qdrant-incremental-ann-integration-regression/design.md", "reason": "Review implementation against intended integration test design."}
