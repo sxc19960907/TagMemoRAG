@@ -9,6 +9,17 @@ from tagmemorag.errors import ErrorCode, InvalidConfigError, ServiceError
 from tagmemorag.storage.base import VectorStore
 
 
+SAFE_QDRANT_PAYLOAD_KEYS = {
+    "kb_name",
+    "node_id",
+    "build_id",
+    "chunk_identity_key",
+    "manual_id",
+    "source_file",
+    "text_hash",
+}
+
+
 class QdrantVectorStore(VectorStore):
     def __init__(
         self,
@@ -290,18 +301,9 @@ def _record_vector(record: Any) -> list[float]:
 
 
 def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    allowed = {
-        "kb_name",
-        "node_id",
-        "build_id",
-        "chunk_identity_key",
-        "manual_id",
-        "source_file",
-        "text_hash",
-    }
     safe: dict[str, Any] = {}
     for key, value in payload.items():
-        if key not in allowed or value is None:
+        if key not in SAFE_QDRANT_PAYLOAD_KEYS or value is None:
             continue
         if key == "node_id":
             safe[key] = int(value)

@@ -194,6 +194,44 @@ search:
         qdrant_vector.QdrantVectorStore._create_client = original
 
 
+def test_cli_qdrant_inspect_outputs_safe_report(tmp_path, capsys, monkeypatch, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+vector_store:
+  provider: qdrant
+  collection_prefix: cli
+""",
+        encoding="utf-8",
+    )
+
+    from tests.unit.test_storage_state import FakeQdrantClient
+    from tagmemorag.storage import qdrant_vector
+
+    FakeQdrantClient.reset()
+    monkeypatch.setattr(qdrant_vector.QdrantVectorStore, "_create_client", staticmethod(lambda *args, **kwargs: FakeQdrantClient()))
+    assert cli.main(["build", "--docs", str(docs), "--config", str(config)]) == 0
+    capsys.readouterr()
+
+    assert cli.main(["qdrant", "inspect", "--config", str(config)]) == 0
+    body = json.loads(capsys.readouterr().out)
+
+    assert body["collection_name"] == "cli_default"
+    assert body["collection_exists"] is True
+    assert body["graph_node_count"] == 1
+    assert body["qdrant_point_count"] == 1
+    assert "sample_payload_keys" in body
+
+
 def test_cli_serve_uses_config_host_port(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"
     config.write_text(

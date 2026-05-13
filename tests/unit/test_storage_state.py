@@ -11,6 +11,7 @@ import pytest
 from tagmemorag.config import Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.graph_builder import build_graph
 from tagmemorag.errors import RebuildInProgressError
+from tagmemorag.qdrant_ops import inspect_qdrant
 from tagmemorag.state import AppState, build_kb, load_kb, save_kb
 from tagmemorag.storage.atomic import atomic_write
 from tagmemorag.storage.json_anchor import JsonAnchorStore
@@ -311,6 +312,102 @@ def test_qdrant_vector_store_search_candidates():
     candidates = store.search_candidates(np.array([1.0, 0.0], dtype=np.float32), 2)
 
     assert candidates == [(10, 1.0), (30, pytest.approx(0.8))]
+
+
+def test_qdrant_inspect_reports_collection_counts_and_payload_keys(monkeypatch, tmp_path, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+
+    report = inspect_qdrant("default", cfg, client_factory=FakeQdrantClient)
+
+    assert report["provider"] == "qdrant"
+    assert report["configured"] is True
+    assert report["collection_name"] == "test_default"
+    assert report["collection_exists"] is True
+    assert report["graph_loaded"] is True
+    assert report["graph_node_count"] == 2
+    assert report["qdrant_point_count"] == 2
+    assert report["missing_vector_count"] == 0
+    assert report["sample_payload_keys"] == [
+        "build_id",
+        "chunk_identity_key",
+        "kb_name",
+        "manual_id",
+        "node_id",
+        "source_file",
+        "text_hash",
+    ]
+    assert report["payload_key_coverage"]["node_id"] == 2
+
+
+def test_qdrant_inspect_detects_missing_graph_vectors(monkeypatch, tmp_path, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    FakeQdrantClient.collections["test_default"].pop(1)
+
+    report = inspect_qdrant("default", cfg, client_factory=FakeQdrantClient)
+
+    assert report["graph_node_count"] == 2
+    assert report["qdrant_point_count"] == 1
+    assert report["missing_vector_count"] == 1
+    assert report["missing_vector_sample"] == [1]
+    assert "retry_incremental_rebuild_or_force_full_rebuild" in report["recommendations"]
+
+
+def test_qdrant_inspect_reports_payload_keys_without_values(monkeypatch, tmp_path, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        vector_store=VectorStoreConfig(provider="qdrant", collection_prefix="test"),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    FakeQdrantClient.collections["test_default"][0].payload.update({"unsafe": "secret-value", "text": "raw text"})
+
+    report = inspect_qdrant("default", cfg, client_factory=FakeQdrantClient)
+    serialized = json.dumps(report, ensure_ascii=False)
+
+    assert "unsafe" not in report["sample_payload_keys"]
+    assert "text" not in report["sample_payload_keys"]
+    assert "secret-value" not in serialized
+    assert "raw text" not in serialized
+
+
+def test_qdrant_inspect_non_qdrant_provider_is_clear(tmp_path):
+    cfg = Settings(storage=StorageConfig(data_dir=str(tmp_path / "data")), vector_store=VectorStoreConfig(provider="npz"))
+
+    report = inspect_qdrant("default", cfg, client_factory=FakeQdrantClient)
+
+    assert report["provider"] == "npz"
+    assert report["configured"] is False
+    assert report["collection_name"] == "tagmemorag_default"
+    assert report["collection_exists"] is False
+    assert "set_vector_store_provider_to_qdrant" in report["recommendations"]
 
 
 def test_anchor_reconcile_exact_fallback_and_unresolved(tmp_path, fake_embedder):

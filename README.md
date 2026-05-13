@@ -545,23 +545,93 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 
 ### Qdrant Vector Backend
 
-The default vector backend is local NPZ at `data/{kb_name}/vectors.npz`. To persist vectors in Qdrant while keeping graph, anchors, and build metadata in local JSON files, install the optional extra and point the service at Qdrant:
+The default vector backend is local NPZ at `data/{kb_name}/vectors.npz`. Qdrant is optional: it persists vectors externally while graph topology, anchors, chunk identity, rebuild impact, and build metadata remain local under `data/{kb_name}/`.
+
+Install the optional client extra and start a local Qdrant for development:
 
 ```bash
 uv sync --extra qdrant
 docker run -p 6333:6333 qdrant/qdrant
 ```
 
+The optional `qdrant-client` extra is supported on Python `<3.13` while the project pins `numpy<2`.
+
+Enable Qdrant in `config.yaml`:
+
 ```yaml
 vector_store:
   provider: qdrant
   qdrant_url: http://localhost:6333
   collection_prefix: tagmemorag
+  timeout_seconds: 10
 ```
 
-Each KB uses a collection named `{collection_prefix}_{kb_name}` after safe character normalization. Qdrant is currently used as vector persistence; WAVE-RAG still loads the KB's vectors back into memory for graph propagation during search. New points store safe payload fields only: `kb_name`, `node_id`, `build_id`, `chunk_identity_key`, `manual_id`, `source_file`, and `text_hash`; raw chunk text, vectors beyond the point vector, and secrets are not stored in payloads. Existing collections with only `kb_name`/`node_id` payloads remain loadable because `load_kb()` retrieves by graph node id and still fails clearly if a graph node is missing a vector.
+Environment overrides use the normal nested form:
 
-During successful managed-library rebuilds, Qdrant collections are synced before graph/meta artifacts are swapped. Full sync upserts all current graph points and then deletes stale old node ids. Safe incremental sync uses compatible `chunk_identity.json` data to skip unchanged points, upsert only new/changed node ids, and delete stale ids after required upserts succeed. If identity/impact data is missing or unsafe, the rebuild falls back to `strategy=full_sync` and reports `fallback_reason` in `qdrant_sync`. If Qdrant sync fails, the old loaded graph remains active, dirty library state stays pending, and stale deletes are not attempted before current point upserts succeed. Operators can roll back to local NPZ by setting `vector_store.provider=npz`, or force a full Qdrant cleanup by running a managed-library rebuild with `mode=full`.
+```bash
+export TAGMEMORAG__VECTOR_STORE__PROVIDER=qdrant
+export TAGMEMORAG__VECTOR_STORE__QDRANT_URL=http://localhost:6333
+export TAGMEMORAG__VECTOR_STORE__COLLECTION_PREFIX=tagmemorag
+```
+
+Each KB uses a collection named `{collection_prefix}_{kb_name}` after safe character normalization. Examples:
+
+| Prefix | KB | Collection |
+|--------|----|------------|
+| `tagmemorag` | `default` | `tagmemorag_default` |
+| `tagmemorag` | `product/a` | `tagmemorag_product-a` |
+| `tmr-prod` | `zh_CN manuals` | `tmr-prod_zh_CN-manuals` |
+
+Qdrant points use graph `node_id` as point id. New points store safe payload fields only: `kb_name`, `node_id`, `build_id`, `chunk_identity_key`, `manual_id`, `source_file`, and `text_hash`. Unsafe fields include raw chunk text, source document bodies, embedding arrays outside the point vector, API keys, environment secrets, arbitrary metadata dumps, and high-cardinality diagnostic blobs. Existing collections with only legacy `kb_name`/`node_id` payloads remain loadable because `load_kb()` retrieves by graph node id and still fails clearly if a graph node is missing a vector.
+
+During successful managed-library rebuilds, Qdrant collections are synced before graph/meta artifacts are swapped. The sync order is:
+
+1. upsert new or changed points
+2. refresh safe payloads for reused incremental points
+3. delete stale old point ids
+
+Full sync upserts all current graph points and then deletes stale old node ids. Safe incremental sync uses compatible `chunk_identity.json` data to skip unchanged vectors, refresh reused payloads in batches when the client supports it, upsert only new/changed node ids, and delete stale ids after required upserts succeed. If identity/impact data is missing or unsafe, the rebuild falls back to `strategy=full_sync` and reports `fallback_reason` in `qdrant_sync`. If Qdrant sync fails, the old loaded graph remains active, dirty library state stays pending, and stale deletes are not attempted before current point upserts succeed.
+
+Use the read-only inspection command to check the configured collection, local graph count, Qdrant point count, missing graph vectors, payload key coverage, and the last low-cardinality Qdrant sync summary:
+
+```bash
+python -m tagmemorag qdrant inspect --kb default --config config.yaml
+```
+
+The JSON report is intentionally bounded. It includes counts, collection name, safe payload key names, capped missing node id samples, and recommendations. It does not print raw vectors, raw chunk text, full payload values, secrets, or unbounded point id lists.
+
+Common operator workflow:
+
+```bash
+# 1. Check pending manual-library state and recovery hints.
+python -m tagmemorag manual-library dirty --kb default --config config.yaml --format json
+
+# 2. Inspect graph/vector consistency for the Qdrant collection.
+python -m tagmemorag qdrant inspect --kb default --config config.yaml
+
+# 3. Retry the normal incremental path when dirty state is valid.
+python -m tagmemorag manual-library rebuild --kb default --config config.yaml --mode incremental
+
+# 4. Force a full Qdrant refresh if vectors or payloads have diverged.
+python -m tagmemorag manual-library rebuild --kb default --config config.yaml --mode full
+```
+
+If Qdrant remains unavailable, roll back to local NPZ by setting `vector_store.provider=npz` and rebuilding the KB so `data/{kb_name}/vectors.npz` is regenerated:
+
+```bash
+export TAGMEMORAG__VECTOR_STORE__PROVIDER=npz
+python -m tagmemorag manual-library rebuild --kb default --config config.yaml --mode full
+```
+
+Troubleshooting guide:
+
+| Symptom | Check | Safe action |
+|---------|-------|-------------|
+| `collection_exists=false` | Qdrant URL, collection name, service health | Start Qdrant, verify config, then run full rebuild |
+| `missing_vector_count>0` | `qdrant inspect` missing count/sample | Retry incremental rebuild; force full rebuild if it persists |
+| Legacy payload coverage only has `kb_name`/`node_id` | `sample_payload_keys`, `payload_key_coverage` | No immediate outage; next full or compatible incremental rebuild refreshes safe payloads |
+| Dirty state remains pending after rebuild failure | `manual-library dirty --format json` | Fix Qdrant reachability, retry incremental, or full rebuild |
+| Qdrant outage blocks startup/load | provider config | Temporarily switch to `npz` and rebuild from managed sources |
 
 Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
 
@@ -574,8 +644,6 @@ The ANN path is intentionally conservative:
 - if Qdrant ANN fails, returns invalid ids, or yields no safe filtered candidate set, search falls back to exact local scoring
 
 If you want filtered searches to bypass ANN entirely, set `search.ann_force_exact_on_filters=true`.
-
-The optional `qdrant-client` extra is supported on Python `<3.13` while the project pins `numpy<2`.
 
 ### HTTP Embedding Providers
 
