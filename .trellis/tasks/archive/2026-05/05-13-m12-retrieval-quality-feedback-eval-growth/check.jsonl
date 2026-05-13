@@ -1,0 +1,9 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and quality checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify file-backed persistence safety"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify structured errors"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify safe logs and metrics labels"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests and review checklist"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify cross-layer data flow"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify no duplicated service logic"}
+{"file": ".trellis/tasks/05-13-m12-retrieval-quality-feedback-eval-growth/research/code-context.md", "reason": "Review integration points and existing eval/search behavior"}
