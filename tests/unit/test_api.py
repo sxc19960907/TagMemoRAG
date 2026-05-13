@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from tagmemorag import api
 from tagmemorag.config import VectorStoreConfig
 from tagmemorag.state import AppState, build_kb, save_kb
+from tagmemorag.types import Anchor
 from tests.unit.test_storage_state import FakeQdrantClient
 
 
@@ -241,3 +242,79 @@ def test_api_search_ann_falls_back_on_qdrant_failure(monkeypatch, tmp_path, test
 
     assert response.status_code == 200
     assert response.json()["results"]
+
+
+def test_api_search_ann_keeps_filtered_results_inside_metadata_scope(monkeypatch, tmp_path, test_config, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    docs = tmp_path / "docs"
+    (docs / "fridge").mkdir(parents=True)
+    (docs / "coffee").mkdir()
+    (docs / "fridge" / "manual.md").write_text("# 温度\n冷藏室温度可以调节。\n", encoding="utf-8")
+    (docs / "fridge" / "manual.metadata.json").write_text(
+        '{"manual_id":"fridge-manual","title":"Fridge Manual","source_file":"fridge/manual.md","product_category":"fridge","product_model":"NRK6192","tags":["temperature-setting"]}',
+        encoding="utf-8",
+    )
+    (docs / "coffee" / "manual.md").write_text("# 温度\n咖啡温度和蒸汽设置。\n", encoding="utf-8")
+    (docs / "coffee" / "manual.metadata.json").write_text(
+        '{"manual_id":"coffee-manual","title":"Coffee Manual","source_file":"coffee/manual.md","product_category":"coffee","product_model":"CM1","tags":["maintenance"]}',
+        encoding="utf-8",
+    )
+    cfg = test_config.model_copy(update={"vector_store": VectorStoreConfig(provider="qdrant", collection_prefix="test")})
+    cfg.search.ann_preselect_enabled = True
+    cfg.search.ann_candidate_k = 2
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post(
+        "/search",
+        json={
+            "question": "温度",
+            "top_k": 5,
+            "filters": {"product_category": "fridge", "product_model": "NRK6192", "tags": ["Temperature Setting"]},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"]
+    assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+
+
+def test_api_search_ann_force_includes_eligible_anchor_when_truncated(monkeypatch, tmp_path, test_config, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text(
+        "# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n# 故障\nE05 表示蒸汽异常。\n",
+        encoding="utf-8",
+    )
+    cfg = test_config.model_copy(update={"vector_store": VectorStoreConfig(provider="qdrant", collection_prefix="test")})
+    cfg.search.ann_preselect_enabled = True
+    cfg.search.ann_candidate_k = 1
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    target_node_id = next(node_id for node_id, node in state.graph.nodes(data=True) if "E05" in str(node.get("text", "")))
+    state.anchors[target_node_id] = state.anchors.get(target_node_id) or Anchor(
+        anchor_key=state.graph.nodes[target_node_id]["anchor_key"],
+        label="故障重点",
+        boost=5.0,
+        node_id=target_node_id,
+    )
+    save_kb(state, cfg)
+    collection = FakeQdrantClient.collections["test_default"]
+    collection[target_node_id].vector = [0.0 for _ in collection[target_node_id].vector]
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽", "top_k": 3, "steps": 0, "source_k": 3})
+
+    assert response.status_code == 200
+    result_ids = {result["node_id"] for result in response.json()["results"]}
+    assert target_node_id in result_ids

@@ -1,9 +1,0 @@
-{"file":".trellis/spec/backend/index.md","reason":"Backend review checklist for search/storage contract changes."}
-{"file":".trellis/spec/backend/database-guidelines.md","reason":"Verify vector-store and managed-library compatibility remain intact."}
-{"file":".trellis/spec/backend/error-handling.md","reason":"Review fallback/error handling behavior for ANN query failures."}
-{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Check observability labels and trace attributes stay low-sensitivity."}
-{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Review test coverage and regression surface."}
-{"file":".trellis/tasks/archive/2026-05/05-13-m9-qdrant-vector-backend/design.md","reason":"Confirm M16 does not violate the original Qdrant backend contract."}
-{"file":".trellis/tasks/archive/2026-05/05-13-m15-qdrant-point-level-incremental-updates/design.md","reason":"Confirm ANN query behavior remains compatible with M15 payload/sync semantics."}
-{"file":".trellis/tasks/05-13-m16-qdrant-ann-preselection/prd.md","reason":"Primary requirements and acceptance criteria for M16."}
-{"file":".trellis/tasks/05-13-m16-qdrant-ann-preselection/design.md","reason":"Review technical boundaries, fallback rules, and rollout shape."}

@@ -661,6 +661,8 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             "tagmemorag.cache_status": cache_status,
             "tagmemorag.result_count": len(results),
             "tagmemorag.search.strategy": execution.strategy,
+            "tagmemorag.search.ann_candidate_count": execution.ann_candidate_count,
+            "tagmemorag.search.ann_fallback_reason": execution.ann_fallback_reason,
         }
     )
     payload = {
