@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and relevant guideline routing."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Qdrant payload and managed-library rebuild persistence contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, dependency, and storage safety expectations."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for cross-layer and reuse checks."}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m15-qdrant-point-level-incremental-updates/design.md", "reason": "Original point-incremental Qdrant sync design and safety ordering."}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m15-qdrant-point-level-incremental-updates/next-steps.md", "reason": "Payload refresh follow-up motivation from M15 review."}
+{"file": ".trellis/tasks/archive/2026-05/05-13-m17-qdrant-incremental-ann-integration-regression/prd.md", "reason": "Combined regression contract that M18 must preserve."}
+{"file": ".trellis/tasks/05-13-m18-qdrant-payload-maintenance-batch-refresh/prd.md", "reason": "M18 requirements and acceptance criteria."}
+{"file": ".trellis/tasks/05-13-m18-qdrant-payload-maintenance-batch-refresh/design.md", "reason": "M18 technical design and safety model."}
