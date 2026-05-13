@@ -104,6 +104,47 @@ storage:
     assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
 
 
+def test_cli_search_with_ann_preselection_qdrant(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text(
+        "# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n# 故障\nE05 表示蒸汽异常。\n",
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+vector_store:
+  provider: qdrant
+search:
+  ann_preselect_enabled: true
+  ann_candidate_k: 2
+""",
+        encoding="utf-8",
+    )
+
+    from tests.unit.test_storage_state import FakeQdrantClient
+
+    FakeQdrantClient.reset()
+    from tagmemorag.storage import qdrant_vector
+
+    original = qdrant_vector.QdrantVectorStore._create_client
+    qdrant_vector.QdrantVectorStore._create_client = staticmethod(lambda *args, **kwargs: FakeQdrantClient())
+    try:
+        build = cli.main(["build", "--docs", str(docs), "--config", str(config)])
+        assert build == 0
+        search = cli.main(["search", "蒸汽很小", "--config", str(config), "--top-k", "3"])
+        assert search == 0
+    finally:
+        qdrant_vector.QdrantVectorStore._create_client = original
+
+
 def test_cli_serve_uses_config_host_port(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"
     config.write_text(

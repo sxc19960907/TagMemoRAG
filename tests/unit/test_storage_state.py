@@ -23,8 +23,10 @@ from tagmemorag.types import Anchor, Chunk
 class FakeQdrantClient:
     collections: dict[str, dict[int, SimpleNamespace]] = {}
     upsert_calls: list[tuple[str, list[int]]] = []
+    set_payload_calls: list[tuple[str, list[int], dict]] = []
     delete_calls: list[tuple[str, list[int]]] = []
     fail_next_upsert: bool = False
+    fail_next_search: bool = False
 
     def __init__(self, **_kwargs):
         pass
@@ -33,8 +35,10 @@ class FakeQdrantClient:
     def reset(cls):
         cls.collections = {}
         cls.upsert_calls = []
+        cls.set_payload_calls = []
         cls.delete_calls = []
         cls.fail_next_upsert = False
+        cls.fail_next_search = False
 
     def get_collection(self, collection_name):
         if collection_name not in self.collections:
@@ -64,6 +68,28 @@ class FakeQdrantClient:
         collection = self.collections.setdefault(collection_name, {})
         for node_id in ids:
             collection.pop(node_id, None)
+
+    def set_payload(self, collection_name, payload, points):
+        ids = [int(node_id) for node_id in points]
+        safe_payload = dict(payload)
+        self.set_payload_calls.append((collection_name, ids, safe_payload))
+        collection = self.collections.setdefault(collection_name, {})
+        for node_id in ids:
+            if node_id in collection:
+                collection[node_id].payload.update(safe_payload)
+
+    def search(self, collection_name, query_vector, limit=10, with_payload=False, with_vectors=False):
+        if self.fail_next_search:
+            type(self).fail_next_search = False
+            raise RuntimeError("search failed")
+        collection = self.collections.get(collection_name, {})
+        query = np.asarray(query_vector, dtype=np.float32)
+        scored = []
+        for node_id, record in collection.items():
+            vector = np.asarray(record.vector, dtype=np.float32)
+            scored.append(SimpleNamespace(id=int(node_id), score=float(vector @ query)))
+        scored.sort(key=lambda item: (-item.score, item.id))
+        return scored[:limit]
 
     def retrieve(self, collection_name, ids, with_vectors=True, with_payload=False):
         collection = self.collections.get(collection_name, {})
@@ -184,6 +210,22 @@ def test_qdrant_vector_store_update_payload_and_delete():
     }
     store.delete([1])
     assert 1 not in FakeQdrantClient.collections["tmr_default"]
+
+
+def test_qdrant_vector_store_search_candidates():
+    FakeQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=2,
+        url="http://qdrant:6333",
+        collection_prefix="tmr",
+        client_factory=FakeQdrantClient,
+    )
+    store.add(np.array([10, 20, 30]), np.array([[1.0, 0.0], [0.0, 1.0], [0.8, 0.2]], dtype=np.float32))
+
+    candidates = store.search_candidates(np.array([1.0, 0.0], dtype=np.float32), 2)
+
+    assert candidates == [(10, 1.0), (30, pytest.approx(0.8))]
 
 
 def test_anchor_reconcile_exact_fallback_and_unresolved(tmp_path, fake_embedder):

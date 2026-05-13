@@ -643,6 +643,9 @@ def sync_qdrant_for_rebuild(
         reused_count = len(reusable_node_ids)
 
     vector_store.update(upsert_ids, new_state.vectors[upsert_ids] if len(upsert_ids) else np.zeros((0, _vector_dim(new_state)), dtype=np.float32), payloads=_qdrant_payloads(new_state, cfg, upsert_ids))
+    if strategy == "point_incremental" and reusable_node_ids:
+        reused_ids = np.asarray(sorted(reusable_node_ids), dtype=np.int64)
+        vector_store.update_payloads(reused_ids, _qdrant_payloads(new_state, cfg, reused_ids))
     vector_store.delete(stale_ids)
     return QdrantSyncSummary(
         strategy=strategy,

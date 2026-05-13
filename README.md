@@ -426,12 +426,16 @@ graph:
 
 search:
   top_k: 5
+  source_k: 3
   steps: 3
   decay: 0.7
   amplitude_cutoff: 0.01
   aggregate: max          # max | sum
   metadata_field_boost: 0.05
   tag_boost: 0.03
+  ann_preselect_enabled: false
+  ann_candidate_k: 64
+  ann_force_exact_on_filters: false
 
 anchor:
   default_boost: 2.0
@@ -530,6 +534,18 @@ vector_store:
 Each KB uses a collection named `{collection_prefix}_{kb_name}` after safe character normalization. Qdrant is currently used as vector persistence; WAVE-RAG still loads the KB's vectors back into memory for graph propagation during search. New points store safe payload fields only: `kb_name`, `node_id`, `build_id`, `chunk_identity_key`, `manual_id`, `source_file`, and `text_hash`; raw chunk text, vectors beyond the point vector, and secrets are not stored in payloads. Existing collections with only `kb_name`/`node_id` payloads remain loadable because `load_kb()` retrieves by graph node id and still fails clearly if a graph node is missing a vector.
 
 During successful managed-library rebuilds, Qdrant collections are synced before graph/meta artifacts are swapped. Full sync upserts all current graph points and then deletes stale old node ids. Safe incremental sync uses compatible `chunk_identity.json` data to skip unchanged points, upsert only new/changed node ids, and delete stale ids after required upserts succeed. If identity/impact data is missing or unsafe, the rebuild falls back to `strategy=full_sync` and reports `fallback_reason` in `qdrant_sync`. If Qdrant sync fails, the old loaded graph remains active, dirty library state stays pending, and stale deletes are not attempted before current point upserts succeed. Operators can roll back to local NPZ by setting `vector_store.provider=npz`, or force a full Qdrant cleanup by running a managed-library rebuild with `mode=full`.
+
+Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
+
+The ANN path is intentionally conservative:
+
+- exact local search remains the default
+- NPZ-backed KBs always stay on the exact path
+- filters are still enforced locally
+- eligible anchor nodes are force-included in the ANN candidate set
+- if Qdrant ANN fails, returns invalid ids, or yields no safe filtered candidate set, search falls back to exact local scoring
+
+If you want filtered searches to bypass ANN entirely, set `search.ann_force_exact_on_filters=true`.
 
 The optional `qdrant-client` extra is supported on Python `<3.13` while the project pins `numpy<2`.
 

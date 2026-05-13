@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
-from tagmemorag.state import AppState, build_kb
+from tagmemorag.config import VectorStoreConfig
+from tagmemorag.state import AppState, build_kb, save_kb
+from tests.unit.test_storage_state import FakeQdrantClient
 
 
 def test_api_search_and_anchor(tmp_path, test_config, fake_embedder, monkeypatch):
@@ -154,7 +156,7 @@ def test_api_unexpected_exception_wrapped_as_internal(tmp_path, test_config, fak
     def boom(*args, **kwargs):
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(api, "wave_search", boom)
+    monkeypatch.setattr(api, "execute_search", boom)
     response = client.post("/search", json={"question": "x"})
     assert response.status_code == 500
     body = response.json()
@@ -194,3 +196,48 @@ def test_api_rebuild_and_graph_info(tmp_path, test_config, fake_embedder):
     info = client.get("/graph_info").json()
     assert info["node_count"] == 2
     assert info["build_id"]
+
+
+def test_api_search_uses_ann_preselection_with_qdrant(monkeypatch, tmp_path, test_config, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    cfg = test_config.model_copy(update={"vector_store": VectorStoreConfig(provider="qdrant", collection_prefix="test")})
+    cfg.search.ann_preselect_enabled = True
+    cfg.search.ann_candidate_k = 1
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2})
+
+    assert response.status_code == 200
+    assert response.json()["results"]
+
+
+def test_api_search_ann_falls_back_on_qdrant_failure(monkeypatch, tmp_path, test_config, fake_embedder):
+    FakeQdrantClient.reset()
+    monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    cfg = test_config.model_copy(update={"vector_store": VectorStoreConfig(provider="qdrant", collection_prefix="test")})
+    cfg.search.ann_preselect_enabled = True
+    cfg.search.ann_candidate_k = 2
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    save_kb(state, cfg)
+    FakeQdrantClient.fail_next_search = True
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2})
+
+    assert response.status_code == 200
+    assert response.json()["results"]

@@ -71,6 +71,18 @@ def test_vector_store_env_overrides(tmp_path, monkeypatch):
     assert cfg.vector_store.collection_prefix == "tmr"
 
 
+def test_search_ann_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__ANN_PRESELECT_ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__ANN_CANDIDATE_K", "32")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__ANN_FORCE_EXACT_ON_FILTERS", "true")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.ann_preselect_enabled is True
+    assert cfg.search.ann_candidate_k == 32
+    assert cfg.search.ann_force_exact_on_filters is True
+
+
 def test_metrics_public_by_default():
     cfg = load_config("missing.yaml")
 

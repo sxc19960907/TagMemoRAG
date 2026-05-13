@@ -25,6 +25,7 @@ from .retrieval_feedback import (
     preview_eval_promotion,
     review_feedback,
 )
+from .search_runtime import execute_search
 from .state import AppState, build_kb, load_kb, save_kb, start_library_rebuild
 from .tag_governance import (
     commit_tag_rewrite,
@@ -34,7 +35,6 @@ from .tag_governance import (
     tag_usage_report,
     preview_tag_rewrite,
 )
-from .wave_searcher import filter_node_ids, wave_search
 
 
 def _create_embedder_from_config(cfg):
@@ -185,18 +185,19 @@ def main(argv: list[str] | None = None) -> int:
             "language": args.language,
             "tags": resolve_tags_for_search(args.tag, load_tag_policy(args.kb, cfg)),
         }
-        results = wave_search(
-            query_vec,
-            state.graph,
-            state.vectors,
-            state.anchors,
+        execution = execute_search(
+            state=state,
+            query_vec=query_vec,
+            settings=cfg,
             top_k=args.top_k or cfg.search.top_k,
-            eligible_node_ids=filter_node_ids(state.graph, filters),
+            source_k=cfg.search.source_k,
+            steps=cfg.search.steps,
+            decay=cfg.search.decay,
+            amplitude_cutoff=cfg.search.amplitude_cutoff,
+            aggregate=cfg.search.aggregate,
             filters=filters,
-            metadata_field_boost=cfg.search.metadata_field_boost,
-            tag_boost=cfg.search.tag_boost,
         )
-        print(json.dumps({"build_id": state.build_id, "results": [r.to_dict() for r in results]}, ensure_ascii=False, indent=2))
+        print(json.dumps({"build_id": state.build_id, "results": [r.to_dict() for r in execution.results]}, ensure_ascii=False, indent=2))
         return 0
     if args.command == "serve":
         cfg = load_config(args.config)

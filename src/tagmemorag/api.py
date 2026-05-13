@@ -54,6 +54,7 @@ from .retrieval_feedback import (
     preview_eval_promotion,
     review_feedback,
 )
+from .search_runtime import execute_search, search_cache_suffix
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
@@ -66,7 +67,7 @@ from .tag_governance import (
     preview_tag_rewrite,
 )
 from .types import GraphState
-from .wave_searcher import filter_node_ids, normalize_filters, wave_search
+from .wave_searcher import normalize_filters
 
 settings = load_config()
 app_state = AppState()
@@ -366,6 +367,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
     filter_dict = _governed_filter_dict(request.kb_name, request.filters)
     canonical_filters = normalize_filters(filter_dict)
+    strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     parts = [
         request.kb_name,
         state.build_id,
@@ -378,6 +380,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         str(params["amplitude_cutoff"]),
         str(params["aggregate"]),
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
+        strategy_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -385,6 +388,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
 def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
     params = _search_param_values(request)
     canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
+    strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     parts = [
         state.kb_name,
         state.build_id,
@@ -397,6 +401,7 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
         str(params["amplitude_cutoff"]),
         str(params["aggregate"]),
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
+        strategy_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -616,23 +621,19 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
         filter_dict = _governed_filter_dict(request.kb_name, request.filters)
-        eligible_node_ids = filter_node_ids(state.graph, filter_dict)
-        results = wave_search(
-            query_vec,
-            state.graph,
-            state.vectors,
-            state.anchors,
+        execution = execute_search(
+            state=state,
+            query_vec=query_vec,
+            settings=settings,
             top_k=int(params["top_k"]),
             source_k=int(params["source_k"]),
             steps=int(params["steps"]),
             decay=float(params["decay"]),
             amplitude_cutoff=float(params["amplitude_cutoff"]),
-            aggregate=aggregate,  # type: ignore[arg-type]
-            eligible_node_ids=eligible_node_ids,
+            aggregate=aggregate,
             filters=filter_dict,
-            metadata_field_boost=settings.search.metadata_field_boost,
-            tag_boost=settings.search.tag_boost,
         )
+        results = execution.results
     search_time_ms = (time.perf_counter() - t0) * 1000.0
     trace_id = str(getattr(http_request.state, "trace_id", ""))
     structlog.get_logger().info(
@@ -644,6 +645,9 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         result_count=len(results),
         latency_ms=round(search_time_ms, 3),
         cache_status="miss",
+        search_strategy=execution.strategy,
+        ann_candidate_count=execution.ann_candidate_count,
+        ann_fallback_reason=execution.ann_fallback_reason,
     )
     get_metrics().record_search(
         kb_name=state.kb_name,
@@ -656,6 +660,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         **{
             "tagmemorag.cache_status": cache_status,
             "tagmemorag.result_count": len(results),
+            "tagmemorag.search.strategy": execution.strategy,
         }
     )
     payload = {

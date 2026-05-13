@@ -39,6 +39,9 @@ class SearchConfig(BaseModel):
     propagation_boost: float = 1.0
     metadata_field_boost: float = 0.05
     tag_boost: float = 0.03
+    ann_preselect_enabled: bool = False
+    ann_candidate_k: int = 64
+    ann_force_exact_on_filters: bool = False
 
 
 class ParserConfig(BaseModel):

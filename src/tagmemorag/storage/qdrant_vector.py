@@ -25,7 +25,7 @@ class QdrantVectorStore(VectorStore):
         self.dim = int(dim)
         self.url = url
         self.collection_name = collection_name(collection_prefix, kb_name)
-        self.client = client or self._create_client(client_factory, url=url, timeout=timeout_seconds)
+        self.client = client or type(self)._create_client(client_factory, url=url, timeout=timeout_seconds)
 
     def add(self, ids: np.ndarray, vecs: np.ndarray, payloads: list[dict[str, Any]] | None = None) -> None:
         self.update(ids, vecs, payloads=payloads)
@@ -73,6 +73,26 @@ class QdrantVectorStore(VectorStore):
         except Exception as exc:
             raise _storage_error("Failed to delete vectors from Qdrant.", exc, self.collection_name) from exc
 
+    def update_payloads(self, ids: np.ndarray | list[int], payloads: list[dict[str, Any]]) -> None:
+        ids_array = np.asarray(ids, dtype=np.int64)
+        if len(ids_array) == 0:
+            return
+        if len(payloads) != len(ids_array):
+            raise ServiceError(
+                ErrorCode.STORAGE_SCHEMA_MISMATCH,
+                "Qdrant payload count does not match vector ids.",
+                {"ids": len(ids_array), "payloads": len(payloads)},
+            )
+        try:
+            for index, node_id in enumerate(ids_array):
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    points=[int(node_id)],
+                    payload=_safe_payload(payloads[index]),
+                )
+        except Exception as exc:
+            raise _storage_error("Failed to update Qdrant payloads.", exc, self.collection_name) from exc
+
     def load(self, ids: np.ndarray | list[int] | None = None) -> tuple[np.ndarray, np.ndarray]:
         try:
             if ids is None:
@@ -115,6 +135,34 @@ class QdrantVectorStore(VectorStore):
         count = min(k, len(sims))
         top = np.argpartition(-sims, count - 1)[:count]
         return sorted(((int(ids[i]), float(sims[i])) for i in top), key=lambda item: (-item[1], item[0]))
+
+    def search_candidates(self, query_vec: np.ndarray, k: int) -> list[tuple[int, float]]:
+        if k <= 0:
+            return []
+        vector = np.asarray(query_vec, dtype=np.float32)
+        try:
+            if self._uses_real_client():
+                records = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=vector.astype(float).tolist(),
+                    limit=int(k),
+                    with_payload=False,
+                    with_vectors=False,
+                )
+            else:
+                records = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=vector.astype(float).tolist(),
+                    limit=int(k),
+                    with_payload=False,
+                    with_vectors=False,
+                )
+        except Exception as exc:
+            raise _storage_error("Failed to query ANN candidates from Qdrant.", exc, self.collection_name) from exc
+        candidates: list[tuple[int, float]] = []
+        for record in records:
+            candidates.append((int(record.id), float(getattr(record, "score", 0.0))))
+        return sorted(candidates, key=lambda item: (-item[1], item[0]))
 
     def get(self, node_id: int) -> np.ndarray:
         _, vecs = self.load([node_id])

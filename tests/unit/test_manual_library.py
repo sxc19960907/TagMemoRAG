@@ -287,8 +287,9 @@ def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake
         "fallback_reason": "",
     }
     assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
+    assert FakeQdrantClient.set_payload_calls[-1][0:2] == ("test_default", [1])
     assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
-    assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == old_state.build_id
+    assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == app.get_current("default").build_id
 
 
 def test_qdrant_incremental_sync_falls_back_without_identity(qdrant_library_config, fake_embedder):
