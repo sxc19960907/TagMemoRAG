@@ -84,6 +84,32 @@ def search_cache_suffix(settings: Settings, *, has_filters: bool) -> str:
     return f"ann_preselect:{int(settings.search.ann_candidate_k)}"
 
 
+def search_debug_enabled(request_debug: bool | None, settings: Settings) -> bool:
+    return bool(request_debug) or bool(settings.search.debug_metadata_enabled)
+
+
+def search_ann_enabled(state: GraphState, settings: Settings) -> bool:
+    return _ann_enabled(state, settings)
+
+
+def search_debug_payload(
+    execution: SearchExecution,
+    params: Mapping[str, object],
+    *,
+    ann_enabled: bool,
+) -> dict[str, object]:
+    return {
+        "search_strategy": execution.strategy,
+        "ann_enabled": bool(ann_enabled),
+        "ann_candidate_count": int(execution.ann_candidate_count),
+        "ann_fallback_reason": execution.ann_fallback_reason or "",
+        "source_k": int(params["source_k"]),
+        "steps": int(params["steps"]),
+        "aggregate": str(params["aggregate"]),
+        "eligible_node_count": len(execution.eligible_node_ids),
+    }
+
+
 def _ann_enabled(state: GraphState, settings: Settings) -> bool:
     return _ann_config_enabled(settings) and settings.vector_store.provider == "qdrant" and state.vectors.shape[0] > 0
 

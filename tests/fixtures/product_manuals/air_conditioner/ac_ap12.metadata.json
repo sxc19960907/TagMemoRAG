@@ -1,0 +1,10 @@
+{
+  "manual_id": "ac-ap12",
+  "title": "AP12 Air Conditioner Manual",
+  "source_file": "air_conditioner/ac_ap12.md",
+  "brand": "BreezeHome",
+  "product_category": "air-conditioner",
+  "product_model": "AP12",
+  "language": "en",
+  "tags": ["filter-cleaning", "mode", "cooling"]
+}

@@ -42,6 +42,7 @@ storage:
     )
     body = json.loads(search.stdout)
     assert body["results"]
+    assert "debug" not in body
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
 
 
@@ -102,6 +103,54 @@ storage:
     body = json.loads(search.stdout)
     assert body["results"]
     assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+
+
+def test_cli_search_debug_outputs_operator_metadata(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+""",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "build", "--docs", str(docs), "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    search = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "search",
+            "蒸汽很小",
+            "--config",
+            str(config),
+            "--top-k",
+            "3",
+            "--debug-search",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    body = json.loads(search.stdout)
+    assert body["debug"]["search_strategy"] == "exact_local"
+    assert body["debug"]["ann_enabled"] is False
+    assert body["debug"]["ann_candidate_count"] == 0
+    assert body["debug"]["ann_fallback_reason"] == ""
 
 
 def test_cli_search_with_ann_preselection_qdrant(tmp_path):

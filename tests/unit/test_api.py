@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
-from tagmemorag.config import VectorStoreConfig
+from tagmemorag.cache.lru_ttl import LRUTTLCache
+from tagmemorag.config import CacheConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.state import AppState, build_kb, save_kb
 from tagmemorag.types import Anchor
 from tests.unit.test_storage_state import FakeQdrantClient
@@ -26,12 +27,74 @@ def test_api_search_and_anchor(tmp_path, test_config, fake_embedder, monkeypatch
     assert body["search_id"]
     assert body["results"]
     assert "search_time_ms" in body and body["search_time_ms"] >= 0
+    assert "debug" not in body
 
     anchor_response = client.post("/anchor", json={"node_id": 0, "label": "蒸汽重点"})
     assert anchor_response.status_code == 200
     anchor_key = anchor_response.json()["anchor_key"]
     assert client.get("/anchor").json()["anchors"][0]["anchor_key"] == anchor_key
     assert client.delete(f"/anchor/{anchor_key}").status_code == 200
+
+
+def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2, "debug": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["debug"] == {
+        "search_strategy": "exact_local",
+        "ann_enabled": False,
+        "ann_candidate_count": 0,
+        "ann_fallback_reason": "",
+        "source_k": test_config.search.source_k,
+        "steps": test_config.search.steps,
+        "aggregate": test_config.search.aggregate,
+        "eligible_node_count": state.graph.number_of_nodes(),
+    }
+    assert not {"trace_id", "search_id", "question", "candidate_ids"} & set(body["debug"])
+
+
+def test_api_search_config_debug_and_cache_shapes_do_not_cross(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(debug_metadata_enabled=True),
+        cache=CacheConfig(enabled=True, max_entries=100, ttl_seconds=3600),
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    app_state = AppState(state)
+    app_state.query_cache = LRUTTLCache(cfg.cache.max_entries, cfg.cache.ttl_seconds, now_fn=lambda: 1000.0)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = app_state
+    client = TestClient(api.app)
+
+    first_debug = client.post("/search", json={"question": "蒸汽很小", "top_k": 2}).json()
+    second_debug = client.post("/search", json={"question": "  蒸汽很小  ", "top_k": 2}).json()
+    cfg.search.debug_metadata_enabled = False
+    first_plain = client.post("/search", json={"question": "蒸汽很小", "top_k": 2}).json()
+    second_plain = client.post("/search", json={"question": "  蒸汽很小  ", "top_k": 2}).json()
+
+    assert first_debug["cache"] == "miss"
+    assert second_debug["cache"] == "hit"
+    assert "debug" in second_debug
+    assert first_plain["cache"] == "miss"
+    assert second_plain["cache"] == "hit"
+    assert "debug" not in first_plain
+    assert "debug" not in second_plain
+    assert first_debug["search_id"] != first_plain["search_id"]
 
 
 def test_api_search_accepts_steps_decay_override(tmp_path, test_config, fake_embedder):
@@ -215,10 +278,15 @@ def test_api_search_uses_ann_preselection_with_qdrant(monkeypatch, tmp_path, tes
     api.app_state = AppState(state)
     client = TestClient(api.app)
 
-    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2})
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2, "debug": True})
 
     assert response.status_code == 200
-    assert response.json()["results"]
+    body = response.json()
+    assert body["results"]
+    assert body["debug"]["search_strategy"] == "ann_preselect_then_wave"
+    assert body["debug"]["ann_enabled"] is True
+    assert body["debug"]["ann_candidate_count"] == 1
+    assert body["debug"]["ann_fallback_reason"] == ""
 
 
 def test_api_search_ann_falls_back_on_qdrant_failure(monkeypatch, tmp_path, test_config, fake_embedder):
@@ -238,10 +306,15 @@ def test_api_search_ann_falls_back_on_qdrant_failure(monkeypatch, tmp_path, test
     api.app_state = AppState(state)
     client = TestClient(api.app)
 
-    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2})
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 2, "debug": True})
 
     assert response.status_code == 200
-    assert response.json()["results"]
+    body = response.json()
+    assert body["results"]
+    assert body["debug"]["search_strategy"] == "exact_local"
+    assert body["debug"]["ann_enabled"] is True
+    assert body["debug"]["ann_candidate_count"] == 0
+    assert body["debug"]["ann_fallback_reason"] == "ann_query_failed"
 
 
 def test_api_search_ann_keeps_filtered_results_inside_metadata_scope(monkeypatch, tmp_path, test_config, fake_embedder):

@@ -6,8 +6,8 @@ from uuid import uuid4
 
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.embedder import create_embedder
+from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import build_kb, load_kb, save_kb
-from tagmemorag.wave_searcher import wave_search
 
 from .dataset import EvalCase, EvalSuiteError, EvalThresholds, load_eval_suite
 from .matching import match_expectations
@@ -55,18 +55,19 @@ def run_eval(
         _validate_top_k(case_top_k)
         state = states[case.kb_name]
         query_vec = embedder.encode_query(case.query)
-        results = wave_search(
-            query_vec,
-            state.graph,
-            state.vectors,
-            state.anchors,
+        execution = execute_search(
+            state=state,
+            query_vec=query_vec,
+            settings=run_cfg,
             top_k=case_top_k,
             source_k=run_cfg.search.source_k,
             steps=run_cfg.search.steps,
             decay=run_cfg.search.decay,
             amplitude_cutoff=run_cfg.search.amplitude_cutoff,
             aggregate=run_cfg.search.aggregate,
+            filters=None,
         )
+        results = execution.results
         rank_matches = match_expectations(results, case.relevant, case_id=case.id)
         metrics = compute_ranking_metrics(rank_matches, len(case.relevant), case_top_k)
         failures = _threshold_failures(metrics.to_dict(), case.thresholds, prefix="case")
@@ -83,6 +84,9 @@ def run_eval(
                 expected=[expected_to_dict(item, f"{case.id}#{index + 1}") for index, item in enumerate(case.relevant)],
                 actual_top_k=[_result_to_report(result, rank_matches[index] if index < len(rank_matches) else set()) for index, result in enumerate(results)],
                 failures=failures,
+                search_strategy=execution.strategy,
+                ann_candidate_count=execution.ann_candidate_count,
+                ann_fallback_reason=execution.ann_fallback_reason,
             )
         )
 

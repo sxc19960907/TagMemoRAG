@@ -52,6 +52,7 @@ def test_cache_key_is_sensitive_to_kb_build_anchors_and_params():
         req,
         GraphState(graph=graph, vectors=np.zeros((0, 64)), build_id="build-a", kb_name="kb-a", anchors_version=2),
     )
+    assert base != _compute_cache_key(SearchRequest(question="a b", kb_name="kb-a", top_k=3, debug=True), state)
 
 
 def test_cache_key_includes_canonical_filters():
@@ -88,3 +89,4 @@ def test_search_id_changes_with_trace_but_uses_same_request_canonicalization():
 
     assert first == _compute_search_id(SearchRequest(question="a b", kb_name="kb-a", top_k=3), state, "trace-a")
     assert first != _compute_search_id(request, state, "trace-b")
+    assert first != _compute_search_id(SearchRequest(question="a b", kb_name="kb-a", top_k=3, debug=True), state, "trace-a")

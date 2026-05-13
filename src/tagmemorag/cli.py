@@ -25,7 +25,7 @@ from .retrieval_feedback import (
     preview_eval_promotion,
     review_feedback,
 )
-from .search_runtime import execute_search
+from .search_runtime import execute_search, search_ann_enabled, search_debug_enabled, search_debug_payload
 from .state import AppState, build_kb, load_kb, save_kb, start_library_rebuild
 from .tag_governance import (
     commit_tag_rewrite,
@@ -72,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--model", default=None)
     search.add_argument("--language", default=None)
     search.add_argument("--tag", action="append", default=[])
+    search.add_argument("--debug-search", action="store_true")
 
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default=None)
@@ -178,6 +179,14 @@ def main(argv: list[str] | None = None) -> int:
         emb = _create_embedder_from_config(cfg)
         state = load_kb(args.kb, cfg)
         query_vec = emb.encode_query(args.question)
+        params = {
+            "top_k": args.top_k or cfg.search.top_k,
+            "source_k": cfg.search.source_k,
+            "steps": cfg.search.steps,
+            "decay": cfg.search.decay,
+            "amplitude_cutoff": cfg.search.amplitude_cutoff,
+            "aggregate": cfg.search.aggregate,
+        }
         filters = {
             "brand": args.brand,
             "product_category": args.category,
@@ -189,15 +198,22 @@ def main(argv: list[str] | None = None) -> int:
             state=state,
             query_vec=query_vec,
             settings=cfg,
-            top_k=args.top_k or cfg.search.top_k,
-            source_k=cfg.search.source_k,
-            steps=cfg.search.steps,
-            decay=cfg.search.decay,
-            amplitude_cutoff=cfg.search.amplitude_cutoff,
-            aggregate=cfg.search.aggregate,
+            top_k=int(params["top_k"]),
+            source_k=int(params["source_k"]),
+            steps=int(params["steps"]),
+            decay=float(params["decay"]),
+            amplitude_cutoff=float(params["amplitude_cutoff"]),
+            aggregate=str(params["aggregate"]),
             filters=filters,
         )
-        print(json.dumps({"build_id": state.build_id, "results": [r.to_dict() for r in execution.results]}, ensure_ascii=False, indent=2))
+        payload = {"build_id": state.build_id, "results": [r.to_dict() for r in execution.results]}
+        if search_debug_enabled(args.debug_search, cfg):
+            payload["debug"] = search_debug_payload(
+                execution,
+                params,
+                ann_enabled=search_ann_enabled(state, cfg),
+            )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     if args.command == "serve":
         cfg = load_config(args.config)

@@ -49,6 +49,8 @@ If no sidecar exists, TagMemoRAG creates fallback metadata from the relative pat
 python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 ```
 
+Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
+
 Filtered search narrows retrieval before WAVE propagation:
 
 ```bash
@@ -96,6 +98,7 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 
 Response includes `build_id`, `search_time_ms`, and a `results` array. Each result has the existing `node_id / score / text / header / path / source_file / anchor_key` fields plus manual metadata such as `manual_id`, `manual_title`, `brand`, `product_category`, `product_model`, `language`, `version`, and `tags`.
 The response also includes `cache: "hit" | "miss"`.
+Set request `debug: true` or `search.debug_metadata_enabled=true` to include a `debug` object with search strategy, ANN candidate/fallback details, and effective search parameters. Diagnostics intentionally omit raw query text, vectors, trace/search ids, and candidate id lists.
 
 ### `POST /rebuild`
 
@@ -433,6 +436,7 @@ search:
   aggregate: max          # max | sum
   metadata_field_boost: 0.05
   tag_boost: 0.03
+  debug_metadata_enabled: false
   ann_preselect_enabled: false
   ann_candidate_k: 64
   ann_force_exact_on_filters: false
@@ -626,6 +630,19 @@ uv run tagmemorag eval run \
   --eval-data-dir .tmp/eval/coffee
 ```
 
+Use `tests/fixtures/eval/coffee.jsonl` as the fast smoke suite for basic CLI and report compatibility. Use the broader M20 product-manual suite when checking retrieval behavior across categories, metadata, tags, ANN preselection, and rebuild-related regressions:
+
+```bash
+uv run tagmemorag eval run \
+  --suite tests/fixtures/eval/product_manuals.jsonl \
+  --docs tests/fixtures/product_manuals \
+  --config config.yaml \
+  --output .tmp/eval-product-report.json \
+  --eval-data-dir .tmp/eval/product-manuals
+```
+
+M20 is measurement-first: use the expanded report to compare retrieval changes, but keep ranking constant tuning in a separate, evidence-backed task.
+
 For CI, use a config whose model provider is `hashing` so the gate does not download a model or call the network:
 
 ```yaml
@@ -642,7 +659,7 @@ Eval suites are JSONL: one query case per line. Each case names the KB, query, a
 {"id":"coffee-steam-weak","kb_name":"default","query":"蒸汽很小怎么办","relevant":[{"source_file":"coffee_machine.md","header":"蒸汽功能","text_contains":["蒸汽很小","喷嘴"]}]}
 ```
 
-Expected results can match by `source_file`, `header`, `anchor_key`, and `text_contains`; all supplied fields must match. The report includes per-case `precision_at_k`, `recall_at_k`, `mrr`, `hit_at_k`, expected references, and actual top-k results. Default gate thresholds apply to `recall_at_k`, `mrr`, and `hit_at_k`; `precision_at_k` is reported and only becomes a hard gate when `--min-precision-at-k` is set.
+Expected results can match by `source_file`, `header`, `anchor_key`, `text_contains`, and `metadata`; all supplied fields must match. The report includes per-case `precision_at_k`, `recall_at_k`, `mrr`, `hit_at_k`, expected references, actual top-k results, and the low-cardinality search strategy summary used by the same execution path as API and CLI search. Default gate thresholds apply to `recall_at_k`, `mrr`, and `hit_at_k`; `precision_at_k` is reported and only becomes a hard gate when `--min-precision-at-k` is set.
 
 ## Docker Deployment
 

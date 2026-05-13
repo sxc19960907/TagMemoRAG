@@ -31,9 +31,12 @@ class EvalCaseReport:
     expected: list[dict[str, Any]]
     actual_top_k: list[dict[str, Any]]
     failures: list[str]
+    search_strategy: str = ""
+    ann_candidate_count: int = 0
+    ann_fallback_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "id": self.id,
             "query": self.query,
             "kb_name": self.kb_name,
@@ -45,6 +48,11 @@ class EvalCaseReport:
             "actual_top_k": self.actual_top_k,
             "failures": self.failures,
         }
+        if self.search_strategy:
+            data["search_strategy"] = self.search_strategy
+            data["ann_candidate_count"] = self.ann_candidate_count
+            data["ann_fallback_reason"] = self.ann_fallback_reason
+        return data
 
 
 @dataclass(frozen=True)
@@ -89,4 +97,6 @@ def expected_to_dict(expectation: ExpectedResult, fallback_id: str) -> dict[str,
         data["anchor_key"] = expectation.anchor_key
     if expectation.text_contains:
         data["text_contains"] = list(expectation.text_contains)
+    if expectation.metadata:
+        data["metadata"] = dict(expectation.metadata)
     return data

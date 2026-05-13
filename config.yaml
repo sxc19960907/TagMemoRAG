@@ -23,6 +23,7 @@ search:
   amplitude_cutoff: 0.01
   aggregate: max
   propagation_boost: 1.0
+  debug_metadata_enabled: false
 parser:
   max_chars: 500
   min_chars: 50

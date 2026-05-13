@@ -54,7 +54,13 @@ from .retrieval_feedback import (
     preview_eval_promotion,
     review_feedback,
 )
-from .search_runtime import execute_search, search_cache_suffix
+from .search_runtime import (
+    execute_search,
+    search_ann_enabled,
+    search_cache_suffix,
+    search_debug_enabled,
+    search_debug_payload,
+)
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
@@ -165,6 +171,7 @@ class SearchRequest(BaseModel):
     aggregate: str | None = None
     kb_name: str = "default"
     filters: "SearchFilters | None" = None
+    debug: bool | None = None
 
 
 class SearchFilters(BaseModel):
@@ -368,6 +375,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     filter_dict = _governed_filter_dict(request.kb_name, request.filters)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
+    debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
     parts = [
         request.kb_name,
         state.build_id,
@@ -381,6 +389,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         str(params["aggregate"]),
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
+        debug_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -389,6 +398,7 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
     params = _search_param_values(request)
     canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
+    debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
     parts = [
         state.kb_name,
         state.build_id,
@@ -402,6 +412,7 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
         str(params["aggregate"]),
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
+        debug_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -674,6 +685,12 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         "search_time_ms": round(search_time_ms, 3),
         "cache": "miss",
     }
+    if search_debug_enabled(request.debug, settings):
+        payload["debug"] = search_debug_payload(
+            execution,
+            params,
+            ann_enabled=search_ann_enabled(state, settings),
+        )
     if cache is not None:
         cache.set(
             cache_key,

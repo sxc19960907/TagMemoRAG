@@ -42,6 +42,7 @@ class SearchConfig(BaseModel):
     ann_preselect_enabled: bool = False
     ann_candidate_k: int = 64
     ann_force_exact_on_filters: bool = False
+    debug_metadata_enabled: bool = False
 
 
 class ParserConfig(BaseModel):
