@@ -95,6 +95,11 @@ class CacheConfig(BaseModel):
     ttl_seconds: int = 3600
 
 
+class ManualLibraryConfig(BaseModel):
+    root_dir: str = "product_manuals"
+    allow_overwrite: bool = False
+
+
 class MetricsConfig(BaseModel):
     enabled: bool = True
     path: str = "/metrics"
@@ -133,6 +138,7 @@ class Settings(BaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
+    manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod

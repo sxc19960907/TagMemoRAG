@@ -49,3 +49,17 @@ Search with metadata filters:
 ```bash
 python -m tagmemorag search "冰箱温度怎么调" --kb fridge --category fridge --model NRK6192 --tag temperature-setting
 ```
+
+## Managed Library Layout
+
+The API-managed workflow stores manuals under `product_manuals/{kb_name}/` by default:
+
+```text
+product_manuals/default/coffee/cm1.md
+product_manuals/default/coffee/cm1.metadata.json
+product_manuals/default/.tagmemorag-library.json
+```
+
+Use `POST /manuals/validate` to check metadata before writing, `POST /manuals` to upload a document plus sidecar metadata, and `GET /manual-library?kb_name=default` to list managed manuals. Uploads and metadata edits set a pending-change marker; they are not searchable until `POST /manual-library/rebuild` completes successfully.
+
+Disable a manual by setting `status` to `disabled` through the API or sidecar. Disabled and archived manuals stay on disk for audit/recovery, remain visible in `GET /manual-library`, and are skipped by future builds. Hard delete removes both the source file and sidecar and is constrained to the configured library root.

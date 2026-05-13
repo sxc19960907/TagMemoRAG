@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development conventions and pre-development checklist for M6"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "M6 adds a manual library module and API endpoints while preserving layer boundaries"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "M6 changes storage, rebuild, API, and tests; quality rules cover double-buffer safety and regression coverage"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "M6 validation, upload, delete, and rebuild failures must keep structured service errors"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "M6 mutation logs must avoid raw text, secrets, and high-cardinality labels"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "M6 remains file-backed and should use atomic writes and schema discipline"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M6 spans config, API, manual metadata, storage, rebuild, cache, and docs"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M6 should reuse M5 ManualMetadata and existing rebuild/storage helpers"}
+{"file": ".trellis/tasks/05-13-m5-manual-metadata-tag-retrieval/prd.md", "reason": "M6 builds directly on M5 manual metadata and tag-aware retrieval requirements"}
+{"file": ".trellis/tasks/05-13-m5-manual-metadata-tag-retrieval/design.md", "reason": "M5 design defines metadata contracts, sidecar loading, filters, and compatibility assumptions"}

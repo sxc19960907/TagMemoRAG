@@ -10,7 +10,7 @@ import uuid
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 import structlog
@@ -26,10 +26,20 @@ from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
 from .manuals import metadata_from_node
+from .manual_library import (
+    delete_manual,
+    disable_manual,
+    library_root,
+    list_records,
+    replace_manual_file,
+    update_manual_metadata,
+    upsert_manual,
+    validate_metadata,
+)
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
-from .state import AppState, load_kb
+from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .types import GraphState
 from .wave_searcher import filter_node_ids, normalize_filters, wave_search
@@ -150,6 +160,22 @@ class SearchFilters(BaseModel):
 
 class RebuildRequest(BaseModel):
     docs_dir: str
+    kb_name: str = "default"
+
+
+class ManualMetadataValidationRequest(BaseModel):
+    kb_name: str = "default"
+    metadata: dict[str, object]
+    mode: str = "create"
+    current_manual_id: str | None = None
+
+
+class ManualMetadataUpdateRequest(BaseModel):
+    kb_name: str = "default"
+    metadata: dict[str, object]
+
+
+class ManualLibraryRebuildRequest(BaseModel):
     kb_name: str = "default"
 
 
@@ -656,6 +682,129 @@ def list_manuals(
     }
 
 
+@app.post("/manuals/validate")
+def validate_manual_metadata(
+    request: ManualMetadataValidationRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    if request.mode not in {"create", "update", "upsert"}:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create, update, or upsert.", {"mode": request.mode})
+    result = validate_metadata(
+        request.kb_name,
+        dict(request.metadata),
+        settings,
+        mode=request.mode,  # type: ignore[arg-type]
+        current_manual_id=request.current_manual_id,
+    )
+    return result.to_dict()
+
+
+@app.post("/manuals")
+async def upload_manual(
+    kb_name: str = Form("default"),
+    metadata: str = Form(...),
+    overwrite: bool = Form(False),
+    trigger_rebuild: bool = Form(False),
+    file: UploadFile = File(...),
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    metadata_obj = _parse_metadata_form(metadata)
+    content = await file.read()
+    record = upsert_manual(kb_name, metadata_obj, content, settings, overwrite=overwrite or settings.manual_library.allow_overwrite)
+    task = start_library_rebuild(app_state, kb_name, settings, embedder=embedder) if trigger_rebuild else None
+    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=record.manual_id, action="upsert", status=record.status)
+    return {"record": record.to_dict(), "rebuild_required": True, "rebuild_task": task.to_dict() if task else None}
+
+
+@app.patch("/manuals/{manual_id}/metadata")
+def patch_manual_metadata(
+    manual_id: str,
+    request: ManualMetadataUpdateRequest,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    record = update_manual_metadata(request.kb_name, manual_id, dict(request.metadata), settings)
+    structlog.get_logger().info(
+        "manual_library_mutation",
+        kb_name=request.kb_name,
+        manual_id=manual_id,
+        action="metadata_update",
+        status=record.status,
+    )
+    return {"record": record.to_dict(), "rebuild_required": True}
+
+
+@app.put("/manuals/{manual_id}/file")
+async def put_manual_file(
+    manual_id: str,
+    kb_name: str = Form("default"),
+    file: UploadFile = File(...),
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    record = replace_manual_file(kb_name, manual_id, await file.read(), settings)
+    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="file_replace", status=record.status)
+    return {"record": record.to_dict(), "rebuild_required": True}
+
+
+@app.delete("/manuals/{manual_id}")
+def remove_manual(
+    manual_id: str,
+    kb_name: str = "default",
+    hard: bool = False,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    if hard and not api_key.has_scope("admin"):
+        raise ServiceError(ErrorCode.FORBIDDEN, "Hard delete requires admin scope.", {"manual_id": manual_id})
+    if hard:
+        result = delete_manual(kb_name, manual_id, settings)
+        structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="hard_delete", status="deleted")
+        return result
+    record = disable_manual(kb_name, manual_id, settings)
+    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="disable", status=record.status)
+    return {"record": record.to_dict(), "rebuild_required": True}
+
+
+@app.get("/manual-library")
+def list_manual_library(
+    kb_name: str = "default",
+    manual_id: str | None = None,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    graph_state = app_state.kbs.get(kb_name)
+    records = list_records(kb_name, settings, graph_state=graph_state)
+    if manual_id is not None:
+        records = [record for record in records if record.manual_id == manual_id]
+        if not records:
+            raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    return {
+        "kb_name": kb_name,
+        "library_root": str(library_root(kb_name, settings)),
+        "manuals": [record.to_dict() for record in records],
+    }
+
+
+@app.post("/manual-library/rebuild", status_code=202)
+def rebuild_manual_library(
+    request: ManualLibraryRebuildRequest,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    task = start_library_rebuild(app_state, request.kb_name, settings, embedder=embedder)
+    return task.to_dict()
+
+
 @app.get("/kb")
 def list_kbs(api_key: ApiKey = Depends(require_scope("search")), _: None = Depends(rate_limit_dep)):
     entries = []
@@ -687,3 +836,13 @@ def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_s
         get_metrics().set_cache_entries(len(app_state.query_cache))
         structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
         return {"cleared_count": cleared}
+
+
+def _parse_metadata_form(metadata: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(metadata)
+    except json.JSONDecodeError as exc:
+        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be valid JSON.", {"error": str(exc)}) from exc
+    if not isinstance(parsed, dict):
+        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be a JSON object.")
+    return parsed

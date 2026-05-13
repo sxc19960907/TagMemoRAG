@@ -144,6 +144,50 @@ Returns the manuals discovered in a loaded KB plus available metadata facets for
 }
 ```
 
+### Managed manual library
+
+M6 adds a file-backed library workflow under `manual_library.root_dir/{kb_name}`. The existing `GET /manuals` endpoint remains graph-derived for search-facing clients; `GET /manual-library?kb_name=...` lists uploaded or disabled manuals even before they have been rebuilt.
+
+Validate metadata without writing files:
+
+```bash
+curl -X POST http://127.0.0.1:8000/manuals/validate \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","metadata":{"manual_id":"cm1","title":"CM1 Manual","source_file":"coffee/cm1.md","product_category":"coffee","tags":["Maintenance Task"]}}'
+```
+
+Upload or overwrite a manual with multipart form data:
+
+```bash
+curl -X POST http://127.0.0.1:8000/manuals \
+  -H "Authorization: Bearer tmr_live_..." \
+  -F kb_name=default \
+  -F overwrite=false \
+  -F metadata='{"manual_id":"cm1","title":"CM1 Manual","source_file":"coffee/cm1.md","product_category":"coffee","language":"zh-CN","tags":["maintenance"]}' \
+  -F file=@product_manuals/default/coffee/cm1.md
+```
+
+Metadata/file changes mark the KB as `rebuild_required` but do not change the currently served graph. Rebuild the managed library with:
+
+```bash
+curl -X POST http://127.0.0.1:8000/manual-library/rebuild \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default"}'
+```
+
+Other library operations:
+
+| Endpoint | Description |
+|----------|-------------|
+| `PATCH /manuals/{manual_id}/metadata` | Update sidecar metadata |
+| `PUT /manuals/{manual_id}/file` | Replace the source document |
+| `DELETE /manuals/{manual_id}?kb_name=...` | Disable a manual for future rebuilds |
+| `DELETE /manuals/{manual_id}?kb_name=...&hard=true` | Hard delete source + sidecar; requires `admin` |
+
+Create/update/disable/rebuild require the `rebuild` scope plus KB allowlist access. Hard delete also requires `admin`. `status=disabled` or `status=archived` sidecars are skipped by future builds while remaining visible in the managed library list.
+
 ### Authentication
 
 Enable API key auth in `config.yaml` and send keys as Bearer tokens:
@@ -258,6 +302,10 @@ cache:
   enabled: true
   max_entries: 10000
   ttl_seconds: 3600
+
+manual_library:
+  root_dir: product_manuals
+  allow_overwrite: false
 
 observability:
   metrics:
@@ -430,4 +478,6 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | **M2** | API key + rate limiting, multi-KB isolation, query cache |
 | **M3** | Eval harness (precision@k / MRR), CI regression gate |
 | **M4** | Prometheus metrics, OpenTelemetry traces |
+| **M5** | Manual metadata sidecars, filters, facets, tag-aware search boosts |
+| **M6** | File-backed managed manual library, upload/update/disable/delete, library rebuild |
 | **post-v1** | Faiss/Qdrant vector backend, HA multi-replica, incremental updates |

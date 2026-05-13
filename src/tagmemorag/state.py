@@ -15,6 +15,7 @@ from .config import Settings
 from .embedder import create_embedder
 from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
+from .manual_library import clear_pending_after_success, is_active_status
 from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
@@ -106,7 +107,14 @@ class AppState:
         with self._lock:
             self.is_shutting_down = True
 
-    def start_rebuild(self, docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None) -> RebuildTask:
+    def start_rebuild(
+        self,
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        embedder=None,
+        on_success=None,
+    ) -> RebuildTask:
         with self._lock:
             if self.is_shutting_down:
                 get_metrics().record_rebuild_rejected(kb_name=kb_name)
@@ -125,7 +133,11 @@ class AppState:
         get_metrics().record_rebuild_started(kb_name=kb_name)
         get_metrics().set_rebuild_in_progress(kb_name=kb_name, value=1)
         structlog.get_logger().info("rebuild_started", task_id=task_id, docs_dir=str(docs_dir), kb_name=kb_name)
-        thread = threading.Thread(target=self._rebuild_worker, args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock), daemon=True)
+        thread = threading.Thread(
+            target=self._rebuild_worker,
+            args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock, on_success),
+            daemon=True,
+        )
         thread.start()
         return task
 
@@ -137,6 +149,7 @@ class AppState:
         cfg: Settings,
         embedder,
         rebuild_lock: threading.Lock,
+        on_success,
     ) -> None:
         t0 = time.perf_counter()
         try:
@@ -148,6 +161,8 @@ class AppState:
                 new_state = build_kb(docs_dir, kb_name, cfg, embedder=embedder, old_state=old_state)
                 save_kb(new_state, cfg)
                 self.swap_kb(kb_name, new_state)
+                if on_success is not None:
+                    on_success(new_state)
                 task.status = "done"
                 task.build_id = new_state.build_id
                 set_span_attributes(
@@ -208,6 +223,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         seen_manual_ids: set[str] = set()
         for path in sorted(document_paths):
             metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
+            if not is_active_status(metadata.status):
+                continue
             chunks.extend(
                 parse_document(
                     path,
@@ -303,3 +320,14 @@ def _anchor_store(kb_name: str, cfg: Settings) -> JsonAnchorStore:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def start_library_rebuild(app_state: AppState, kb_name: str, cfg: Settings, embedder=None) -> RebuildTask:
+    from .manual_library import library_root
+
+    docs_dir = library_root(kb_name, cfg)
+
+    def clear_pending(new_state: GraphState) -> None:
+        clear_pending_after_success(kb_name, cfg, new_state.build_id)
+
+    return app_state.start_rebuild(docs_dir, kb_name, cfg, embedder=embedder, on_success=clear_pending)
