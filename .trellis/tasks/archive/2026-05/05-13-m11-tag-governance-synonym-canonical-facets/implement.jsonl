@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist for M11"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "M11 logs/metrics must avoid raw high-cardinality tag labels"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "M11 adds a tag governance module and API endpoints while preserving layer boundaries"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M11 spans storage, validation, suggestions, search, API, CLI, and UI"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M11 should reuse ManualMetadata, manual_library, tag_suggestions, and M10 bulk validation"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "M11 remains file-backed and must use atomic writes under the manual library root"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "M11 policy validation and rewrite failures must use structured service errors"}
+{"file": ".trellis/tasks/05-13-m11-tag-governance-synonym-canonical-facets/research/code-context.md", "reason": "Repo-specific code context for M11 tag governance"}
