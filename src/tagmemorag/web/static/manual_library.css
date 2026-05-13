@@ -363,6 +363,47 @@ summary {
   align-items: center;
 }
 
+.suggestion-box {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  padding: 9px;
+}
+
+.suggestion-toolbar,
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.suggestion-toolbar button {
+  min-height: 30px;
+  padding: 4px 9px;
+}
+
+.suggestion-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.suggestion-status.error {
+  color: var(--danger);
+}
+
+.suggestion-chip {
+  min-height: 28px;
+  max-width: 100%;
+  border-color: #b5cce2;
+  background: #eef7ff;
+  color: #154b79;
+  overflow-wrap: anywhere;
+}
+
 .toggles label {
   display: flex;
   grid-template-columns: none;

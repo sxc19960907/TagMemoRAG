@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/prd.md", "reason": "M8 tag suggestion UX requirements and acceptance criteria"}
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/design.md", "reason": "M8 suggestion API, algorithm, and UI integration design"}
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/implement.md", "reason": "M8 implementation order and validation plan"}
+{"file": ".trellis/tasks/05-13-m7-manual-library-admin-ui/design.md", "reason": "M7 admin UI structure that M8 extends"}
+{"file": ".trellis/tasks/05-13-m6-manual-library-management/design.md", "reason": "M6 managed library API and persistence context"}
+{"file": ".trellis/tasks/05-13-m5-manual-metadata-tag-retrieval/design.md", "reason": "M5 tag normalization and retrieval context"}

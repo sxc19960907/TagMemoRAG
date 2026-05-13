@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/prd.md", "reason": "M8 acceptance criteria and out-of-scope boundaries"}
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/design.md", "reason": "M8 contract and cross-layer review"}
+{"file": ".trellis/tasks/05-13-m8-tag-suggestion-ux/implement.md", "reason": "M8 verification commands and review gates"}
+{"file": ".trellis/tasks/05-13-m7-manual-library-admin-ui/implement.md", "reason": "M7 validation precedent and UI smoke expectations"}

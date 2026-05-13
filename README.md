@@ -188,6 +188,17 @@ Other library operations:
 
 Create/update/disable/rebuild require the `rebuild` scope plus KB allowlist access. Hard delete also requires `admin`. `status=disabled` or `status=archived` sidecars are skipped by future builds while remaining visible in the managed library list.
 
+Suggest tags for an upload or edit draft without writing files:
+
+```bash
+curl -X POST http://127.0.0.1:8000/manuals/tags/suggest \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","metadata":{"manual_id":"cm1","title":"CM1 Coffee Machine Maintenance Manual","source_file":"coffee/cm1-maintenance.md","product_category":"coffee","product_model":"CM1","tags":["steam-wand"]},"limit":8}'
+```
+
+The endpoint requires the `search` scope and returns normalized, scored suggestions with source hints and short reasons. M8 suggestions are deterministic heuristics from draft metadata, filename/path signals, and tags/facets already present in the selected KB; they are not LLM-generated or authoritative taxonomy. Accepting suggestions only changes the draft tags field in the UI. Metadata is not persisted until the existing upload or save action succeeds, and `POST /manuals/validate` remains the canonical normalization check.
+
 ### Manual library admin UI
 
 Start the same FastAPI service, then open:
@@ -196,7 +207,7 @@ Start the same FastAPI service, then open:
 http://127.0.0.1:8000/admin/manual-library
 ```
 
-Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, uploads manuals, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
+Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, edits sidecars, replaces source files, disables or hard deletes manuals, and triggers/polls managed library rebuilds.
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 

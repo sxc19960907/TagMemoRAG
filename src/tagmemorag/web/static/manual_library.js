@@ -10,6 +10,7 @@ const state = {
   filters: { text: "", status: "all", searchable: "all", pending: "all" },
   rebuildTask: null,
   loading: false,
+  suggestions: { upload: [], detail: [] },
 };
 
 const fields = [
@@ -42,6 +43,9 @@ const el = {
   detailSubtitle: document.getElementById("detail-subtitle"),
   detailForm: document.getElementById("detail-form"),
   detailMessages: document.getElementById("detail-messages"),
+  detailSuggestions: document.getElementById("detail-suggestions"),
+  suggestDetailTags: document.getElementById("suggest-detail-tags"),
+  acceptAllDetailTags: document.getElementById("accept-all-detail-tags"),
   validateDetail: document.getElementById("validate-detail"),
   replaceFile: document.getElementById("replace-file"),
   replaceFileButton: document.getElementById("replace-file-button"),
@@ -53,6 +57,9 @@ const el = {
   closeUpload: document.getElementById("close-upload"),
   uploadForm: document.getElementById("upload-form"),
   uploadMessages: document.getElementById("upload-messages"),
+  uploadSuggestions: document.getElementById("upload-suggestions"),
+  suggestUploadTags: document.getElementById("suggest-upload-tags"),
+  acceptAllUploadTags: document.getElementById("accept-all-upload-tags"),
   validateUpload: document.getElementById("validate-upload"),
   rebuild: document.getElementById("rebuild-library"),
 };
@@ -121,6 +128,16 @@ function tagsToText(tags) {
   return Array.isArray(tags) ? tags.join(", ") : "";
 }
 
+function normalizeTag(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 function metadataFromForm(form, includeManualId = false) {
   const data = new FormData(form);
   let raw = {};
@@ -160,6 +177,100 @@ function showMessages(container, messages, kind = "") {
     div.textContent = typeof message === "string" ? message : `${message.field || "metadata"}: ${message.message}`;
     container.appendChild(div);
   });
+}
+
+function suggestionNodes(scope) {
+  const box = scope === "upload" ? el.uploadSuggestions : el.detailSuggestions;
+  return {
+    status: box.querySelector('[data-role="status"]'),
+    list: box.querySelector('[data-role="list"]'),
+    acceptAll: scope === "upload" ? el.acceptAllUploadTags : el.acceptAllDetailTags,
+    suggest: scope === "upload" ? el.suggestUploadTags : el.suggestDetailTags,
+  };
+}
+
+function setSuggestionStatus(scope, message, kind = "") {
+  const nodes = suggestionNodes(scope);
+  nodes.status.className = `suggestion-status ${kind}`.trim();
+  nodes.status.textContent = message || "";
+}
+
+function renderSuggestions(scope) {
+  const nodes = suggestionNodes(scope);
+  const suggestions = state.suggestions[scope] || [];
+  nodes.list.innerHTML = "";
+  nodes.acceptAll.disabled = suggestions.length === 0 || (scope === "detail" && !selectedManual());
+  suggestions.forEach((suggestion) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "suggestion-chip";
+    chip.textContent = suggestion.tag;
+    chip.title = suggestion.reason || "";
+    chip.addEventListener("click", () => acceptSuggestion(scope, suggestion.tag));
+    nodes.list.appendChild(chip);
+  });
+}
+
+function clearSuggestions(scope) {
+  state.suggestions[scope] = [];
+  setSuggestionStatus(scope, "");
+  renderSuggestions(scope);
+}
+
+async function suggestTags(scope) {
+  const metadata = scope === "upload" ? uploadMetadataFromForm() : metadataFromForm(el.detailForm, true);
+  const nodes = suggestionNodes(scope);
+  nodes.suggest.disabled = true;
+  setSuggestionStatus(scope, "Loading suggestions...");
+  try {
+    const body = await apiFetch("/manuals/tags/suggest", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ kb_name: state.kbName, metadata, limit: 8 }),
+    });
+    state.suggestions[scope] = body.suggestions || [];
+    renderSuggestions(scope);
+    setSuggestionStatus(scope, state.suggestions[scope].length ? "" : "No new tag suggestions.");
+  } catch (error) {
+    state.suggestions[scope] = [];
+    renderSuggestions(scope);
+    setSuggestionStatus(scope, error.message, "error");
+  } finally {
+    nodes.suggest.disabled = scope === "detail" && !selectedManual();
+  }
+}
+
+function tagsTextarea(scope) {
+  return scope === "upload" ? el.uploadForm.elements.tags : el.detailForm.elements.tags;
+}
+
+function acceptSuggestion(scope, tag) {
+  const input = tagsTextarea(scope);
+  input.value = tagsToText(dedupeTags([...tagsFromText(input.value), tag]));
+  state.suggestions[scope] = (state.suggestions[scope] || []).filter(
+    (suggestion) => normalizeTag(suggestion.tag) !== normalizeTag(tag),
+  );
+  renderSuggestions(scope);
+}
+
+function acceptAllSuggestions(scope) {
+  const input = tagsTextarea(scope);
+  const accepted = (state.suggestions[scope] || []).map((suggestion) => suggestion.tag);
+  input.value = tagsToText(dedupeTags([...tagsFromText(input.value), ...accepted]));
+  state.suggestions[scope] = [];
+  renderSuggestions(scope);
+}
+
+function dedupeTags(tags) {
+  const seen = new Set();
+  const result = [];
+  tags.forEach((tag) => {
+    const normalized = normalizeTag(tag);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
 }
 
 async function loadManuals() {
@@ -236,6 +347,7 @@ function renderTable() {
     `;
     tr.addEventListener("click", () => {
       state.selectedManualId = manual.manual_id;
+      clearSuggestions("detail");
       render();
     });
     el.rows.appendChild(tr);
@@ -253,13 +365,18 @@ function renderDetail() {
     input.disabled = disabled;
   });
   el.validateDetail.disabled = disabled;
+  el.suggestDetailTags.disabled = disabled;
+  el.acceptAllDetailTags.disabled = disabled || state.suggestions.detail.length === 0;
   el.replaceFileButton.disabled = disabled;
   el.replaceFile.disabled = disabled;
   el.disableManual.disabled = disabled;
   el.hardDelete.disabled = disabled || el.hardDeleteConfirm.value !== manual?.manual_id;
   el.hardDeleteConfirm.disabled = disabled;
   el.detailSubtitle.textContent = manual ? manual.manual_id : "Select a manual";
-  if (!manual) return;
+  if (!manual) {
+    clearSuggestions("detail");
+    return;
+  }
 
   const metadata = manualMetadata(manual);
   fields.forEach((field) => {
@@ -345,6 +462,9 @@ el.validateDetail.addEventListener("click", async () => {
     showMessages(el.detailMessages, [error.message], "error");
   }
 });
+
+el.suggestDetailTags.addEventListener("click", () => suggestTags("detail"));
+el.acceptAllDetailTags.addEventListener("click", () => acceptAllSuggestions("detail"));
 
 el.detailForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -435,6 +555,7 @@ el.hardDelete.addEventListener("click", async () => {
 
 el.openUpload.addEventListener("click", () => {
   el.uploadMessages.innerHTML = "";
+  clearSuggestions("upload");
   if (typeof el.uploadDialog.showModal === "function") el.uploadDialog.showModal();
   else el.uploadDialog.setAttribute("open", "");
 });
@@ -449,6 +570,9 @@ el.validateUpload.addEventListener("click", async () => {
     showMessages(el.uploadMessages, [error.message], "error");
   }
 });
+
+el.suggestUploadTags.addEventListener("click", () => suggestTags("upload"));
+el.acceptAllUploadTags.addEventListener("click", () => acceptAllSuggestions("upload"));
 
 el.uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();

@@ -28,6 +28,8 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     body = response.text
     assert "Manual Library" in body
     assert 'id="manual-rows"' in body
+    assert 'id="suggest-upload-tags"' in body
+    assert 'id="suggest-detail-tags"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/manual_library.js" in body
 
@@ -40,5 +42,8 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
 
     assert css.status_code == 200
     assert "workspace" in css.text
+    assert "suggestion-chip" in css.text
     assert js.status_code == 200
     assert "manuals/validate" in js.text
+    assert "manuals/tags/suggest" in js.text
+    assert "acceptAllSuggestions" in js.text

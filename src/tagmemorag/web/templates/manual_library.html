@@ -128,6 +128,14 @@
                 </label>
               </div>
               <label><span>Tags</span><textarea name="tags" rows="3" placeholder="comma or newline separated"></textarea></label>
+              <div class="suggestion-box" id="detail-suggestions">
+                <div class="suggestion-toolbar">
+                  <button type="button" id="suggest-detail-tags">Suggest tags</button>
+                  <button type="button" id="accept-all-detail-tags">Accept all</button>
+                </div>
+                <div class="suggestion-status" data-role="status"></div>
+                <div class="suggestion-list" data-role="list"></div>
+              </div>
               <label><span>Notes</span><textarea name="notes" rows="3"></textarea></label>
               <details>
                 <summary>Raw JSON</summary>
@@ -180,6 +188,14 @@
           <label><span>Version</span><input name="version"></label>
         </div>
         <label><span>Tags</span><textarea name="tags" rows="3" placeholder="comma or newline separated"></textarea></label>
+        <div class="suggestion-box" id="upload-suggestions">
+          <div class="suggestion-toolbar">
+            <button type="button" id="suggest-upload-tags">Suggest tags</button>
+            <button type="button" id="accept-all-upload-tags">Accept all</button>
+          </div>
+          <div class="suggestion-status" data-role="status"></div>
+          <div class="suggestion-list" data-role="list"></div>
+        </div>
         <label><span>Notes</span><textarea name="notes" rows="3"></textarea></label>
         <div class="toggles">
           <label><input name="overwrite" type="checkbox"> Overwrite existing</label>

@@ -43,6 +43,7 @@ from .observability.tracing import configure_tracing, set_span_attributes, start
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
+from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
 from .types import GraphState
 from .wave_searcher import filter_node_ids, normalize_filters, wave_search
 
@@ -178,6 +179,13 @@ class ManualMetadataValidationRequest(BaseModel):
 class ManualMetadataUpdateRequest(BaseModel):
     kb_name: str = "default"
     metadata: dict[str, object]
+
+
+class ManualTagSuggestRequest(BaseModel):
+    kb_name: str = "default"
+    metadata: dict[str, object]
+    text_sample: str = Field(default="", max_length=4000)
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=24)
 
 
 class ManualLibraryRebuildRequest(BaseModel):
@@ -717,6 +725,29 @@ def validate_manual_metadata(
         current_manual_id=request.current_manual_id,
     )
     return result.to_dict()
+
+
+@app.post("/manuals/tags/suggest")
+def suggest_manual_tags(
+    request: ManualTagSuggestRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    graph_state = app_state.kbs.get(request.kb_name)
+    records = list_records(request.kb_name, settings, graph_state=graph_state)
+    suggestions, existing_tags = suggest_tags(
+        dict(request.metadata),
+        records=records,
+        graph_state=graph_state,
+        text_sample=request.text_sample,
+        limit=request.limit,
+    )
+    return {
+        "kb_name": request.kb_name,
+        "suggestions": [suggestion.to_dict() for suggestion in suggestions],
+        "existing_tags": existing_tags,
+    }
 
 
 @app.post("/manuals")
