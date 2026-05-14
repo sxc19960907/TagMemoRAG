@@ -97,7 +97,7 @@ def _build_config(embedder: str) -> Settings:
         if not os.environ.get("SILICONFLOW_API_KEY"):
             raise SystemExit("SILICONFLOW_API_KEY is required for the siliconflow baseline")
         return Settings(model={
-            "provider": "local",
+            "provider": "http",
             "name": "BAAI/bge-small-zh-v1.5",
             "dim": 384,
             "base_url": "https://api.siliconflow.cn/v1",
