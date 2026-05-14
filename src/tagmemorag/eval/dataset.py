@@ -47,6 +47,7 @@ class EvalCase:
     notes: str = ""
     top_k_override: int | None = None
     thresholds: EvalThresholds = EvalThresholds()
+    negatives: tuple[ExpectedResult, ...] = ()
 
 
 def load_eval_suite(path: str | Path) -> list[EvalCase]:
@@ -82,7 +83,13 @@ def _parse_case(raw: dict[str, Any], suite_path: Path, line_number: int) -> Eval
     relevant_raw = raw.get("relevant")
     if not isinstance(relevant_raw, list) or not relevant_raw:
         raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} must include non-empty relevant list")
-    relevant = tuple(_parse_expected(item, case_id, suite_path, line_number) for item in relevant_raw)
+    relevant = tuple(_parse_expected(item, case_id, suite_path, line_number, field="relevant") for item in relevant_raw)
+    negatives_raw = raw.get("negatives", [])
+    if negatives_raw is None:
+        negatives_raw = []
+    if not isinstance(negatives_raw, list):
+        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} negatives must be a list")
+    negatives = tuple(_parse_expected(item, case_id, suite_path, line_number, field="negatives") for item in negatives_raw)
     tags_raw = raw.get("tags", [])
     if not isinstance(tags_raw, list) or not all(isinstance(item, str) for item in tags_raw):
         raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} tags must be a list of strings")
@@ -105,12 +112,13 @@ def _parse_case(raw: dict[str, Any], suite_path: Path, line_number: int) -> Eval
         notes=str(raw.get("notes") or ""),
         top_k_override=top_k_override,
         thresholds=thresholds,
+        negatives=negatives,
     )
 
 
-def _parse_expected(raw: Any, case_id: str, suite_path: Path, line_number: int) -> ExpectedResult:
+def _parse_expected(raw: Any, case_id: str, suite_path: Path, line_number: int, *, field: str = "relevant") -> ExpectedResult:
     if not isinstance(raw, dict):
-        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} relevant entries must be objects")
+        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} {field} entries must be objects")
     text_contains_raw = raw.get("text_contains", ())
     if isinstance(text_contains_raw, str):
         text_contains = (text_contains_raw,)
@@ -130,9 +138,9 @@ def _parse_expected(raw: Any, case_id: str, suite_path: Path, line_number: int) 
         weight=float(raw.get("weight", 1.0)),
     )
     if expected.weight <= 0:
-        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} relevant weight must be positive")
+        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} {field} weight must be positive")
     if not (expected.source_file or expected.header or expected.anchor_key or expected.text_contains or expected.metadata):
-        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} relevant entry must include at least one matcher field")
+        raise EvalSuiteError(f"{suite_path}:{line_number}: case {case_id} {field} entry must include at least one matcher field")
     return expected
 
 

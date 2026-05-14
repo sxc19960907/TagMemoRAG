@@ -10,7 +10,7 @@ from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import build_kb, load_kb, save_kb
 
 from .dataset import EvalCase, EvalSuiteError, EvalThresholds, load_eval_suite
-from .matching import match_expectations
+from .matching import NegativeHit, match_expectations, match_negatives
 from .metrics import aggregate_metrics, compute_ranking_metrics
 from .report import EvalCaseReport, EvalReport, EvalSummary, expected_to_dict
 
@@ -88,7 +88,10 @@ def run_eval(
         results = execution.results
         rank_matches = match_expectations(results, case.relevant, case_id=case.id)
         metrics = compute_ranking_metrics(rank_matches, len(case.relevant), case_top_k)
-        failures = _threshold_failures(metrics.to_dict(), case.thresholds, prefix="case")
+        negative_hits = match_negatives(results[:case_top_k], case.negatives, case_id=case.id)
+        threshold_failures = _threshold_failures(metrics.to_dict(), case.thresholds, prefix="case")
+        negative_failures = _negative_violations(negative_hits)
+        failures = negative_failures + threshold_failures
         passed = not failures
         case_reports.append(
             EvalCaseReport(
@@ -105,6 +108,8 @@ def run_eval(
                 search_strategy=execution.strategy,
                 ann_candidate_count=execution.ann_candidate_count,
                 ann_fallback_reason=execution.ann_fallback_reason,
+                negatives=[expected_to_dict(item, f"{case.id}#neg{index + 1}") for index, item in enumerate(case.negatives)],
+                negative_hits=[hit.to_dict() for hit in negative_hits],
             )
         )
 
@@ -180,6 +185,13 @@ def _threshold_failures(metrics: dict[str, float], thresholds: EvalThresholds, *
         if threshold is not None and metrics[metric_name] < threshold:
             failures.append(f"{prefix} {metric_name} {metrics[metric_name]:.6f} < {threshold:.6f}")
     return failures
+
+
+def _negative_violations(hits: list[NegativeHit]) -> list[str]:
+    return [
+        f"negative #{hit.negative_index} matched at rank {hit.rank} ({hit.source_file})"
+        for hit in hits
+    ]
 
 
 def _validate_thresholds(thresholds: EvalThresholds) -> None:

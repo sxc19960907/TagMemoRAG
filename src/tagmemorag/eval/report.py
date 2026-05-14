@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from typing import Any
@@ -34,6 +34,8 @@ class EvalCaseReport:
     search_strategy: str = ""
     ann_candidate_count: int = 0
     ann_fallback_reason: str = ""
+    negatives: list[dict[str, Any]] = field(default_factory=list)
+    negative_hits: list[dict[str, int | str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -52,6 +54,10 @@ class EvalCaseReport:
             data["search_strategy"] = self.search_strategy
             data["ann_candidate_count"] = self.ann_candidate_count
             data["ann_fallback_reason"] = self.ann_fallback_reason
+        if self.negatives:
+            data["negatives"] = self.negatives
+        if self.negative_hits:
+            data["negative_hits"] = self.negative_hits
         return data
 
 
