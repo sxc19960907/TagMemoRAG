@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/prd.md", "reason": "Acceptance criteria AC1-AC8 are the verification target. Definition of Done lists test layers."}
+{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/design.md", "reason": "Cross-layer data flow (dataset → matching → runner → report → CI). Failure handling expectations and observability fields to verify."}
+{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/implement.md", "reason": "Per-step validation commands and review gates list — each step's gate is a check item."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest scope and test layering — checks must verify new eval changes follow them. Deterministic baseline output is a forbidden-pattern guard."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify new errors (missing baseline, malformed negatives) follow ServiceError code conventions."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify report output and CI logs do not leak high-cardinality data (raw queries, full source lists in metrics labels)."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify the negatives field is wired consistently through every layer it crosses."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify match_negatives reuses _matches helpers instead of duplicating relevance logic."}
