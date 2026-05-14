@@ -15,6 +15,7 @@ import structlog
 from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
 from .embedder import create_embedder
+from .epa_basis import retrain_report
 from .errors import ErrorCode, KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ServiceError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
 from .incremental_rebuild import RebuildDetail, build_kb_incremental
@@ -29,6 +30,7 @@ from .storage.json_anchor import JsonAnchorStore
 from .storage.json_graph import JsonGraphStore
 from .storage.npz_vector import NpzVectorStore
 from .storage.qdrant_vector import QdrantVectorStore
+from .tag_rebuild import sync_rebuild_tags
 from .types import Anchor, GraphState
 
 
@@ -51,6 +53,15 @@ class RebuildTask:
     chunk_identity_fallback_reason: str = ""
     impact_report: dict | None = None
     qdrant_sync: dict | None = None
+    tag_embeddings_added: int = 0
+    tag_embeddings_skipped: int = 0
+    tag_embeddings_failed: int = 0
+    orphan_tags_removed: int = 0
+    tag_embedding_error: str = ""
+    epa_basis_train_kind: str = ""
+    epa_basis_K: int = 0
+    epa_basis_tag_count: int = 0
+    epa_train_error: str = ""
     cancel_requested: bool = False
 
     def to_dict(self) -> dict:
@@ -73,6 +84,15 @@ class RebuildTask:
             "impact_report": self.impact_report,
             "impact_summary": self.impact_report.get("summary") if isinstance(self.impact_report, dict) else None,
             "qdrant_sync": self.qdrant_sync,
+            "tag_embeddings_added": self.tag_embeddings_added,
+            "tag_embeddings_skipped": self.tag_embeddings_skipped,
+            "tag_embeddings_failed": self.tag_embeddings_failed,
+            "orphan_tags_removed": self.orphan_tags_removed,
+            "tag_embedding_error": self.tag_embedding_error,
+            "epa_basis_train_kind": self.epa_basis_train_kind,
+            "epa_basis_K": self.epa_basis_K,
+            "epa_basis_tag_count": self.epa_basis_tag_count,
+            "epa_train_error": self.epa_train_error,
             "cancel_requested": self.cancel_requested,
         }
         summary = getattr(self, "operations_summary", None)
@@ -313,6 +333,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             normalize=cfg.model.normalize,
         )
         chunks = []
+        manual_tags_by_id: dict[str, tuple[str, ...]] = {}
         document_paths = (
             p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
         )
@@ -321,6 +342,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
             if not is_active_status(metadata.status):
                 continue
+            manual_tags_by_id[metadata.manual_id] = metadata.tags
             chunks.extend(
                 parse_document(
                     path,
@@ -349,6 +371,14 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         remapped, unresolved = anchor_store.reconcile(old_anchors, graph, vectors, embedder)
         anchors = {anchor.node_id: anchor for anchor in remapped if anchor.node_id is not None}
         build_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        tag_report = sync_rebuild_tags(
+            kb_name,
+            cfg,
+            manual_tags_by_id=manual_tags_by_id,
+            embedder=embedder,
+            remove_missing_manuals=True,
+        )
+        epa_report = retrain_report(cfg)
         meta = {
             "schema_version": cfg.storage.schema_version,
             "model_name": getattr(embedder, "model_name", cfg.model.name),
@@ -356,6 +386,15 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             "built_at": _now(),
             "chunk_count": len(chunks),
             "aggregate_default": cfg.search.aggregate,
+            "tag_embeddings_added": tag_report.tag_embeddings_added,
+            "tag_embeddings_skipped": tag_report.tag_embeddings_skipped,
+            "tag_embeddings_failed": tag_report.tag_embeddings_failed,
+            "orphan_tags_removed": tag_report.orphan_tags_removed,
+            "tag_embedding_error": tag_report.tag_embedding_error,
+            "epa_basis_train_kind": str(epa_report.get("epa_basis_train_kind", "") or ""),
+            "epa_basis_K": int(epa_report.get("epa_basis_K", 0) or 0),
+            "epa_basis_tag_count": int(epa_report.get("epa_basis_tag_count", 0) or 0),
+            "epa_train_error": str(epa_report.get("epa_train_error", "") or ""),
         }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
@@ -427,6 +466,15 @@ def _build_for_rebuild(
             auto_decision_reason=auto_decision_reason,
             chunk_identity_fallback_reason=result.detail.chunk_identity_fallback_reason,
             impact_report=result.detail.impact_report,
+            tag_embeddings_added=result.detail.tag_embeddings_added,
+            tag_embeddings_skipped=result.detail.tag_embeddings_skipped,
+            tag_embeddings_failed=result.detail.tag_embeddings_failed,
+            orphan_tags_removed=result.detail.orphan_tags_removed,
+            tag_embedding_error=result.detail.tag_embedding_error,
+            epa_basis_train_kind=result.detail.epa_basis_train_kind,
+            epa_basis_K=result.detail.epa_basis_K,
+            epa_basis_tag_count=result.detail.epa_basis_tag_count,
+            epa_train_error=result.detail.epa_train_error,
         )
         _apply_rebuild_detail(task, detail)
         if result.state is not None:
@@ -441,6 +489,19 @@ def _build_for_rebuild(
     fallback_reason = task.fallback_reason
     dirty_count = len(manifest.dirty_manuals) if manifest is not None else 0
     impact_report = _full_rebuild_impact(kb_name, new_state, old_state, manifest)
+    impact_report.update(
+        {
+            "tag_embeddings_added": int(new_state.meta.get("tag_embeddings_added", 0) or 0),
+            "tag_embeddings_skipped": int(new_state.meta.get("tag_embeddings_skipped", 0) or 0),
+            "tag_embeddings_failed": int(new_state.meta.get("tag_embeddings_failed", 0) or 0),
+            "orphan_tags_removed": int(new_state.meta.get("orphan_tags_removed", 0) or 0),
+            "tag_embedding_error": str(new_state.meta.get("tag_embedding_error", "") or ""),
+            "epa_basis_train_kind": str(new_state.meta.get("epa_basis_train_kind", "") or ""),
+            "epa_basis_K": int(new_state.meta.get("epa_basis_K", 0) or 0),
+            "epa_basis_tag_count": int(new_state.meta.get("epa_basis_tag_count", 0) or 0),
+            "epa_train_error": str(new_state.meta.get("epa_train_error", "") or ""),
+        }
+    )
     detail = RebuildDetail(
         requested_mode=requested_mode,
         effective_mode="full",
@@ -449,6 +510,15 @@ def _build_for_rebuild(
         embedded_chunk_count=new_state.graph.number_of_nodes(),
         auto_decision_reason=auto_decision_reason,
         impact_report=impact_report,
+        tag_embeddings_added=int(new_state.meta.get("tag_embeddings_added", 0) or 0),
+        tag_embeddings_skipped=int(new_state.meta.get("tag_embeddings_skipped", 0) or 0),
+        tag_embeddings_failed=int(new_state.meta.get("tag_embeddings_failed", 0) or 0),
+        orphan_tags_removed=int(new_state.meta.get("orphan_tags_removed", 0) or 0),
+        tag_embedding_error=str(new_state.meta.get("tag_embedding_error", "") or ""),
+        epa_basis_train_kind=str(new_state.meta.get("epa_basis_train_kind", "") or ""),
+        epa_basis_K=int(new_state.meta.get("epa_basis_K", 0) or 0),
+        epa_basis_tag_count=int(new_state.meta.get("epa_basis_tag_count", 0) or 0),
+        epa_train_error=str(new_state.meta.get("epa_train_error", "") or ""),
     )
     new_state.meta.update(
         {
@@ -460,6 +530,15 @@ def _build_for_rebuild(
             "fallback_reason": detail.fallback_reason,
             "auto_decision_reason": detail.auto_decision_reason,
             "impact_report": impact_report,
+            "tag_embeddings_added": detail.tag_embeddings_added,
+            "tag_embeddings_skipped": detail.tag_embeddings_skipped,
+            "tag_embeddings_failed": detail.tag_embeddings_failed,
+            "orphan_tags_removed": detail.orphan_tags_removed,
+            "tag_embedding_error": detail.tag_embedding_error,
+            "epa_basis_train_kind": detail.epa_basis_train_kind,
+            "epa_basis_K": detail.epa_basis_K,
+            "epa_basis_tag_count": detail.epa_basis_tag_count,
+            "epa_train_error": detail.epa_train_error,
             "impact_summary": impact_report.get("summary") if isinstance(impact_report, dict) else None,
         }
     )
@@ -477,6 +556,15 @@ def _apply_rebuild_detail(task: RebuildTask, detail: RebuildDetail) -> None:
     task.auto_decision_reason = detail.auto_decision_reason
     task.chunk_identity_fallback_reason = detail.chunk_identity_fallback_reason
     task.impact_report = detail.impact_report
+    task.tag_embeddings_added = detail.tag_embeddings_added
+    task.tag_embeddings_skipped = detail.tag_embeddings_skipped
+    task.tag_embeddings_failed = detail.tag_embeddings_failed
+    task.orphan_tags_removed = detail.orphan_tags_removed
+    task.tag_embedding_error = detail.tag_embedding_error
+    task.epa_basis_train_kind = detail.epa_basis_train_kind
+    task.epa_basis_K = detail.epa_basis_K
+    task.epa_basis_tag_count = detail.epa_basis_tag_count
+    task.epa_train_error = detail.epa_train_error
 
 
 def _auto_incremental_decision(docs_dir: str | Path, kb_name: str, cfg: Settings, manifest) -> tuple[bool, str]:

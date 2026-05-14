@@ -10,6 +10,7 @@ import numpy as np
 from .chunk_identity import ChunkIdentityMap, entry_from_chunk, entry_from_node, load_chunk_identity
 from .config import Settings
 from .errors import RebuildFailedError
+from .epa_basis import retrain_report
 from .graph_builder import build_graph
 from .manual_library import ManualLibraryManifest, is_active_status, list_records
 from .manuals import load_manual_metadata, metadata_from_node
@@ -17,6 +18,7 @@ from .observability.metrics import get_metrics
 from .parser import parse_document
 from .rebuild_impact import make_impact_report
 from .storage.json_anchor import JsonAnchorStore
+from .tag_rebuild import sync_rebuild_tags
 from .types import Chunk, GraphState
 
 
@@ -31,6 +33,15 @@ class RebuildDetail:
     auto_decision_reason: str = ""
     chunk_identity_fallback_reason: str = ""
     impact_report: dict[str, Any] | None = None
+    tag_embeddings_added: int = 0
+    tag_embeddings_skipped: int = 0
+    tag_embeddings_failed: int = 0
+    orphan_tags_removed: int = 0
+    tag_embedding_error: str = ""
+    epa_basis_train_kind: str = ""
+    epa_basis_K: int = 0
+    epa_basis_tag_count: int = 0
+    epa_train_error: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +54,15 @@ class RebuildDetail:
             "auto_decision_reason": self.auto_decision_reason,
             "chunk_identity_fallback_reason": self.chunk_identity_fallback_reason,
             "impact_report": self.impact_report,
+            "tag_embeddings_added": self.tag_embeddings_added,
+            "tag_embeddings_skipped": self.tag_embeddings_skipped,
+            "tag_embeddings_failed": self.tag_embeddings_failed,
+            "orphan_tags_removed": self.orphan_tags_removed,
+            "tag_embedding_error": self.tag_embedding_error,
+            "epa_basis_train_kind": self.epa_basis_train_kind,
+            "epa_basis_K": self.epa_basis_K,
+            "epa_basis_tag_count": self.epa_basis_tag_count,
+            "epa_train_error": self.epa_train_error,
         }
 
 
@@ -64,6 +84,7 @@ class IncrementalPlan:
     active_source_by_manual_id: dict[str, str]
     reusable: list[ReusableChunk] = field(default_factory=list)
     dirty_chunks: list[Chunk] = field(default_factory=list)
+    manual_tags_by_id: dict[str, tuple[str, ...]] = field(default_factory=dict)
     chunk_identity_fallback_reason: str = ""
 
 
@@ -117,6 +138,17 @@ def build_kb_incremental(
             old_keys_by_manual=old_keys_by_manual,
             new_keys_by_manual=new_keys_by_manual,
         )
+        tag_report = sync_rebuild_tags(
+            kb_name,
+            cfg,
+            manual_tags_by_id=plan.manual_tags_by_id,
+            embedder=embedder,
+            manual_ids_to_clear=plan.dirty_manual_ids,
+        )
+        epa_report = retrain_report(cfg)
+        impact_data = impact_report.to_dict()
+        impact_data.update(tag_report.to_dict())
+        impact_data.update(epa_report)
         detail = RebuildDetail(
             requested_mode=requested_mode,
             effective_mode="incremental",
@@ -124,7 +156,16 @@ def build_kb_incremental(
             reused_chunk_count=len(plan.reusable),
             embedded_chunk_count=len(plan.dirty_chunks),
             chunk_identity_fallback_reason=plan.chunk_identity_fallback_reason,
-            impact_report=impact_report.to_dict(),
+            impact_report=impact_data,
+            tag_embeddings_added=tag_report.tag_embeddings_added,
+            tag_embeddings_skipped=tag_report.tag_embeddings_skipped,
+            tag_embeddings_failed=tag_report.tag_embeddings_failed,
+            orphan_tags_removed=tag_report.orphan_tags_removed,
+            tag_embedding_error=tag_report.tag_embedding_error,
+            epa_basis_train_kind=str(epa_report.get("epa_basis_train_kind", "") or ""),
+            epa_basis_K=int(epa_report.get("epa_basis_K", 0) or 0),
+            epa_basis_tag_count=int(epa_report.get("epa_basis_tag_count", 0) or 0),
+            epa_train_error=str(epa_report.get("epa_train_error", "") or ""),
         )
         meta = {
             "schema_version": cfg.storage.schema_version,
@@ -140,7 +181,16 @@ def build_kb_incremental(
             "dirty_manual_count": detail.dirty_manual_count,
             "fallback_reason": detail.fallback_reason,
             "chunk_identity_fallback_reason": detail.chunk_identity_fallback_reason,
-            "impact_report": impact_report.to_dict(),
+            "impact_report": impact_data,
+            "tag_embeddings_added": tag_report.tag_embeddings_added,
+            "tag_embeddings_skipped": tag_report.tag_embeddings_skipped,
+            "tag_embeddings_failed": tag_report.tag_embeddings_failed,
+            "orphan_tags_removed": tag_report.orphan_tags_removed,
+            "tag_embedding_error": tag_report.tag_embedding_error,
+            "epa_basis_train_kind": detail.epa_basis_train_kind,
+            "epa_basis_K": detail.epa_basis_K,
+            "epa_basis_tag_count": detail.epa_basis_tag_count,
+            "epa_train_error": detail.epa_train_error,
             "impact_summary": impact_report.summary,
         }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
@@ -236,6 +286,7 @@ def _build_plan(
         metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
         if not is_active_status(metadata.status):
             continue
+        plan.manual_tags_by_id[metadata.manual_id] = metadata.tags
         for chunk in parse_document(
             path,
             cfg.parser.max_chars,
