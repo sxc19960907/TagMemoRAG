@@ -1,9 +1,0 @@
-{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/prd.md", "reason": "Goal, D1-D5 decisions, MVP M1-M5, 8 acceptance criteria — drives every implementation step."}
-{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/design.md", "reason": "Module boundary diagram, case schema with negatives, baseline JSON shape, CI workflow shape, deterministic config_hash."}
-{"file": ".trellis/tasks/05-14-retrieval-quality-regression-suite/implement.md", "reason": "Ordered 6-step checklist with per-step validation commands and rollback points."}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test layering, dependency rules, deterministic test expectations — the new eval suites and baseline scripts must follow them."}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServiceError shape conventions for new error paths (missing baseline file, malformed jsonl, negatives schema errors)."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Forbidden high-cardinality fields (raw query text, source-file lists). Eval reports may contain these — must check what gets logged vs persisted."}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module placement (eval/, scripts/, tests/fixtures/eval/baselines/, .github/workflows/) — keep new files in canonical locations."}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "negatives field flows dataset.py → matching.py → runner.py → report.py; cross-layer consistency check."}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse ExpectedRelevance / _matches() / _parse_relevant — do not duplicate match logic for negatives."}
