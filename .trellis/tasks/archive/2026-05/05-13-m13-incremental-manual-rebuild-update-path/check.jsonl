@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality checklist for M13 review"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify atomic dirty-state and persistence writes"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify structured fallback and API errors"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify safe rebuild observability fields"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests, compatibility, and layer boundaries"}
+{"file": ".trellis/spec/guides/index.md", "reason": "Review cross-layer and reuse concerns"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/prd.md", "reason": "M13 requirements and acceptance criteria"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/design.md", "reason": "M13 technical design"}
+{"file": ".trellis/tasks/05-13-m13-incremental-manual-rebuild-update-path/implement.md", "reason": "M13 implementation and validation plan"}
