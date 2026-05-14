@@ -21,3 +21,12 @@ services:
       timeout: 2s
       retries: 3
       start_period: 10s
+  sqlite:
+    image: keinos/sqlite3:3.45.1
+    profiles:
+      - tools
+    working_dir: /workspace
+    volumes:
+      - ./data:/workspace/data
+    entrypoint: ["sqlite3"]
+    command: ["data/manual_registry.sqlite3"]

@@ -92,6 +92,14 @@ manual_library:
   s3_session_token_env: ""
   s3_addressing_style: auto
   s3_timeout_seconds: 10.0
+wave_phase0:
+  enabled: true
+  epa_basis_enabled: true
+  epa_min_k: 8
+  epa_cluster_count: 32
+  epa_energy_threshold: 0.95
+  epa_retrain_growth_ratio: 0.20
+  epa_lock_timeout_seconds: 30.0
 observability:
   metrics:
     enabled: true

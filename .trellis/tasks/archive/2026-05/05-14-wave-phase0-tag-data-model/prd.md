@@ -169,7 +169,7 @@ Phase 0 范围明确为以下五件事，按依赖序：
 - [ ] AC2：在 4 个 fixture KB（washer/dishwasher/ac/fridge）上跑 `tagmemorag build`，所有 canonical tags 都有 embedding，EPA basis 文件生成且 train_kind 标记为 cold-start
 - [ ] AC3：跑两次重复的 build，第二次 `tag_embeddings_added=0, tag_embeddings_skipped=N`（增量幂等）
 - [ ] AC4：触发 tag_rewrite（rename/merge/delete）后，SQLite tags 表与 metadata.json 状态一致；epa_basis dirty 标记正确
-- [ ] AC5：删除 manual 后，chunk_tags 行被 CASCADE 清理；无引用的 tag 被识别为孤儿
+- [ ] AC5：删除 manual 后，manual_tags 行被清理；无引用的 tag 被识别为孤儿
 - [ ] AC6：execute_search 在 fixture 上的输出与 Phase 0 之前的 baseline 字节级一致（用 snapshot test 锁住）
 - [ ] AC7：构造 tag 数 < K*2 的场景，验证 EPA basis 走 cold-start 分支不抛错；构造 tag 数 ≥ K*2 的场景，验证升级到真 PCA
 - [ ] AC8：删 SQLite 三表 + 删 epa_basis.npz，重启服务后所有功能正常（验证回滚路径）
@@ -198,4 +198,3 @@ Phase 0 范围明确为以下五件事，按依赖序：
 - **D3**: tag_intrinsic_residuals 表建表留空，默认 1.0
 - **D4**: tag embedding 在 incremental_rebuild 时增量计算
 - **D5**: tag_rewrite 接通 SQLite，manual 删除级联清理 — 纳入 Phase 0 MVP
-

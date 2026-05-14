@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
 from .config import Settings
+from .epa_basis import retrain_report
 from .errors import ErrorCode, ServiceError
 from .manual_library import (
     ACTIVE_STATUSES,
@@ -20,7 +21,9 @@ from .manual_library import (
     safe_source_path,
 )
 from .manuals import ManualMetadata, metadata_sidecar_path, normalize_tag
+from .manual_registry import create_registry
 from .storage.atomic import atomic_write
+from .tag_store import delete_tags, find_orphan_tags, upsert_manual_tags
 from .types import GraphState
 
 TAG_POLICY_NAME = ".tagmemorag-tags.json"
@@ -535,6 +538,7 @@ def commit_tag_rewrite(
         )
     changes = {change.manual_id: change for change in preview.changes}
     updated = 0
+    updated_changes: list[TagRewriteChange] = []
     failures: list[dict[str, Any]] = []
     for record in list_records(kb_name, cfg):
         change = changes.get(record.manual_id)
@@ -545,6 +549,7 @@ def commit_tag_rewrite(
             metadata = replace(record.metadata, tags=change.after_tags)
             _write_metadata(metadata_sidecar_path(source_path), metadata)
             updated += 1
+            updated_changes.append(change)
         except ServiceError as exc:
             failures.append({"manual_id": record.manual_id, "code": exc.code.value, "message": exc.message, "detail": exc.detail})
         except OSError as exc:
@@ -562,6 +567,8 @@ def commit_tag_rewrite(
                 source_file=change.source_file,
                 operation="metadata_update",
             )
+        _sync_tag_rewrite_sqlite(kb_name, cfg, updated_changes)
+        retrain_report(cfg, force=True)
     return TagRewriteResult(
         preview=preview,
         updated_count=updated,
@@ -569,6 +576,22 @@ def commit_tag_rewrite(
         failures=tuple(failures),
         policy=policy,
     )
+
+
+def _sync_tag_rewrite_sqlite(kb_name: str, cfg: Settings, changes: Sequence[TagRewriteChange]) -> None:
+    registry = create_registry(_phase0_registry_path(cfg))
+    with registry.connection() as conn:
+        with conn:
+            for change in changes:
+                upsert_manual_tags(conn, kb_name, change.manual_id, change.after_tags)
+            orphans = find_orphan_tags(conn, kb_name)
+            delete_tags(conn, orphans)
+
+
+def _phase0_registry_path(cfg: Settings) -> str | Path:
+    if cfg.manual_library.registry_path == "data/manual_registry.sqlite3":
+        return Path(cfg.storage.data_dir) / "manual_registry.sqlite3"
+    return cfg.manual_library.registry_path
 
 
 def _policy_with_aliases(

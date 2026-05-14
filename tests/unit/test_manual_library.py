@@ -27,6 +27,8 @@ from tagmemorag.manual_library import (
     verify_registry_blobs,
     validate_metadata,
 )
+from tagmemorag.manual_registry import create_registry
+from tagmemorag.tag_store import upsert_manual_tags
 from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import AppState, build_kb, start_library_rebuild
 from tests.unit.test_storage_state import FakeQdrantClient
@@ -144,6 +146,26 @@ def test_validate_metadata_normalizes_and_reports_duplicate_manual_id(library_co
     assert result.messages[0].code == "DUPLICATE_MANUAL_ID"
 
 
+def test_validate_metadata_emits_non_blocking_tag_ordering_hint(library_config):
+    payload = _metadata("coffee/multi-tag.md", manual_id="cm-multi")
+    payload["tags"] = ["fault-code", "diagnostics", "washer"]
+
+    result = validate_metadata("default", payload, library_config, mode="create")
+
+    assert result.valid is True
+    hints = [m for m in result.messages if m.code == "TAG_ORDERING_HINT"]
+    assert len(hints) == 1
+    assert hints[0].detail.get("severity") == "info"
+    assert hints[0].field == "tags"
+
+
+def test_validate_metadata_skips_ordering_hint_for_single_tag(library_config):
+    result = validate_metadata("default", _metadata("coffee/single.md", manual_id="cm-solo"), library_config, mode="create")
+
+    assert result.valid is True
+    assert all(m.code != "TAG_ORDERING_HINT" for m in result.messages)
+
+
 def test_upsert_update_disable_delete_and_manifest_pending(library_config):
     record = upsert_manual("default", _metadata(), b"# Use\nClean weekly.\n", library_config)
     root = library_root("default", library_config)
@@ -169,6 +191,51 @@ def test_upsert_update_disable_delete_and_manifest_pending(library_config):
     assert load_manifest("default", library_config).dirty_manuals["cm1"].operation == "hard_delete"
     assert not (root / "coffee" / "cm1.md").exists()
     assert not list_records("default", library_config)
+
+
+def test_delete_manual_cleans_phase0_tag_links_and_marks_epa_dirty(library_config):
+    upsert_manual("default", _metadata(), b"# Use\nClean weekly.\n", library_config)
+    with create_registry(Path(library_config.storage.data_dir) / "manual_registry.sqlite3").connection() as conn:
+        upsert_manual_tags(conn, "default", "cm1", ["maintenance-task"])
+
+    result = delete_manual("default", "cm1", library_config)
+
+    with create_registry(Path(library_config.storage.data_dir) / "manual_registry.sqlite3").connection() as conn:
+        manual_tag_count = conn.execute("SELECT count(*) AS count FROM manual_tags").fetchone()["count"]
+        tag_count = conn.execute("SELECT count(*) AS count FROM tags").fetchone()["count"]
+
+    assert result["orphan_tags_removed"] == 1
+    assert manual_tag_count == 0
+    assert tag_count == 0
+    assert (Path(library_config.storage.data_dir) / "_global" / "epa_basis.dirty").exists()
+
+
+def test_registry_delete_manual_cleans_phase0_tag_links(tmp_path):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite3"),
+            blob_backend="local",
+            blob_root_dir=str(tmp_path / "blobs"),
+        ),
+        model={"dim": 64},
+    )
+    upsert_manual("default", _metadata(), b"# Use\nClean weekly.\n", cfg)
+    with create_registry(cfg.manual_library.registry_path).connection() as conn:
+        upsert_manual_tags(conn, "default", "cm1", ["maintenance-task"])
+
+    result = delete_manual("default", "cm1", cfg)
+
+    with create_registry(cfg.manual_library.registry_path).connection() as conn:
+        manual_tag_count = conn.execute("SELECT count(*) AS count FROM manual_tags").fetchone()["count"]
+        tag_count = conn.execute("SELECT count(*) AS count FROM tags").fetchone()["count"]
+
+    assert result["orphan_tags_removed"] == 1
+    assert result["registry_backend"] == "sqlite"
+    assert manual_tag_count == 0
+    assert tag_count == 0
 
 
 def test_disabled_manual_is_skipped_by_build_kb(library_config, fake_embedder):

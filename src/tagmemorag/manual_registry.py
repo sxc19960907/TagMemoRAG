@@ -307,13 +307,61 @@ class SQLiteManualRegistry:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tags(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kb_name TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    vector BLOB,
+                    embedding_dim INTEGER,
+                    embedded_at TEXT,
+                    UNIQUE(kb_name, name)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS manual_tags(
+                    kb_name TEXT NOT NULL,
+                    manual_id TEXT NOT NULL,
+                    tag_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (kb_name, manual_id, tag_id),
+                    FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tag_intrinsic_residuals(
+                    tag_id INTEGER PRIMARY KEY,
+                    residual_energy REAL NOT NULL DEFAULT 1.0,
+                    neighbor_count INTEGER NOT NULL DEFAULT 0,
+                    computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                )
+                """
+            )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_records_kb_status ON manual_records(kb_name, status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_audit_manual ON manual_audit_events(kb_name, manual_id, created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tags_kb ON tags(kb_name)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_tags_tag ON manual_tags(tag_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_tags_kb_manual ON manual_tags(kb_name, manual_id)")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+    def connection(self) -> sqlite3.Connection:
+        """Return a sqlite3 connection for callers that need to share the registry DB.
+
+        Caller is responsible for closing the connection (use as context manager).
+        Foreign keys are enabled so CASCADE deletes propagate.
+        """
+        return self._connect()
 
 
 def create_registry(path: str | Path) -> SQLiteManualRegistry:

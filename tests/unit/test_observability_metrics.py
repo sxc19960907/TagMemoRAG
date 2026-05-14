@@ -37,6 +37,28 @@ def test_metric_helpers_register_custom_series():
     assert "tagmemorag_startup_duration_seconds 0.25" in body
 
 
+def test_phase0_tag_and_epa_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_embeddings(kb_name="default", outcome="added", count=3)
+    collector.record_tag_embeddings(kb_name="default", outcome="skipped", count=2)
+    collector.record_tag_embeddings(kb_name="default", outcome="failed", count=0)
+    collector.set_tags_total(kb_name="default", count=12)
+    collector.record_epa_basis_retrain(outcome="cold-start", duration=0.05)
+    collector.record_epa_basis_retrain(outcome="real-pca", duration=0.5)
+    collector.record_epa_basis_retrain(outcome="skipped", duration=0.0)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_tag_embeddings_total{kb_name="default",outcome="added"} 3.0' in body
+    assert 'tagmemorag_tag_embeddings_total{kb_name="default",outcome="skipped"} 2.0' in body
+    assert 'tagmemorag_tags_total{kb_name="default"} 12.0' in body
+    assert 'tagmemorag_epa_basis_retrain_total{outcome="cold-start"}' in body
+    assert 'tagmemorag_epa_basis_retrain_total{outcome="real-pca"}' in body
+    assert 'tagmemorag_epa_basis_retrain_total{outcome="skipped"}' in body
+    assert "tagmemorag_epa_basis_retrain_duration_seconds_bucket" in body
+
+
 def test_metric_label_contract_blocks_sensitive_dimensions():
     metrics.assert_label_contract()
     assert not (metrics.ALLOWED_LABEL_NAMES & metrics.FORBIDDEN_LABEL_NAMES)
