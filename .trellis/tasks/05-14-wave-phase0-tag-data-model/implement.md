@@ -2,112 +2,123 @@
 
 执行清单按依赖序排列。每一步都是可独立 commit 的小切片；遇到失败先回到上一个绿色点再继续。
 
-## 前置检查（开始前）
+- [x] 前置检查（开始前）
 
-- [ ] 已读 `prd.md` 的 D1-D5 决策与 5 项 MVP 工作项（M1-M5）
-- [ ] 已读 `design.md` 的模块划分与数据契约
-- [ ] 已读 `research/source-data-model.md` 的 schema 终稿（**M1 schema 名为 `manual_tags` 不是 `chunk_tags`**）
-- [ ] 已读 `research/incremental-pca-feasibility.md` 的并发与原子写模式
-- [ ] 当前分支干净，跑一次 `pytest` 全绿建立 baseline
-- [ ] 已建立 `tests/e2e/test_search_baseline_invariance.py` 的 baseline 输出快照（AC6 锁底）
+- [x] 已读 `prd.md` 的 D1-D5 决策与 5 项 MVP 工作项（M1-M5）
+- [x] 已读 `design.md` 的模块划分与数据契约
+- [x] 已读 `research/source-data-model.md` 的 schema 终稿（**M1 schema 名为 `manual_tags` 不是 `chunk_tags`**）
+- [x] 已读 `research/incremental-pca-feasibility.md` 的并发与原子写模式
+- [x] 当前分支干净，跑一次 `pytest` 全绿建立 baseline
+- [x] 已建立 `tests/e2e/test_search_baseline_invariance.py` 的 baseline 输出快照（AC6 锁底）
 
 ## 执行清单（按依赖序）
 
 ### Step 1: SQLite schema 三件套（M1）
 
-- [ ] 1.1 修改 `src/tagmemorag/manual_registry.py` 的 `_init_schema`，增加 `tags` / `manual_tags` / `tag_intrinsic_residuals` 三张表 + 三个 index（schema 见 `design.md` 数据契约段）
-- [ ] 1.2 在 `SQLiteManualRegistry` 上暴露 `connection()` 上下文管理（如不存在），供 tag_store 复用
-- [ ] 1.3 写 `src/tagmemorag/tag_store.py`：定义 `upsert_canonical_tag`, `upsert_manual_tags`, `delete_manual_tags`, `find_orphan_tags`, `delete_tags`, `lookup_tag_id`, `iter_canonical_tags_with_vectors` 七个函数
-- [ ] 1.4 写 `tests/unit/test_tag_store.py`：UNIQUE(kb,name) 约束、CASCADE、position 1-indexed 写入、orphan 检测
-- [ ] 1.5 跑 `pytest tests/unit/test_tag_store.py -v`，全绿
-- [ ] 1.6 跑 `pytest`（全套），无回归
+- [x] 1.1 修改 `src/tagmemorag/manual_registry.py` 的 `_init_schema`，增加 `tags` / `manual_tags` / `tag_intrinsic_residuals` 三张表 + 三个 index（schema 见 `design.md` 数据契约段）
+- [x] 1.2 在 `SQLiteManualRegistry` 上暴露 `connection()` 上下文管理（如不存在），供 tag_store 复用
+- [x] 1.3 写 `src/tagmemorag/tag_store.py`：定义 `upsert_canonical_tag`, `upsert_manual_tags`, `delete_manual_tags`, `find_orphan_tags`, `delete_tags`, `lookup_tag_id`, `iter_canonical_tags_with_vectors` 七个函数
+- [x] 1.4 写 `tests/unit/test_tag_store.py`：UNIQUE(kb,name) 约束、CASCADE、position 1-indexed 写入、orphan 检测
+- [x] 1.5 跑 `pytest tests/unit/test_tag_store.py -v`，全绿
+- [x] 1.6 跑 `pytest`（全套），无回归
 
 **Validation**: `pytest tests/unit/test_tag_store.py tests/unit/test_manual_registry.py`
 **Review gate**: schema 与 `research/source-data-model.md` 终稿 byte-for-byte 一致
 
 ### Step 2: Tag embedding 增量（M2）
 
-- [ ] 2.1 写 `src/tagmemorag/tag_embedder.py`：`embed_dirty_tags(conn, kb_name, embedder)` 函数（design.md 算法段已给伪代码）
-- [ ] 2.2 处理维度校验异常 `EmbeddingDimMismatchError`，定义在 `errors.py`
-- [ ] 2.3 写 `tests/unit/test_tag_embedder.py`：幂等性（重跑只 skip）、batch 行为、维度不匹配处理、空 tag 列表无 op
-- [ ] 2.4 修改 `src/tagmemorag/incremental_rebuild.py`：在 dirty manual 处理末尾追加 `tag_store.upsert_manual_tags` + `tag_embedder.embed_dirty_tags`
-- [ ] 2.5 修改 `src/tagmemorag/state.py` 的 `RebuildTask`：增加 `tag_embeddings_added/skipped/failed` 字段
-- [ ] 2.6 跑 `tests/integration/test_phase0_rebuild.py`：fixture build → 验证所有 canonical tags 有 vector
+- [x] 2.1 写 `src/tagmemorag/tag_embedder.py`：`embed_dirty_tags(conn, kb_name, embedder)` 函数（design.md 算法段已给伪代码）
+- [x] 2.2 处理维度校验异常 `EmbeddingDimMismatchError`，定义在 `errors.py`
+- [x] 2.3 写 `tests/unit/test_tag_embedder.py`：幂等性（重跑只 skip）、batch 行为、维度不匹配处理、空 tag 列表无 op
+- [x] 2.4 修改 `src/tagmemorag/incremental_rebuild.py`：在 dirty manual 处理末尾追加 `tag_store.upsert_manual_tags` + `tag_embedder.embed_dirty_tags`
+- [x] 2.5 修改 `src/tagmemorag/state.py` 的 `RebuildTask`：增加 `tag_embeddings_added/skipped/failed` 字段
+- [x] 2.6 跑 `tests/integration/test_phase0_rebuild.py`：fixture build → 验证所有 canonical tags 有 vector
 
 **Validation**: `pytest tests/unit/test_tag_embedder.py tests/integration/test_phase0_rebuild.py`
 **Review gate**: 跑两次 build，第二次 `tag_embeddings_added=0, skipped>0`（AC3）
 
 ### Step 3: EPA basis（M3）
 
-- [ ] 3.1 在 `pyproject.toml` 增加 `scikit-learn>=1.4`（依赖）
-- [ ] 3.2 写 `src/tagmemorag/epa_basis.py`：
+- [x] 3.1 在 `pyproject.toml` 增加 `scikit-learn>=1.4`（依赖）
+- [x] 3.2 写 `src/tagmemorag/epa_basis.py`：
   - `epa_basis_lock(lock_path, timeout_sec)` 上下文（fcntl.flock）
   - `save_epa_basis(...)` / `load_epa_basis(path)`（atomic write 模式：tmp → fsync → replace → fsync(dir)）
   - `build_cold_start_basis(dim, K=8)`
   - `train_real_pca(tag_vectors, tag_names)`（KMeans + sklearn PCA + basisLabels by argmax cosine）
   - `retrain_if_needed(cfg, force=False)` 主入口
-- [ ] 3.3 写 `src/tagmemorag/epa_projector.py`：纯读对象，提供 `project(query_vec)`（Phase 0 不接入检索，但单测要跑通）
-- [ ] 3.4 写 `tests/unit/test_epa_basis.py`：
+- [x] 3.3 写 `src/tagmemorag/epa_projector.py`：纯读对象，提供 `project(query_vec)`（Phase 0 不接入检索，但单测要跑通）
+- [x] 3.4 写 `tests/unit/test_epa_basis.py`：
   - 冷启动路径：N<16 时 basis = identity[:K]，basisLabels = ["axis-0",...]
   - 真 PCA 路径：N≥16 时 train_kind="real-pca"，K 满足 cum_var≥0.95 且 ≥8
   - save/load roundtrip：所有字段保持
   - schema_version=1 加载 OK，version=2 抛错
   - graduation：先冷启动写一次，添加 tag 到 N≥16 后再训，train_kind 升级
-- [ ] 3.5 写 `tests/unit/test_epa_concurrency.py`：
+- [x] 3.5 写 `tests/unit/test_epa_concurrency.py`：
   - 双线程同时调 `retrain_if_needed`，验证锁串行化
   - 模拟 atomic write 中断：tmp 存在但 final 不存在，下次启动不读破损文件
-- [ ] 3.6 修改 `incremental_rebuild.py`：rebuild 末尾调用 `epa_basis.retrain_if_needed(cfg)`
-- [ ] 3.7 RebuildTask 增加 `epa_basis_train_kind / epa_basis_K / epa_basis_tag_count / epa_train_error` 字段
-- [ ] 3.8 修改 `src/tagmemorag/cli.py`：增加 `tagmemorag epa rebuild [--force]` 子命令
-- [ ] 3.9 在 `config.yaml` 增加 `wave_phase0` 段（紧急回滚开关 + 调参）
-- [ ] 3.10 跑 e2e：4 个 fixture KB 跑 build → 验证 `data/_global/epa_basis.npz` 生成，train_kind="cold-start"（fixture 总 tag<16）
+- [x] 3.6 修改 `incremental_rebuild.py`：rebuild 末尾调用 `epa_basis.retrain_if_needed(cfg)`
+- [x] 3.7 RebuildTask 增加 `epa_basis_train_kind / epa_basis_K / epa_basis_tag_count / epa_train_error` 字段
+- [x] 3.8 修改 `src/tagmemorag/cli.py`：增加 `tagmemorag epa rebuild [--force]` 子命令
+- [x] 3.9 在 `config.yaml` 增加 `wave_phase0` 段（紧急回滚开关 + 调参）
+- [x] 3.10 跑 e2e：4 个 fixture KB 跑 build → 验证 `data/_global/epa_basis.npz` 生成，train_kind="cold-start"（fixture 总 tag<16）
 
 **Validation**: `pytest tests/unit/test_epa_basis.py tests/unit/test_epa_concurrency.py`
 **Review gate**: AC2（fixture 上 cold-start 标记）+ AC7（构造 N≥16 验证 graduation）
 
 ### Step 4: tag_rewrite 接通 SQLite（M4）
 
-- [ ] 4.1 修改 `src/tagmemorag/tag_governance.py` 的 `commit_tag_rewrite`：在写完 metadata.json 后追加 SQLite 同步段（design.md 已给伪代码）
-- [ ] 4.2 处理 merge 的 conflict：用 `INSERT OR IGNORE` / `UPDATE OR IGNORE`，保留 target 的 position
-- [ ] 4.3 末尾调用 `epa_basis.retrain_if_needed(cfg, force=True)`（taxonomy 变了必须重训）
-- [ ] 4.4 写 `tests/unit/test_tag_governance_sqlite_sync.py`：rename / merge / delete 三种操作的 SQLite 状态对齐
-- [ ] 4.5 跑 `pytest tests/unit/test_tag_governance*.py`，全绿（含旧测试不退化）
+- [x] 4.1 修改 `src/tagmemorag/tag_governance.py` 的 `commit_tag_rewrite`：在写完 metadata.json 后追加 SQLite 同步段（design.md 已给伪代码）
+- [x] 4.2 处理 merge 的 conflict：用 `INSERT OR IGNORE` / `UPDATE OR IGNORE`，保留 target 的 position
+- [x] 4.3 末尾调用 `epa_basis.retrain_if_needed(cfg, force=True)`（taxonomy 变了必须重训）
+- [x] 4.4 写 `tests/unit/test_tag_governance_sqlite_sync.py`：rename / merge / delete 三种操作的 SQLite 状态对齐
+- [x] 4.5 跑 `pytest tests/unit/test_tag_governance*.py`，全绿（含旧测试不退化）
 
 **Validation**: `pytest tests/unit/test_tag_governance_sqlite_sync.py tests/unit/test_tag_governance.py`
 **Review gate**: AC4（rewrite 后 SQLite 与 metadata 状态一致）
 
 ### Step 5: Manual 删除级联（M5）
 
-- [ ] 5.1 找到 manual delete 实际调用点（`api.py` 的 `DELETE /manuals/{id}` 或 `manual_library.delete_manual`），梳理现有路径
-- [ ] 5.2 在 delete 末尾追加 SQLite 清理（design.md 伪代码）：
+- [x] 5.1 找到 manual delete 实际调用点（`api.py` 的 `DELETE /manuals/{id}` 或 `manual_library.delete_manual`），梳理现有路径
+- [x] 5.2 在 delete 末尾追加 SQLite 清理（design.md 伪代码）：
   - DELETE manual_tags WHERE kb_name=? AND manual_id=?
   - 找孤儿 tags（LEFT JOIN manual_tags）+ DELETE
-- [ ] 5.3 标记 EPA dirty（不立即重训；rebuild 末尾批量处理）
-- [ ] 5.4 RebuildTask 增加 `orphan_tags_removed` 字段
-- [ ] 5.5 写测试：删除 manual → manual_tags 行清零 → 孤儿 tag 被识别 → 下次 rebuild 触发 EPA 重训
+- [x] 5.3 标记 EPA dirty（不立即重训；rebuild 末尾批量处理）
+- [x] 5.4 RebuildTask 增加 `orphan_tags_removed` 字段
+- [x] 5.5 写测试：删除 manual → manual_tags 行清零 → 孤儿 tag 被识别 → 下次 rebuild 触发 EPA 重训
 
 **Validation**: `pytest tests/unit/test_manuals_delete.py tests/integration/test_phase0_rebuild.py`
 **Review gate**: AC5（manual 删除级联 OK）
 
 ### Step 6: 可观测性 + 文档
 
-- [ ] 6.1 修改 `src/tagmemorag/observability/metrics.py`：增加 4 个 Prometheus 指标（design.md 列表）
-- [ ] 6.2 修改 `src/tagmemorag/api.py`：rebuild 任务响应序列化包含新字段（向后兼容）
-- [ ] 6.3 写 `docs/tag-ordering-convention.md`：明确 metadata.tags 数组顺序约定（D1）
-- [ ] 6.4 在 `/manuals/validate` 端点加非阻塞警告：检测到 tag 顺序疑似无意义时提示用户
-- [ ] 6.5 修改 `README.md`：加 Phase 0 章节，描述新 SQLite 表 + epa_basis 文件 + 紧急回滚开关。**不要暴露浪潮回归路线**（避免误导用户期待新检索能力）
+- [x] 6.1 修改 `src/tagmemorag/observability/metrics.py`：增加 4 个 Prometheus 指标（design.md 列表）
+- [x] 6.2 修改 `src/tagmemorag/api.py`：rebuild 任务响应序列化包含新字段（向后兼容）
+- [x] 6.3 写 `docs/tag-ordering-convention.md`：明确 metadata.tags 数组顺序约定（D1）
+- [x] 6.4 在 `/manuals/validate` 端点加非阻塞警告：检测到 tag 顺序疑似无意义时提示用户
+- [x] 6.5 修改 `README.md`：加 Phase 0 章节，描述新 SQLite 表 + epa_basis 文件 + 紧急回滚开关。**不要暴露浪潮回归路线**（避免误导用户期待新检索能力）
 
 **Validation**: 启动服务 → curl /metrics → 看到新指标
 **Review gate**: README 不提"WAVE 算法"或"浪潮"字样，仅描述数据层变化
 
 ### Step 7: 回归 + 验收
 
-- [ ] 7.1 跑 `tests/e2e/test_search_baseline_invariance.py`：execute_search 输出与 Phase 0 前 baseline 字节一致（AC6）
-- [ ] 7.2 跑 `pytest`（全套），全绿
-- [ ] 7.3 跑 lint + type-check（项目规范的命令）
-- [ ] 7.4 删 SQLite 三表 + 删 epa_basis.npz，重启服务，跑健康探针 + /search → 无错（AC8 回滚验证）
-- [ ] 7.5 重新跑 build → 三表与 npz 重新生成 → /search 仍正常
-- [ ] 7.6 在 PR 描述里附 8 个 AC 的勾选状态
+- [x] 7.1 跑 `tests/e2e/test_search_baseline_invariance.py`：execute_search 输出与 Phase 0 前 baseline 字节一致（AC6）
+- [x] 7.2 跑 `pytest`（全套），全绿
+- [x] 7.3 跑 lint + type-check（项目规范的命令）— 项目当前未配置 ruff/mypy；以 pytest 为唯一回归门槛
+- [x] 7.4 删 SQLite 三表 + 删 epa_basis.npz，重启服务，跑健康探针 + /search → 无错（AC8 回滚验证，由 `test_search_output_invariant_after_phase0_data_purge` 覆盖）
+- [x] 7.5 重新跑 build → 三表与 npz 重新生成 → /search 仍正常
+- [x] 7.6 在 PR 描述里附 8 个 AC 的勾选状态
+
+## AC 验收状态（PR 描述用）
+
+- [x] AC1：`pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py` 全套通过（257 passed）
+- [x] AC2：fixture build 后所有 canonical tags 有 embedding，`data/_global/epa_basis.npz` 生成且 `train_kind="cold-start"`（由 `test_phase0_rebuild_tags.test_full_build_syncs_manual_tags_and_embeddings` + `test_epa_basis.test_retrain_if_needed_cold_starts_then_graduates` 锁定）
+- [x] AC3：第二次 build `tag_embeddings_added=0, tag_embeddings_skipped=N`（由 `test_tag_embedder.test_embed_dirty_tags_writes_vectors_and_is_idempotent` 锁定）
+- [x] AC4：tag_rewrite (rename/merge/delete) 后 SQLite 与 metadata 状态一致（由 `test_tag_governance_sqlite_sync` 两条测试锁定）
+- [x] AC5：删除 manual 后 manual_tags 行清零、孤儿 tag 被识别（由 `test_manual_library.test_delete_manual_cleans_phase0_tag_links_and_marks_epa_dirty` + `test_phase0_rebuild_tags.test_incremental_rebuild_updates_tag_links_and_removes_orphans` 锁定）
+- [x] AC6：execute_search 输出与 Phase 0 前 baseline 字节一致（由 `test_search_baseline_invariance` 两条测试锁定，覆盖"删除 Phase 0 数据后重建"和"运行时禁用 wave_phase0"两种场景）
+- [x] AC7：N<16 走 cold-start、N≥16 升级真 PCA（由 `test_epa_basis.test_retrain_if_needed_cold_starts_then_graduates` 锁定）
+- [x] AC8：删 SQLite 三表 + 删 epa_basis.npz 后服务功能正常（由 `test_search_baseline_invariance.test_search_output_invariant_after_phase0_data_purge` 锁定）
 
 **Validation**: AC1-AC8 全部勾选
 **Review gate**: 人工 review 整个 PR，重点看 schema 迁移、并发锁实现、tag_rewrite 同步逻辑
