@@ -16,6 +16,7 @@ from .embedder import create_embedder
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
+from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .qdrant_ops import inspect_qdrant
@@ -157,6 +158,23 @@ def main(argv: list[str] | None = None) -> int:
     registry_verify = library_registry_sub.add_parser("verify-blobs")
     registry_verify.add_argument("--kb", default="default")
     registry_verify.add_argument("--config", default="config.yaml")
+    library_bundle = manual_library_sub.add_parser("bundle")
+    library_bundle_sub = library_bundle.add_subparsers(dest="manual_bundle_command", required=True)
+    bundle_export = library_bundle_sub.add_parser("export")
+    bundle_export.add_argument("--kb", default="default")
+    bundle_export.add_argument("--config", default="config.yaml")
+    bundle_export.add_argument("--output", required=True)
+    bundle_inspect = library_bundle_sub.add_parser("inspect")
+    bundle_inspect.add_argument("--bundle", required=True)
+    bundle_inspect.add_argument("--config", default=None)
+    bundle_inspect.add_argument("--target-kb", default=None)
+    bundle_inspect.add_argument("--conflict-mode", choices=["fail", "skip", "overwrite"], default="fail")
+    bundle_import = library_bundle_sub.add_parser("import")
+    bundle_import.add_argument("--bundle", required=True)
+    bundle_import.add_argument("--config", default="config.yaml")
+    bundle_import.add_argument("--target-kb", default=None)
+    bundle_import.add_argument("--conflict-mode", choices=["fail", "skip", "overwrite"], default="fail")
+    bundle_import.add_argument("--dry-run", action="store_true", default=False)
 
     tag = sub.add_parser("tag")
     tag_sub = tag.add_subparsers(dest="tag_command", required=True)
@@ -440,6 +458,30 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.manual_registry_command == "verify-blobs":
             print(json.dumps(verify_registry_blobs(args.kb, cfg), ensure_ascii=False, indent=2))
+            return 0
+    if args.command == "manual-library" and args.manual_library_command == "bundle":
+        cfg = load_config(args.config) if args.config else None
+        if cfg is not None:
+            configure_logging(cfg.logging.level, cfg.logging.format)
+        if args.manual_bundle_command == "export":
+            assert cfg is not None
+            result = export_bundle(args.kb, cfg, args.output)
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+            return 0
+        if args.manual_bundle_command == "inspect":
+            report = inspect_bundle(args.bundle, cfg, target_kb=args.target_kb, conflict_mode=args.conflict_mode)
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+            return 0 if report.valid else 1
+        if args.manual_bundle_command == "import":
+            assert cfg is not None
+            result = import_bundle(
+                args.bundle,
+                cfg,
+                target_kb=args.target_kb,
+                conflict_mode=args.conflict_mode,
+                dry_run=args.dry_run,
+            )
+            print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
             return 0
     if args.command == "tag" and args.tag_command == "stats":
         cfg = load_config(args.config)

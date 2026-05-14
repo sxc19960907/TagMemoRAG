@@ -294,6 +294,48 @@ python -m tagmemorag manual-library rebuild --kb default --config config.yaml
 
 If an S3 upload fails, registry rows and dirty state are not committed. If a rebuild cannot read an object, the previous graph keeps serving and dirty state remains pending. Roll back by restoring object-store availability and retrying; if you migrated from sidecars and kept local files, you can switch `registry_backend` back to `file` for an emergency rebuild path.
 
+Portable import/export bundles:
+
+```bash
+python -m tagmemorag manual-library bundle export \
+  --kb default \
+  --config config.yaml \
+  --output backups/default.bundle.zip
+
+python -m tagmemorag manual-library bundle inspect \
+  --bundle backups/default.bundle.zip \
+  --config config.yaml \
+  --target-kb restored
+
+python -m tagmemorag manual-library bundle import \
+  --bundle backups/default.bundle.zip \
+  --config config.yaml \
+  --target-kb restored \
+  --dry-run
+
+python -m tagmemorag manual-library bundle import \
+  --bundle backups/default.bundle.zip \
+  --config config.yaml \
+  --target-kb restored \
+  --conflict-mode fail
+```
+
+Bundles are ZIP archives with `tagmemorag-bundle.json`, `checksums.json`, per-manual metadata under `records/`, source bytes under `blobs/`, registry audit summaries when available, and dirty/rebuild diagnostic snapshots under `state/`. Inspect verifies safe archive paths, schema version, metadata shape, blob presence, and SHA-256 checksums without writing anything.
+
+File-sidecar exports read only managed manuals that have valid sidecars. SQLite registry exports read original bytes through the configured `ManualBlobStore`, so S3-backed libraries produce self-contained local bundles instead of external S3 URLs. Bundle metadata stores safe logical blob keys for provenance only; it does not include credentials, signed URLs, request headers, absolute local paths, vectors, Qdrant dumps, stack traces, or raw search query text.
+
+Import writes source bytes through the target deployment's configured backend: sidecar files in file mode, or blob store plus registry rows in SQLite mode. `--conflict-mode fail` aborts before writes on existing `manual_id` or `source_file` conflicts, `skip` imports only non-conflicting records, and `overwrite` replaces conflicting records. Imports mark the target KB dirty and pending rebuild but do not rebuild automatically, so the previous graph keeps serving until `manual-library rebuild` succeeds.
+
+Disaster recovery sequence:
+
+1. Export from the source deployment and store the bundle with normal backup controls.
+2. On the target deployment, run `bundle inspect` with the target config and KB name.
+3. Run `bundle import --dry-run` and review conflicts.
+4. Run `bundle import` with the chosen conflict mode.
+5. Run `manual-library dirty` to confirm pending state, then rebuild with `auto`, `incremental`, or `full`.
+
+For local-to-object-storage migration, configure the target with `registry_backend=sqlite` and `blob_backend=s3`, inspect the bundle against that config, import, verify blobs, then rebuild. If import validation fails, no registry rows are written. If a later rebuild fails, fix the reported storage/Qdrant/embedding issue and retry; imported source bytes and dirty state remain available for recovery.
+
 Rebuild recovery runbook:
 
 1. Inspect pending state:
@@ -973,4 +1015,9 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | **M22** ✅ | Qdrant operations documentation and inspection command |
 | **M23** ✅ | Retrieval tuning experiment loop; defaults preserved from eval evidence |
 | **M25** ✅ | Hybrid lexical retrieval for exact fault codes, model terms, and short product-manual phrases |
-| **Parking lot** | Payload-filtered ANN, database-backed manual registry/audit, background rebuild queue/cancellation, HA multi-replica, import/export bundles |
+| **M26** ✅ | SQLite manual registry, lifecycle audit, and local blob-store boundary |
+| **M27** ✅ | S3-compatible manual blob store behind registry-backed libraries |
+| **M28** ✅ | Opt-in background rebuild queue and cancellation controls |
+| **M29** ✅ | Admin diagnostics for dirty state, registry, blobs, audit, and queue jobs |
+| **M30** ✅ | Portable managed-library import/export bundles |
+| **Parking lot** | Payload-filtered ANN, HA multi-replica, streaming bundle API, bundle encryption/signing |

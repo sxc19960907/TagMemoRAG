@@ -440,6 +440,63 @@ manual_library:
     assert repeated["skipped_records"] == 1
 
 
+def test_cli_manual_library_bundle_export_inspect_import(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    restore_config = tmp_path / "restore.yaml"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+""",
+        encoding="utf-8",
+    )
+    restore_config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "restore-data"}
+manual_library:
+  root_dir: {tmp_path / "restore-manuals"}
+""",
+        encoding="utf-8",
+    )
+    manual_dir = tmp_path / "manuals" / "default" / "coffee"
+    manual_dir.mkdir(parents=True)
+    (manual_dir / "cm1.md").write_text("# Use\nClean weekly.\n", encoding="utf-8")
+    (manual_dir / "cm1.metadata.json").write_text(
+        '{"manual_id":"cm1","title":"CM1","source_file":"coffee/cm1.md","product_category":"coffee","language":"zh-CN"}',
+        encoding="utf-8",
+    )
+    bundle = tmp_path / "default.bundle.zip"
+
+    assert cli.main(["manual-library", "bundle", "export", "--config", str(config), "--output", str(bundle)]) == 0
+    exported = json.loads(capsys.readouterr().out)
+    assert exported["manual_count"] == 1
+    assert bundle.exists()
+
+    assert cli.main(["manual-library", "bundle", "inspect", "--bundle", str(bundle), "--config", str(restore_config), "--target-kb", "restored"]) == 0
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["valid"] is True
+    assert inspected["import_actions"][0]["action"] == "create"
+
+    assert cli.main(["manual-library", "bundle", "import", "--bundle", str(bundle), "--config", str(restore_config), "--target-kb", "restored", "--dry-run"]) == 0
+    dry_run = json.loads(capsys.readouterr().out)
+    assert dry_run["dry_run"] is True
+    assert dry_run["imported_count"] == 0
+
+    assert cli.main(["manual-library", "bundle", "import", "--bundle", str(bundle), "--config", str(restore_config), "--target-kb", "restored"]) == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["imported_count"] == 1
+    assert (tmp_path / "restore-manuals" / "restored" / "coffee" / "cm1.md").exists()
+
+
 def test_cli_feedback_workflow(tmp_path, capsys):
     config = tmp_path / "config.yaml"
     config.write_text(
