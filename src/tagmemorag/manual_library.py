@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .config import Settings
+from .epa_basis import mark_epa_basis_dirty
 from .errors import ErrorCode, ServiceError
 from .manual_blob_store import BlobRef, create_blob_store, guess_content_type
 from .manual_registry import ManualRecord, RegistryMigrationReport, create_registry
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, metadata_sidecar_path
 from .parser import SUPPORTED_DOCUMENT_SUFFIXES
 from .storage.atomic import atomic_write
+from .tag_store import delete_manual_tags, delete_tags, find_orphan_tags
 from .types import GraphState
 
 ManualStatus = Literal["active", "disabled", "archived"]
@@ -331,7 +333,16 @@ def validate_metadata(
         from .tag_governance import governance_validation_messages
 
         messages.extend(governance_validation_messages(normalized.tags, tag_policy))
-    blocking_messages = [message for message in messages if message.detail.get("severity") != "warning"]
+    if len(normalized.tags) >= 2:
+        messages.append(
+            ValidationMessage(
+                "tags",
+                "TAG_ORDERING_HINT",
+                "tags array order is read by future search re-ranking; order from specific to broad (see docs/tag-ordering-convention.md).",
+                {"tags": list(normalized.tags), "severity": "info"},
+            )
+        )
+    blocking_messages = [message for message in messages if message.detail.get("severity") not in {"warning", "info"}]
     return MetadataValidationResult(valid=not blocking_messages, normalized=normalized, messages=tuple(messages))
 
 
@@ -492,7 +503,13 @@ def delete_manual(kb_name: str, manual_id: str, cfg: Settings) -> dict[str, Any]
     source_path.unlink(missing_ok=True)
     sidecar_path.unlink(missing_ok=True)
     mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=existing.source_file, operation="hard_delete", checksum=existing.checksum)
-    return {"manual_id": manual_id, "status": "deleted", "rebuild_required": True}
+    orphan_tags_removed = _cleanup_deleted_manual_tags(kb_name, manual_id, cfg)
+    return {
+        "manual_id": manual_id,
+        "status": "deleted",
+        "rebuild_required": True,
+        "orphan_tags_removed": orphan_tags_removed,
+    }
 
 
 def list_records(kb_name: str, cfg: Settings, *, graph_state: GraphState | None = None) -> list[ManualLibraryRecord]:
@@ -946,7 +963,33 @@ def _delete_manual_registry(kb_name: str, manual_id: str, cfg: Settings) -> dict
     deleted = registry.hard_delete(kb_name, manual_id)
     create_blob_store(cfg).delete(current.blob_key)
     mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=current.source_file, operation="hard_delete", checksum=current.checksum)
-    return {"manual_id": manual_id, "status": "deleted", "rebuild_required": True, "registry_backend": "sqlite", "registry_version": deleted.version}
+    orphan_tags_removed = _cleanup_deleted_manual_tags(kb_name, manual_id, cfg)
+    return {
+        "manual_id": manual_id,
+        "status": "deleted",
+        "rebuild_required": True,
+        "registry_backend": "sqlite",
+        "registry_version": deleted.version,
+        "orphan_tags_removed": orphan_tags_removed,
+    }
+
+
+def _cleanup_deleted_manual_tags(kb_name: str, manual_id: str, cfg: Settings) -> int:
+    registry = create_registry(_phase0_registry_path(cfg))
+    with registry.connection() as conn:
+        with conn:
+            delete_manual_tags(conn, kb_name, manual_id)
+            orphans = find_orphan_tags(conn, kb_name)
+            orphan_tags_removed = delete_tags(conn, orphans)
+    if orphan_tags_removed:
+        mark_epa_basis_dirty(cfg)
+    return orphan_tags_removed
+
+
+def _phase0_registry_path(cfg: Settings) -> str | Path:
+    if cfg.manual_library.registry_path == "data/manual_registry.sqlite3":
+        return Path(cfg.storage.data_dir) / "manual_registry.sqlite3"
+    return cfg.manual_library.registry_path
 
 
 def _list_records_registry(kb_name: str, cfg: Settings, *, graph_state: GraphState | None) -> list[ManualLibraryRecord]:
