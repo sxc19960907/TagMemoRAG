@@ -139,6 +139,16 @@ class ManualLibraryConfig(BaseModel):
     s3_timeout_seconds: float = 10.0
 
 
+class WavePhase0Config(BaseModel):
+    enabled: bool = True
+    epa_basis_enabled: bool = True
+    epa_min_k: int = Field(default=8, ge=1)
+    epa_cluster_count: int = Field(default=32, ge=1)
+    epa_energy_threshold: float = Field(default=0.95, gt=0.0, le=1.0)
+    epa_retrain_growth_ratio: float = Field(default=0.20, ge=0.0)
+    epa_lock_timeout_seconds: float = Field(default=30.0, gt=0.0)
+
+
 class MetricsConfig(BaseModel):
     enabled: bool = True
     path: str = "/metrics"
@@ -179,6 +189,7 @@ class Settings(BaseSettings):
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
+    wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod

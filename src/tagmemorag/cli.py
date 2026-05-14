@@ -13,6 +13,7 @@ import uvicorn
 from .config import load_config
 from .auth.config_store import ConfigAuthStore
 from .embedder import create_embedder
+from .epa_basis import retrain_if_needed, basis_path, load_epa_basis
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
@@ -195,6 +196,12 @@ def main(argv: list[str] | None = None) -> int:
     qdrant_inspect = qdrant_sub.add_parser("inspect")
     qdrant_inspect.add_argument("--kb", default="default")
     qdrant_inspect.add_argument("--config", default="config.yaml")
+
+    epa = sub.add_parser("epa")
+    epa_sub = epa.add_subparsers(dest="epa_command", required=True)
+    epa_rebuild = epa_sub.add_parser("rebuild")
+    epa_rebuild.add_argument("--config", default="config.yaml")
+    epa_rebuild.add_argument("--force", action="store_true")
 
     feedback = sub.add_parser("feedback")
     feedback_sub = feedback.add_subparsers(dest="feedback_command", required=True)
@@ -526,6 +533,22 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)
         print(json.dumps(inspect_qdrant(args.kb, cfg), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "epa" and args.epa_command == "rebuild":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        report = retrain_if_needed(cfg, force=args.force)
+        if report is None:
+            current = load_epa_basis(basis_path(cfg))
+            report = {
+                "epa_basis_train_kind": current.train_kind if current is not None else "",
+                "epa_basis_K": current.K if current is not None else 0,
+                "epa_basis_tag_count": current.tag_count_at_train if current is not None else 0,
+                "skipped": current is not None,
+            }
+        else:
+            report = report | {"skipped": False}
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "feedback" and args.feedback_command == "submit":
         cfg = load_config(args.config)
