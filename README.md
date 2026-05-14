@@ -986,6 +986,62 @@ uv run pytest tests/ -v
 
 Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 
+## Tag Data Model
+
+TagMemoRAG persists `manual.metadata.tags` into a structured, position-aware SQLite layer alongside the existing `manual_records` table, plus a global EPA basis file. Search behavior is unchanged at this layer — these tables are populated for downstream analytics and ranking experiments.
+
+### SQLite tables (in `data/manual_registry.sqlite3`)
+
+- `tags(id, kb_name, name, vector BLOB, embedding_dim, embedded_at, UNIQUE(kb_name, name))` — canonical tag entities with embeddings filled by the rebuild pipeline.
+- `manual_tags(kb_name, manual_id, tag_id, position INTEGER, PK(kb_name, manual_id, tag_id))` — link rows recording the 1-indexed position of each tag inside `metadata.tags`. Tag order matters; see [docs/tag-ordering-convention.md](docs/tag-ordering-convention.md).
+- `tag_intrinsic_residuals(tag_id PK, residual_energy REAL DEFAULT 1.0, neighbor_count INTEGER DEFAULT 0, computed_at TEXT)` — placeholder table populated by future residual analysis; default `1.0` keeps downstream formulas neutral.
+
+All three tables use `CREATE TABLE IF NOT EXISTS`, so old `manual_registry.sqlite3` databases upgrade in place. `FOREIGN KEY ... ON DELETE CASCADE` removes link/residual rows when a tag is deleted.
+
+### Global EPA basis (`data/_global/epa_basis.npz`)
+
+A KB-independent orthonormal basis trained over canonical tag embeddings. Stored fields: `orthoBasis`, `basisMean`, `basisEnergies`, `basisLabels`, `K`, `dim`, `train_kind`, `tag_count_at_train`, `trained_at`, `schema_version`.
+
+- **Cold-start**: when `len(canonical_tags) < K*2`, the basis is the first `K` rows of an identity matrix (`train_kind="cold-start"`). This keeps small KBs working without a degenerate PCA fit.
+- **Real PCA**: once the canonical-tag corpus crosses `K*2`, the basis is rebuilt from KMeans centroids fed into `sklearn.decomposition.PCA` (`train_kind="real-pca"`).
+- **Concurrency**: a `data/_global/epa_basis.lock` file (`fcntl.flock`) serializes retrains across concurrent KB rebuilds. `data/_global/epa_basis.dirty` flags pending retrains triggered by tag rewrites or manual deletes.
+- **CLI**: `python -m tagmemorag epa rebuild [--force]` triggers a manual full retrain.
+
+### Observability
+
+The rebuild task response (`GET /rebuild/{task_id}`) gains the following fields:
+
+- `tag_embeddings_added`, `tag_embeddings_skipped`, `tag_embeddings_failed`, `tag_embedding_error`
+- `orphan_tags_removed`
+- `epa_basis_train_kind`, `epa_basis_K`, `epa_basis_tag_count`, `epa_train_error`
+
+Prometheus metrics (`/metrics`):
+
+- `tagmemorag_tag_embeddings_total{kb_name, outcome}` — counts of tag embedding outcomes (`added`/`skipped`/`failed`).
+- `tagmemorag_tags_total{kb_name}` — current canonical tag count.
+- `tagmemorag_epa_basis_retrain_total{outcome}` — retrain events grouped by `cold-start`/`real-pca`/`skipped`/`failed`.
+- `tagmemorag_epa_basis_retrain_duration_seconds{outcome}` — retrain latency histogram.
+
+### Emergency rollback
+
+`config.yaml` has a `wave_phase0` section with two kill switches:
+
+```yaml
+wave_phase0:
+  enabled: true
+  epa_basis_enabled: true
+```
+
+Setting either to `false` disables the EPA basis path without removing the SQLite tables. To fully revert the data layer:
+
+```bash
+sqlite3 data/manual_registry.sqlite3 \
+  "DROP TABLE IF EXISTS manual_tags; DROP TABLE IF EXISTS tag_intrinsic_residuals; DROP TABLE IF EXISTS tags;"
+rm -rf data/_global/
+```
+
+The next rebuild recreates everything; `execute_search` output is byte-identical regardless of whether the data is present.
+
 ## Roadmap
 
 | Milestone | Scope |
@@ -1020,4 +1076,5 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | **M28** ✅ | Opt-in background rebuild queue and cancellation controls |
 | **M29** ✅ | Admin diagnostics for dirty state, registry, blobs, audit, and queue jobs |
 | **M30** ✅ | Portable managed-library import/export bundles |
+| **M31** ✅ | Tag data model: position-aware tag links, embeddings, and global EPA basis |
 | **Parking lot** | Payload-filtered ANN, HA multi-replica, streaming bundle API, bundle encryption/signing |
