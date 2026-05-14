@@ -1,0 +1,11 @@
+{"file": ".trellis/tasks/05-14-wave-phase0-tag-data-model/prd.md", "reason": "Acceptance criteria AC1-AC8 are the verification target. Definition of Done lists test layers and 'no behavior change' invariant."}
+{"file": ".trellis/tasks/05-14-wave-phase0-tag-data-model/design.md", "reason": "Cross-layer data flow (incremental_rebuild → tag_store → tag_embedder → epa_basis), failure-handling expectations, and observability fields to verify."}
+{"file": ".trellis/tasks/05-14-wave-phase0-tag-data-model/implement.md", "reason": "Per-step validation commands and review gates list — each step's gate is a check item."}
+{"file": ".trellis/tasks/05-14-wave-phase0-tag-data-model/research/source-data-model.md", "reason": "Schema final form (manual_tags, residuals with neighbor_count/computed_at) — checks must verify the implemented schema matches verbatim."}
+{"file": ".trellis/tasks/05-14-wave-phase0-tag-data-model/research/incremental-pca-feasibility.md", "reason": "Atomic write contract (tmp + fsync + replace + fsync(dir)) and fcntl.flock semantics — implementation must satisfy these or AC7/AC8 fail under crash/concurrent scenarios."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Migration idempotency (CREATE TABLE IF NOT EXISTS), FK CASCADE handling, and connection lifecycle — checks must verify Phase 0 follows them."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error shape consistency: tag embedding failure / EPA train failure must not bubble as 5xx; should land in task.impact_report fields."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest scope, lint, type-check are mandatory before declaring done. Defines the regression bar."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify new structured log fields are low-cardinality and don't leak high-cardinality data (tag names OK, query text NOT OK)."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify Phase 0 changes are coherent across layers — schema migration, rebuild hook, tag_governance sync, manual delete cascade all align."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify no duplication of Embedder usage, SQLite connection patterns, or registry transaction conventions — checks must flag near-duplicates."}
