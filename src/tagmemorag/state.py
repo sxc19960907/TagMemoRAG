@@ -15,7 +15,7 @@ import structlog
 from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
 from .embedder import create_embedder
-from .errors import KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ShuttingDownError, StorageSchemaMismatchError
+from .errors import ErrorCode, KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ServiceError, ShuttingDownError, StorageSchemaMismatchError
 from .graph_builder import build_graph
 from .incremental_rebuild import RebuildDetail, build_kb_incremental
 from .manual_library import clear_pending_after_success, is_active_status, load_manifest
@@ -51,6 +51,7 @@ class RebuildTask:
     chunk_identity_fallback_reason: str = ""
     impact_report: dict | None = None
     qdrant_sync: dict | None = None
+    cancel_requested: bool = False
 
     def to_dict(self) -> dict:
         data = {
@@ -72,6 +73,7 @@ class RebuildTask:
             "impact_report": self.impact_report,
             "impact_summary": self.impact_report.get("summary") if isinstance(self.impact_report, dict) else None,
             "qdrant_sync": self.qdrant_sync,
+            "cancel_requested": self.cancel_requested,
         }
         summary = getattr(self, "operations_summary", None)
         if callable(summary):
@@ -209,6 +211,7 @@ class AppState:
                 "tagmemorag.rebuild",
                 **{"tagmemorag.kb_name": kb_name, "tagmemorag.x_trace_id": task.task_id},
             ):
+                _raise_if_cancelled(task)
                 new_state = _build_for_rebuild(
                     docs_dir,
                     kb_name,
@@ -220,6 +223,7 @@ class AppState:
                     is_library_rebuild=is_library_rebuild,
                     task=task,
                 )
+                _raise_if_cancelled(task)
                 if is_library_rebuild and cfg.vector_store.provider == "qdrant":
                     qdrant_sync = sync_qdrant_for_rebuild(new_state, old_state, cfg, task)
                     task.qdrant_sync = qdrant_sync.to_dict()
@@ -229,6 +233,7 @@ class AppState:
                     _save_kb_metadata_artifacts(new_state, cfg)
                 else:
                     save_kb(new_state, cfg)
+                _raise_if_cancelled(task)
                 if is_library_rebuild and task.status != "failed":
                     save_chunk_identity(identity_path(kb_name, cfg), build_chunk_identity_map(new_state.graph, kb_name=kb_name, build_id=new_state.build_id, cfg=cfg))
                     if isinstance(task.impact_report, dict):
@@ -271,11 +276,11 @@ class AppState:
                     fallback_reason=task.fallback_reason,
                 )
         except Exception as exc:
-            task.status = "failed"
+            task.status = "cancelled" if isinstance(exc, RebuildCancelledError) else "failed"
             task.error = {"type": type(exc).__name__, "message": str(exc)}
             get_metrics().record_rebuild_failed(kb_name=kb_name, duration=time.perf_counter() - t0)
             structlog.get_logger().error(
-                "rebuild_failed",
+                "rebuild_cancelled" if isinstance(exc, RebuildCancelledError) else "rebuild_failed",
                 task_id=task.task_id,
                 kb_name=kb_name,
                 error_type=type(exc).__name__,
@@ -728,6 +733,16 @@ def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[in
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class RebuildCancelledError(ServiceError):
+    def __init__(self, task_id: str):
+        super().__init__(ErrorCode.REBUILD_FAILED, "Rebuild was cancelled.", {"task_id": task_id})
+
+
+def _raise_if_cancelled(task: RebuildTask) -> None:
+    if task.cancel_requested:
+        raise RebuildCancelledError(task.task_id)
 
 
 def start_library_rebuild(

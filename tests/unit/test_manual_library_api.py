@@ -18,6 +18,7 @@ def _configure(tmp_path, fake_embedder) -> TestClient:
     api.settings = cfg
     api.embedder = fake_embedder
     api.app_state = AppState()
+    api.rebuild_queue = None
     return TestClient(api.app)
 
 
@@ -128,6 +129,34 @@ def test_manual_disable_hard_delete_and_library_rebuild(tmp_path, fake_embedder)
     assert hard.status_code == 200
     assert hard.json()["status"] == "deleted"
     assert client.get("/manual-library", params={"kb_name": "default"}).json()["manuals"] == []
+
+
+def test_manual_library_rebuild_queue_api(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals"), rebuild_queue_enabled=True),
+        model={"dim": 64},
+    )
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.rebuild_queue = None
+    client = TestClient(api.app)
+    client.post(
+        "/manuals",
+        data={"kb_name": "default", "metadata": json.dumps(_metadata())},
+        files={"file": ("cm1.md", b"# Use\nClean weekly.\n", "text/markdown")},
+    )
+
+    rebuild = client.post("/manual-library/rebuild", json={"kb_name": "default", "mode": "incremental"})
+
+    assert rebuild.status_code == 202
+    body = rebuild.json()
+    assert body["job_id"]
+    assert body["status"] in {"queued", "running", "succeeded"}
+    listed = client.get("/manual-library/rebuild-jobs", params={"kb_name": "default"})
+    assert listed.status_code == 200
+    assert listed.json()["jobs"][0]["job_id"] == body["job_id"]
 
 
 def test_tag_governance_api_policy_stats_and_rewrite(tmp_path, fake_embedder):

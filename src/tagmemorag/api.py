@@ -47,6 +47,7 @@ from .manual_library import (
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
+from .rebuild_queue import RebuildQueue
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -78,13 +79,14 @@ from .wave_searcher import normalize_filters
 settings = load_config()
 app_state = AppState()
 embedder = None  # lazily created in lifespan to avoid import-time model download
+rebuild_queue: RebuildQueue | None = None
 WEB_DIR = Path(__file__).resolve().parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global embedder
+    global embedder, rebuild_queue
     configure_logging(settings.logging.level, settings.logging.format)
     logger = structlog.get_logger()
     startup_t0 = time.perf_counter()
@@ -132,6 +134,9 @@ async def lifespan(app: FastAPI):
     app_state.query_cache = (
         LRUTTLCache(settings.cache.max_entries, settings.cache.ttl_seconds) if settings.cache.enabled else None
     )
+    if settings.manual_library.rebuild_queue_enabled:
+        rebuild_queue = RebuildQueue(app_state, settings, embedder=embedder)
+        app.state.rebuild_queue = rebuild_queue
     _load_all_kbs(logger)
     get_metrics().set_kbs_loaded(len(app_state.kbs))
     if app_state.query_cache is not None:
@@ -148,6 +153,8 @@ async def lifespan(app: FastAPI):
         shutdown_t0 = time.perf_counter()
         logger.info("shutdown_started")
         app_state.begin_shutdown()
+        if rebuild_queue is not None:
+            rebuild_queue.shutdown()
         drain_t0 = time.perf_counter()
         for kb_name in app_state.list_kbs():
             lock = app_state.lock_for(kb_name)
@@ -991,9 +998,9 @@ async def upload_manual(
     metadata_obj = _parse_metadata_form(metadata)
     content = await file.read()
     record = upsert_manual(kb_name, metadata_obj, content, settings, overwrite=overwrite or settings.manual_library.allow_overwrite)
-    task = start_library_rebuild(app_state, kb_name, settings, embedder=embedder) if trigger_rebuild else None
+    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="upload") if trigger_rebuild else {}
     structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=record.manual_id, action="upsert", status=record.status)
-    return {"record": record.to_dict(), "rebuild_required": True, "rebuild_task": task.to_dict() if task else None}
+    return {"record": record.to_dict(), "rebuild_required": True, **rebuild_payload}
 
 
 @app.post("/manual-library/bulk/preview")
@@ -1059,7 +1066,7 @@ async def import_manual_bulk(
         overwrite=overwrite,
         selected_rows=_parse_selected_rows(selected_rows),
     )
-    task = start_library_rebuild(app_state, kb_name, settings, embedder=embedder) if trigger_rebuild and result.imported_count else None
+    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="bulk_import") if trigger_rebuild and result.imported_count else {}
     structlog.get_logger().info(
         "manual_bulk_import",
         kb_name=kb_name,
@@ -1070,7 +1077,7 @@ async def import_manual_bulk(
     )
     body = result.to_dict()
     body["rebuild_required"] = result.pending_rebuild
-    body["rebuild_task"] = task.to_dict() if task else None
+    body.update(rebuild_payload or {"rebuild_task": None})
     return body
 
 
@@ -1258,15 +1265,69 @@ def rebuild_manual_library(
     ensure_kb_access(api_key, request.kb_name)
     if request.mode not in {"full", "incremental", "auto"}:
         raise ServiceError(ErrorCode.INVALID_INPUT, "rebuild mode must be full, incremental, or auto.", {"mode": request.mode})
-    task = start_library_rebuild(
-        app_state,
+    return _request_library_rebuild(
         request.kb_name,
-        settings,
-        embedder=embedder,
         mode=request.mode,
         allow_fallback=request.allow_fallback,
+        trigger="api",
+        top_level=True,
     )
-    return task.to_dict()
+
+
+@app.get("/manual-library/rebuild-jobs")
+def list_rebuild_jobs(
+    kb_name: str | None = None,
+    status: str | None = None,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    if kb_name is not None:
+        ensure_kb_access(api_key, kb_name)
+    queue = _require_rebuild_queue()
+    jobs = [
+        job
+        for job in queue.list_jobs(kb_name=kb_name, status=status)
+        if api_key.allows_kb(str(job.get("kb_name") or ""))
+    ]
+    return {"jobs": jobs}
+
+
+@app.get("/manual-library/rebuild-jobs/{job_id}")
+def inspect_rebuild_job(
+    job_id: str,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    queue = _require_rebuild_queue()
+    job = queue.inspect(job_id)
+    ensure_kb_access(api_key, str(job["kb_name"]))
+    return job
+
+
+@app.post("/manual-library/rebuild-jobs/{job_id}/cancel")
+def cancel_rebuild_job(
+    job_id: str,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    queue = _require_rebuild_queue()
+    job = queue.get(job_id)
+    ensure_kb_access(api_key, job.kb_name)
+    cancelled = queue.cancel(job_id)
+    return cancelled.to_dict()
+
+
+@app.post("/manual-library/rebuild-jobs/{job_id}/retry")
+def retry_rebuild_job(
+    job_id: str,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    queue = _require_rebuild_queue()
+    job = queue.get(job_id)
+    ensure_kb_access(api_key, job.kb_name)
+    retried = queue.retry(job_id)
+    return retried.to_dict()
 
 
 @app.get("/kb")
@@ -1380,3 +1441,41 @@ def _parse_bulk_mode(mode: str) -> BulkImportMode:
     if mode not in {"create_only", "upsert", "dry_run"}:
         raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create_only, upsert, or dry_run.", {"mode": mode})
     return cast(BulkImportMode, mode)
+
+
+def _request_library_rebuild(
+    kb_name: str,
+    *,
+    mode: str,
+    allow_fallback: bool,
+    trigger: str,
+    top_level: bool = False,
+) -> dict[str, object]:
+    if settings.manual_library.rebuild_queue_enabled:
+        queue = _get_rebuild_queue()
+        job, coalesced = queue.enqueue(kb_name, mode=mode, allow_fallback=allow_fallback, trigger=trigger)
+        payload = job.to_dict(coalesced=coalesced)
+        return payload if top_level else {"rebuild_task": None, "rebuild_job": payload}
+    task = start_library_rebuild(
+        app_state,
+        kb_name,
+        settings,
+        embedder=embedder,
+        mode=mode,
+        allow_fallback=allow_fallback,
+    )
+    payload = task.to_dict()
+    return payload if top_level else {"rebuild_task": payload}
+
+
+def _get_rebuild_queue() -> RebuildQueue:
+    global rebuild_queue
+    if rebuild_queue is None or rebuild_queue.app_state is not app_state or rebuild_queue.cfg is not settings:
+        rebuild_queue = RebuildQueue(app_state, settings, embedder=embedder)
+    return rebuild_queue
+
+
+def _require_rebuild_queue() -> RebuildQueue:
+    if not settings.manual_library.rebuild_queue_enabled:
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Rebuild queue is not enabled.", {})
+    return _get_rebuild_queue()

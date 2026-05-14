@@ -118,6 +118,12 @@ class ManualLibraryConfig(BaseModel):
     allow_overwrite: bool = False
     incremental_auto_max_dirty_manuals: int = 20
     incremental_auto_max_dirty_chunks: int = 500
+    rebuild_queue_enabled: bool = False
+    rebuild_queue_durable: bool = False
+    rebuild_queue_max_workers: int = 1
+    rebuild_queue_max_attempts: int = 2
+    rebuild_queue_retry_backoff_seconds: float = 5.0
+    rebuild_queue_history_limit: int = 100
     registry_backend: Literal["file", "sqlite"] = "file"
     registry_path: str = "data/manual_registry.sqlite3"
     blob_backend: Literal["local", "s3"] = "local"

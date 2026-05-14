@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/prd.md", "reason": "Acceptance criteria for final M28 verification."}
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/design.md", "reason": "Design checklist for queue/cancel/retry safety review."}
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/implement.md", "reason": "Execution phases and validation commands."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Validate dirty-state, registry, and blob-store safety contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate error mapping and safe response details."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate tests and dependency boundaries."}

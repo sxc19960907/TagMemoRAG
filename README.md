@@ -193,6 +193,39 @@ python -m tagmemorag manual-library dirty --kb default --format csv
 
 The JSON dirty response is also the operator status view. It includes `pending_changes`, dirty manual rows with `searchable` and `exists`, `current_build_id`, `last_successful_build_id`, `last_impact_summary`, low-cardinality Qdrant sync counts, `recovery_actions`, and an `operations_summary`. The CSV format keeps the stable dirty-manual columns for compact operational exports.
 
+#### Background rebuild queue
+
+M28 adds an opt-in in-process queue for managed-library rebuilds. Keep it disabled for small local deployments that prefer immediate rebuild tasks. Enable it when uploads, bulk imports, object storage, embedding providers, or Qdrant can produce repeated or transient rebuild pressure:
+
+```yaml
+manual_library:
+  rebuild_queue_enabled: true
+  rebuild_queue_max_workers: 1
+  rebuild_queue_max_attempts: 2
+  rebuild_queue_retry_backoff_seconds: 5.0
+  rebuild_queue_history_limit: 100
+```
+
+When enabled, `POST /manual-library/rebuild` returns a job payload instead of a low-level rebuild task. Requests for the same KB coalesce where safe: `full` upgrades queued `incremental` or `auto`, and `allow_fallback=false` stays strict. Different KBs may run concurrently up to `rebuild_queue_max_workers`; a single KB still runs one rebuild at a time.
+
+```bash
+curl -X POST http://127.0.0.1:8000/manual-library/rebuild \
+  -H "Authorization: Bearer tmr_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"kb_name":"default","mode":"auto","allow_fallback":true}'
+
+curl "http://127.0.0.1:8000/manual-library/rebuild-jobs?kb_name=default" \
+  -H "Authorization: Bearer tmr_live_..."
+
+curl "http://127.0.0.1:8000/manual-library/rebuild-jobs/JOB_ID" \
+  -H "Authorization: Bearer tmr_live_..."
+
+curl -X POST "http://127.0.0.1:8000/manual-library/rebuild-jobs/JOB_ID/cancel" \
+  -H "Authorization: Bearer tmr_live_..."
+```
+
+Queued jobs can be cancelled before they start. Running cancellation is cooperative at safe rebuild checkpoints; if the job has already passed the final save/swap point it may finish successfully while showing `cancel_requested=true`. Failed transient storage, embedding, and Qdrant-like failures retry up to `rebuild_queue_max_attempts`; invalid input/config errors fail without retry. The queue is process-local in M28, so after a server restart inspect dirty state and enqueue a fresh rebuild if needed. Roll back by setting `manual_library.rebuild_queue_enabled=false`, which restores immediate rebuild behavior.
+
 #### SQLite registry and blob stores
 
 M26 adds an opt-in registry/blob-store mode for managed manuals. It stores manual metadata, lifecycle state, versions, checksums, blob keys, and audit events in SQLite while storing original uploaded bytes through a blob-store boundary. M27 adds an S3-compatible implementation for MinIO, AWS S3, R2, OSS-compatible endpoints, and similar services. Local file mode remains the default:

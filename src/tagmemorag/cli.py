@@ -19,6 +19,7 @@ from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .qdrant_ops import inspect_qdrant
+from .rebuild_queue import RebuildQueue
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -127,6 +128,19 @@ def main(argv: list[str] | None = None) -> int:
     library_rebuild.add_argument("--config", default="config.yaml")
     library_rebuild.add_argument("--mode", choices=["full", "incremental", "auto"], default="full")
     library_rebuild.add_argument("--no-fallback", action="store_true")
+    library_rebuild.add_argument("--queued", action="store_true")
+    library_jobs = manual_library_sub.add_parser("rebuild-jobs")
+    library_jobs_sub = library_jobs.add_subparsers(dest="manual_library_jobs_command", required=True)
+    jobs_list = library_jobs_sub.add_parser("list")
+    jobs_list.add_argument("--kb", default=None)
+    jobs_list.add_argument("--config", default="config.yaml")
+    jobs_list.add_argument("--status", default=None)
+    jobs_inspect = library_jobs_sub.add_parser("inspect")
+    jobs_inspect.add_argument("--config", default="config.yaml")
+    jobs_inspect.add_argument("--job-id", required=True)
+    jobs_cancel = library_jobs_sub.add_parser("cancel")
+    jobs_cancel.add_argument("--config", default="config.yaml")
+    jobs_cancel.add_argument("--job-id", required=True)
     library_dirty = manual_library_sub.add_parser("dirty")
     library_dirty.add_argument("--kb", default="default")
     library_dirty.add_argument("--config", default="config.yaml")
@@ -361,6 +375,17 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             current = None
         app_state = AppState(current)
+        if args.queued or cfg.manual_library.rebuild_queue_enabled:
+            queue = RebuildQueue(app_state, cfg, embedder=embedder)
+            job, coalesced = queue.enqueue(
+                args.kb,
+                mode=args.mode,
+                allow_fallback=not args.no_fallback,
+                trigger="cli",
+            )
+            queue.drain_until_idle()
+            print(json.dumps(queue.inspect(job.job_id) | {"coalesced": coalesced}, ensure_ascii=False, indent=2))
+            return 0 if queue.get(job.job_id).status == "succeeded" else 1
         task = start_library_rebuild(
             app_state,
             args.kb,
@@ -373,6 +398,19 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(0.05)
         print(json.dumps(task.to_dict(), ensure_ascii=False, indent=2))
         return 0 if task.status == "done" else 1
+    if args.command == "manual-library" and args.manual_library_command == "rebuild-jobs":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        queue = RebuildQueue(AppState(), cfg)
+        if args.manual_library_jobs_command == "list":
+            print(json.dumps({"jobs": queue.list_jobs(kb_name=args.kb, status=args.status)}, ensure_ascii=False, indent=2))
+            return 0
+        if args.manual_library_jobs_command == "inspect":
+            print(json.dumps(queue.inspect(args.job_id), ensure_ascii=False, indent=2))
+            return 0
+        if args.manual_library_jobs_command == "cancel":
+            print(json.dumps(queue.cancel(args.job_id).to_dict(), ensure_ascii=False, indent=2))
+            return 0
     if args.command == "manual-library" and args.manual_library_command == "dirty":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

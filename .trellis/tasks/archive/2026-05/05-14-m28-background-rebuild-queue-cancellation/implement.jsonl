@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/prd.md", "reason": "M28 requirements and acceptance criteria for queued, cancellable, retryable rebuilds."}
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/design.md", "reason": "Technical design for queue state, coalescing, cancellation, retry, API/CLI, and rollout."}
+{"file": ".trellis/tasks/05-14-m28-background-rebuild-queue-cancellation/research/code-context.md", "reason": "Current code entry points, safety contracts, and test references for implementation."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Existing managed-library, registry/blob-store, and dirty-state persistence contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServiceError codes and safe API error shape for queue/cancel/retry failures."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and dependency boundaries for backend changes."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe logging and low-cardinality operational fields for queue status."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M28 spans API, CLI, state, storage, metrics, and docs."}
