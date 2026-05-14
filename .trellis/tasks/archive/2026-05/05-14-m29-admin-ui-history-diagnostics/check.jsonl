@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/prd.md", "reason": "Acceptance criteria for M29 final verification."}
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/design.md", "reason": "Design gates for diagnostics API/UI safety review."}
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/implement.md", "reason": "Implementation checklist and validation commands."}
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/research/code-context.md", "reason": "Code context and known risks to check against implementation."}

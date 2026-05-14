@@ -183,6 +183,120 @@ main {
   color: var(--warn);
 }
 
+.operations-band {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 12px;
+}
+
+.ops-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.ops-toolbar h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.ops-toolbar p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.ops-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  padding: 9px;
+}
+
+.ops-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ops-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-split {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+}
+
+.ops-split section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.recommendation,
+.missing-blob-list div {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.missing-blob-list {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.ops-table-wrap,
+.audit-table-wrap {
+  max-height: 260px;
+  border-top: 1px solid var(--line);
+}
+
+.ops-table,
+.audit-table {
+  min-width: 780px;
+}
+
+.ops-table td,
+.ops-table th,
+.audit-table td,
+.audit-table th {
+  padding: 7px 8px;
+}
+
+#queue-job-detail {
+  max-height: 130px;
+  margin: 10px;
+}
+
 .filters,
 .bulk-filters {
   display: grid;
@@ -491,6 +605,7 @@ summary {
 }
 
 .file-actions,
+.audit-panel,
 .danger-zone {
   border-top: 1px solid var(--line);
 }
@@ -605,6 +720,8 @@ dialog::backdrop {
   .filters,
   .bulk-filters,
   .tag-grid,
+  .ops-grid,
+  .ops-split,
   .workspace {
     grid-template-columns: 1fr;
   }

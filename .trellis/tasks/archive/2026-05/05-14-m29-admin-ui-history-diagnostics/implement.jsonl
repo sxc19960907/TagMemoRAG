@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/prd.md", "reason": "M29 requirements and acceptance criteria for admin diagnostics UI."}
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/design.md", "reason": "Technical design for diagnostics APIs, UI data flow, queue handling, and safety rules."}
+{"file": ".trellis/tasks/05-14-m29-admin-ui-history-diagnostics/research/code-context.md", "reason": "Current code entry points and implementation risks for M29."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and module conventions."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Dependency direction and module placement guidance."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Structured ServiceError and safe API response contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and safety expectations for backend changes."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe logging and low-cardinality observability guidance."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "M29 spans API, backend helpers, Jinja, JS, CSS, and tests."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "M29 should reuse existing registry, dirty-state, queue, and UI patterns."}

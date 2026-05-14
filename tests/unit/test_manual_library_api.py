@@ -159,6 +159,74 @@ def test_manual_library_rebuild_queue_api(tmp_path, fake_embedder):
     assert listed.json()["jobs"][0]["job_id"] == body["job_id"]
 
 
+def test_manual_library_diagnostics_file_sidecar_and_queue_disabled(tmp_path, fake_embedder):
+    client = _configure(tmp_path, fake_embedder)
+
+    response = client.get("/manual-library/diagnostics", params={"kb_name": "default"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["registry"]["enabled"] is False
+    assert body["blob_health"]["checked"] is False
+    assert body["rebuild_queue"]["enabled"] is False
+    assert body["dirty"]["pending_changes"] is False
+    assert body["recommendations"][0]["code"] == "file_sidecar_mode"
+
+
+def test_manual_library_diagnostics_registry_blob_verify_audit_and_queue(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite"),
+            blob_root_dir=str(tmp_path / "blobs"),
+            rebuild_queue_enabled=True,
+        ),
+        model={"dim": 64},
+    )
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.rebuild_queue = None
+    client = TestClient(api.app)
+    client.post(
+        "/manuals",
+        data={"kb_name": "default", "metadata": json.dumps(_metadata())},
+        files={"file": ("cm1.md", b"# Use\nClean weekly.\n", "text/markdown")},
+    )
+    listing = client.get("/manual-library", params={"kb_name": "default"}).json()
+    blob_key = listing["manuals"][0]["blob_key"]
+    (tmp_path / "blobs" / blob_key).unlink()
+    rebuild = client.post("/manual-library/rebuild", json={"kb_name": "default", "mode": "auto"})
+    assert rebuild.status_code == 202
+
+    diagnostics = client.get(
+        "/manual-library/diagnostics",
+        params={"kb_name": "default", "verify_blobs": "true"},
+    )
+
+    assert diagnostics.status_code == 200
+    body = diagnostics.json()
+    assert body["registry"]["enabled"] is True
+    assert body["registry"]["record_count"] == 1
+    assert body["blob_health"]["checked"] is True
+    assert body["blob_health"]["missing_count"] == 1
+    assert body["blob_health"]["missing"][0]["manual_id"] == "cm1"
+    assert body["rebuild_queue"]["enabled"] is True
+    assert body["rebuild_queue"]["jobs"][0]["job_id"] == rebuild.json()["job_id"]
+    assert any(item["code"] == "restore_object_store" for item in body["recommendations"])
+
+    audit = client.get("/manual-library/registry/audit", params={"kb_name": "default", "manual_id": "cm1", "limit": "500"})
+    assert audit.status_code == 200
+    audit_body = audit.json()
+    assert audit_body["enabled"] is True
+    assert audit_body["limit"] == 200
+    assert audit_body["events"][0]["manual_id"] == "cm1"
+    assert audit_body["events"][0]["operation"] == "upsert"
+    assert set(audit_body["events"][0]["detail"]) <= {"source_file", "status", "checksum", "blob_backend", "size_bytes", "content_type"}
+
+
 def test_tag_governance_api_policy_stats_and_rewrite(tmp_path, fake_embedder):
     client = _configure(tmp_path, fake_embedder)
     client.post(

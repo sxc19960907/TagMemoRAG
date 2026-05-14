@@ -47,6 +47,56 @@
       <main>
         <section class="status-strip" id="status-strip" role="status" aria-live="polite"></section>
 
+        <section class="operations-band" aria-label="Manual library diagnostics">
+          <div class="ops-toolbar">
+            <div>
+              <h2>Operations</h2>
+              <p id="diagnostics-summary">Diagnostics not loaded</p>
+            </div>
+            <div class="button-row">
+              <button id="refresh-diagnostics" type="button">Refresh</button>
+              <button id="verify-blobs" type="button">Verify blobs</button>
+            </div>
+          </div>
+          <div class="ops-grid" id="diagnostics-cards"></div>
+          <div class="ops-split">
+            <section aria-label="Recovery guidance">
+              <div class="pane-header compact">
+                <div>
+                  <h3>Recovery</h3>
+                  <p>Safe next actions from dirty state, blob health, queue, and Qdrant signals</p>
+                </div>
+              </div>
+              <div id="recommendation-list" class="recommendation-list"></div>
+            </section>
+            <section aria-label="Rebuild queue jobs">
+              <div class="pane-header compact">
+                <div>
+                  <h3>Rebuild Queue</h3>
+                  <p id="queue-summary">Queue state not loaded</p>
+                </div>
+              </div>
+              <div class="table-wrap ops-table-wrap">
+                <table class="ops-table">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Mode</th>
+                      <th>Attempt</th>
+                      <th>Task</th>
+                      <th>Position</th>
+                      <th>Updated</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="queue-job-rows"></tbody>
+                </table>
+              </div>
+              <pre id="queue-job-detail" class="json-preview"></pre>
+            </section>
+          </div>
+        </section>
+
         <section class="filters" aria-label="Manual filters">
           <label>
             <span>Search</span>
@@ -164,6 +214,31 @@
               <p class="muted">Large content changes may leave anchors unresolved until the next rebuild.</p>
               <input id="replace-file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf">
               <button type="button" id="replace-file-button">Replace file</button>
+            </section>
+
+            <section class="audit-panel">
+              <div class="pane-header compact">
+                <div>
+                  <h3>Audit Timeline</h3>
+                  <p id="audit-summary">Select a manual or load KB audit events</p>
+                </div>
+              </div>
+              <div class="table-wrap audit-table-wrap">
+                <table class="audit-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Manual</th>
+                      <th>Operation</th>
+                      <th>Outcome</th>
+                      <th>Version</th>
+                      <th>Actor</th>
+                      <th>Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-rows"></tbody>
+                </table>
+              </div>
             </section>
 
             <section class="danger-zone">

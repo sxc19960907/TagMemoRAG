@@ -18,6 +18,10 @@ const state = {
   bulkFilters: { severity: "all", action: "all", status: "", tag: "" },
   tagReport: null,
   rewritePreview: null,
+  diagnostics: null,
+  auditEvents: [],
+  auditManualId: null,
+  selectedJobId: null,
 };
 
 const fields = [
@@ -44,6 +48,16 @@ const el = {
   count: document.getElementById("manual-count"),
   root: document.getElementById("library-root"),
   dirtySummary: document.getElementById("dirty-summary"),
+  diagnosticsSummary: document.getElementById("diagnostics-summary"),
+  diagnosticsCards: document.getElementById("diagnostics-cards"),
+  recommendations: document.getElementById("recommendation-list"),
+  refreshDiagnostics: document.getElementById("refresh-diagnostics"),
+  verifyBlobs: document.getElementById("verify-blobs"),
+  queueSummary: document.getElementById("queue-summary"),
+  queueRows: document.getElementById("queue-job-rows"),
+  queueDetail: document.getElementById("queue-job-detail"),
+  auditSummary: document.getElementById("audit-summary"),
+  auditRows: document.getElementById("audit-rows"),
   filterText: document.getElementById("filter-text"),
   filterStatus: document.getElementById("filter-status"),
   filterSearchable: document.getElementById("filter-searchable"),
@@ -335,13 +349,17 @@ async function importBulkSelected() {
       body: bulkFormData(true),
     });
     state.bulkPreview = body.preview || state.bulkPreview;
-    const message = body.rebuild_task
+    const message = body.rebuild_job
+      ? `Imported ${body.imported_count} rows and queued rebuild job.`
+      : body.rebuild_task
       ? `Imported ${body.imported_count} rows and started rebuild.`
       : `Imported ${body.imported_count} rows. Rebuild is required before they are searchable.`;
     setStatus(message, "warn");
     showMessages(el.bulkMessages, [message], body.failed_count ? "error" : "success");
     if (body.rebuild_task) pollRebuild(body.rebuild_task.task_id);
+    if (body.rebuild_job) pollRebuildJob(body.rebuild_job.job_id);
     await loadManuals();
+    await loadDiagnostics();
     renderBulkPreview();
   } catch (error) {
     showMessages(el.bulkMessages, [error.message], "error");
@@ -470,6 +488,165 @@ async function loadManuals() {
     state.loading = false;
     render();
   }
+}
+
+async function loadDiagnostics({ verifyBlobs = false } = {}) {
+  const params = new URLSearchParams({ kb_name: state.kbName, include_jobs: "true" });
+  if (verifyBlobs) params.set("verify_blobs", "true");
+  try {
+    const body = await apiFetch(`/manual-library/diagnostics?${params.toString()}`, {
+      headers: headers(false),
+    });
+    state.diagnostics = body;
+    renderDiagnostics();
+  } catch (error) {
+    state.diagnostics = null;
+    renderDiagnostics(error.message);
+  }
+}
+
+async function loadAuditTimeline(manualId = state.selectedManualId) {
+  state.auditManualId = manualId || null;
+  const params = new URLSearchParams({ kb_name: state.kbName, limit: "50" });
+  if (manualId) params.set("manual_id", manualId);
+  try {
+    const body = await apiFetch(`/manual-library/registry/audit?${params.toString()}`, {
+      headers: headers(false),
+    });
+    state.auditEvents = body.events || [];
+    renderAuditTimeline(body.enabled === false);
+  } catch (error) {
+    state.auditEvents = [];
+    renderAuditTimeline(false, error.message);
+  }
+}
+
+function renderDiagnostics(errorMessage = "") {
+  const diagnostics = state.diagnostics;
+  el.diagnosticsCards.innerHTML = "";
+  el.recommendations.innerHTML = "";
+  el.queueRows.innerHTML = "";
+  el.queueDetail.textContent = "";
+  if (errorMessage) {
+    el.diagnosticsSummary.textContent = errorMessage;
+    el.queueSummary.textContent = "Queue state unavailable.";
+    return;
+  }
+  if (!diagnostics) {
+    el.diagnosticsSummary.textContent = "Diagnostics not loaded";
+    el.queueSummary.textContent = "Queue state not loaded";
+    return;
+  }
+  const registry = diagnostics.registry || {};
+  const blob = diagnostics.blob_health || {};
+  const dirty = diagnostics.dirty || {};
+  const last = diagnostics.last_rebuild || {};
+  const queue = diagnostics.rebuild_queue || {};
+  el.diagnosticsSummary.textContent = `${diagnostics.kb_name || state.kbName} | registry ${registry.enabled ? registry.registry_backend : "file-sidecar"} | blob ${blob.blob_backend || registry.blob_backend || "local"}`;
+  [
+    ["Registry", registry.enabled ? `${registry.record_count || 0} records` : "file sidecars", registry.enabled ? "ok" : "off"],
+    ["Blob Health", blob.checked ? `${blob.missing_count || 0} missing / ${blob.checked_count || 0} checked` : "unchecked", blob.missing_count ? "warn" : "off"],
+    ["Dirty State", dirty.pending_changes ? `${dirty.dirty_manual_count || 0} dirty` : "clear", dirty.pending_changes ? "warn" : "ok"],
+    ["Queue", queue.enabled ? `${(queue.jobs || []).length} jobs` : "disabled", queue.enabled ? "ok" : "off"],
+    ["Last Build", last.last_successful_build_id || last.current_build_id || "none", "off"],
+    ["Qdrant", last.qdrant_sync ? `${last.qdrant_sync.strategy || "sync"} up ${last.qdrant_sync.points_upserted || 0}` : "not reported", last.qdrant_sync?.fallback_reason ? "warn" : "off"],
+  ].forEach(([label, value, kind]) => {
+    const div = document.createElement("div");
+    div.className = "ops-card";
+    div.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>${badge(kind === "ok" ? "ok" : kind === "warn" ? "attention" : "info", kind)}`;
+    el.diagnosticsCards.appendChild(div);
+  });
+  const recommendations = diagnostics.recommendations || [];
+  el.recommendations.innerHTML = recommendations.length
+    ? recommendations.map((item) => `<div class="recommendation">${badge(item.severity || "info", item.severity === "warning" ? "warn" : "off")}<span>${escapeHtml(recommendationLabel(item.code, item.label))}</span></div>`).join("")
+    : '<div class="muted">No recovery actions recommended.</div>';
+  renderBlobRows(blob);
+  renderRebuildJobs(queue);
+}
+
+function renderBlobRows(blob) {
+  if (!blob.checked || !(blob.missing || []).length) return;
+  const list = document.createElement("div");
+  list.className = "missing-blob-list";
+  list.innerHTML = (blob.missing || [])
+    .map((row) => `<div>${badge("missing", "warn")} <strong>${escapeHtml(row.manual_id)}</strong> ${escapeHtml(row.blob_backend)}:${escapeHtml(row.blob_key)}</div>`)
+    .join("");
+  el.recommendations.appendChild(list);
+}
+
+function renderRebuildJobs(queue) {
+  const jobs = queue.jobs || [];
+  el.queueSummary.textContent = queue.enabled ? `${jobs.length} current-process jobs` : "Queue disabled; immediate rebuild polling is active.";
+  if (!jobs.length) {
+    el.queueRows.innerHTML = `<tr><td colspan="7" class="muted">${queue.enabled ? "No rebuild jobs." : "Queue disabled."}</td></tr>`;
+    return;
+  }
+  jobs.forEach((job) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${badge(job.status || "", statusKind(job.status))}</td>
+      <td>${escapeHtml(job.requested_mode || "")} / ${escapeHtml(job.effective_mode || "")}</td>
+      <td>${escapeHtml(job.attempt || 0)} / ${escapeHtml(job.max_attempts || 0)}</td>
+      <td>${escapeHtml(job.task_id || "")}</td>
+      <td>${escapeHtml(job.queue_position ?? "")}</td>
+      <td>${escapeHtml(shortDate(job.updated_at))}</td>
+      <td>
+        <button type="button" data-job-action="inspect" data-job-id="${escapeHtml(job.job_id)}">Inspect</button>
+        ${["queued", "running", "retrying", "cancel_requested"].includes(job.status) ? `<button type="button" data-job-action="cancel" data-job-id="${escapeHtml(job.job_id)}">Cancel</button>` : ""}
+        ${job.status === "failed" ? `<button type="button" data-job-action="retry" data-job-id="${escapeHtml(job.job_id)}">Retry</button>` : ""}
+      </td>
+    `;
+    el.queueRows.appendChild(tr);
+  });
+}
+
+function renderAuditTimeline(disabled = false, errorMessage = "") {
+  el.auditRows.innerHTML = "";
+  if (errorMessage) {
+    el.auditSummary.textContent = errorMessage;
+    return;
+  }
+  if (disabled) {
+    el.auditSummary.textContent = "Registry disabled; audit timeline is empty in file-sidecar mode.";
+    return;
+  }
+  el.auditSummary.textContent = state.auditManualId ? `Audit events for ${state.auditManualId}` : "Latest KB audit events";
+  if (!state.auditEvents.length) {
+    el.auditRows.innerHTML = '<tr><td colspan="7" class="muted">No audit events.</td></tr>';
+    return;
+  }
+  state.auditEvents.forEach((event) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(shortDate(event.created_at))}</td>
+      <td>${escapeHtml(event.manual_id)}</td>
+      <td>${escapeHtml(event.operation)}</td>
+      <td>${badge(event.outcome || "", event.outcome === "success" ? "ok" : "warn")}</td>
+      <td>${escapeHtml(event.version)}</td>
+      <td>${escapeHtml(event.actor_id || "")}</td>
+      <td><code>${escapeHtml(JSON.stringify(event.detail || {}))}</code></td>
+    `;
+    el.auditRows.appendChild(tr);
+  });
+}
+
+function recommendationLabel(code, fallback) {
+  const labels = {
+    verify_blobs: "Verify registry blobs",
+    restore_object_store: "Restore object store availability or missing objects",
+    inspect_dirty: "Inspect dirty state before rebuilding",
+    retry_rebuild: "Retry the failed queued rebuild",
+    inspect_queue: "Inspect queued rebuild work",
+    force_full_rebuild: "Force a full rebuild",
+    file_sidecar_mode: "Registry disabled; file sidecar mode is normal",
+  };
+  return labels[code] || fallback || code || "Review diagnostics";
+}
+
+function statusKind(status) {
+  if (["succeeded", "done", "active"].includes(status)) return "ok";
+  if (["failed", "retrying", "cancel_requested", "queued", "running"].includes(status)) return "warn";
+  return "off";
 }
 
 async function loadTagReport() {
@@ -606,6 +783,7 @@ async function commitTagRewrite() {
     showMessages(el.rewriteMessages, [`Updated ${body.updated_count || 0} manuals. Rebuild is required.`], "success");
     setStatus("Tag rewrite committed. Rebuild is required before search reflects the change.", "warn");
     await loadManuals();
+    await loadDiagnostics();
     await loadTagReport();
   } catch (error) {
     showMessages(el.rewriteMessages, [error.message], "error");
@@ -670,6 +848,7 @@ function renderTable() {
       state.selectedManualId = manual.manual_id;
       clearSuggestions("detail");
       render();
+      loadAuditTimeline(manual.manual_id);
     });
     el.rows.appendChild(tr);
   });
@@ -752,6 +931,8 @@ el.kbForm.addEventListener("submit", (event) => {
   state.kbName = el.kbName.value.trim() || "default";
   state.selectedManualId = null;
   loadManuals();
+  loadDiagnostics();
+  loadAuditTimeline(null);
 });
 
 el.token.addEventListener("input", () => {
@@ -803,6 +984,8 @@ el.detailForm.addEventListener("submit", async (event) => {
     });
     setStatus("Metadata saved. Rebuild is required before search reflects the change.", "warn");
     await loadManuals();
+    await loadDiagnostics();
+    await loadAuditTimeline(manual.manual_id);
   } catch (error) {
     showMessages(el.detailMessages, [error.message], "error");
   }
@@ -828,6 +1011,8 @@ el.replaceFileButton.addEventListener("click", async () => {
     el.replaceFile.value = "";
     setStatus("Source file replaced. Rebuild is required before search reflects the change.", "warn");
     await loadManuals();
+    await loadDiagnostics();
+    await loadAuditTimeline(manual.manual_id);
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -850,6 +1035,8 @@ el.disableManual.addEventListener("click", async () => {
     disableArmedFor = "";
     setStatus("Manual disabled. Rebuild is required to remove it from search.", "warn");
     await loadManuals();
+    await loadDiagnostics();
+    await loadAuditTimeline(manual.manual_id);
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -869,6 +1056,8 @@ el.hardDelete.addEventListener("click", async () => {
     el.hardDeleteConfirm.value = "";
     setStatus("Manual hard deleted. Rebuild is required to clear search state.", "warn");
     await loadManuals();
+    await loadDiagnostics();
+    await loadAuditTimeline(null);
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -963,9 +1152,12 @@ el.uploadForm.addEventListener("submit", async (event) => {
     });
     el.uploadDialog.close();
     el.uploadForm.reset();
-    setStatus(body.rebuild_task ? "Manual uploaded and rebuild started." : "Manual uploaded. Rebuild is required before it is searchable.", "warn");
+    setStatus(body.rebuild_job ? "Manual uploaded and rebuild job queued." : body.rebuild_task ? "Manual uploaded and rebuild started." : "Manual uploaded. Rebuild is required before it is searchable.", "warn");
     if (body.rebuild_task) pollRebuild(body.rebuild_task.task_id);
+    if (body.rebuild_job) pollRebuildJob(body.rebuild_job.job_id);
     await loadManuals();
+    await loadDiagnostics();
+    await loadAuditTimeline(metadata.manual_id);
   } catch (error) {
     showMessages(el.uploadMessages, [error.message], "error");
   }
@@ -973,16 +1165,83 @@ el.uploadForm.addEventListener("submit", async (event) => {
 
 el.rebuild.addEventListener("click", async () => {
   try {
-    const task = await apiFetch("/manual-library/rebuild", {
+    const response = await apiFetch("/manual-library/rebuild", {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({ kb_name: state.kbName, mode: el.rebuildMode.value }),
     });
-    pollRebuild(task.task_id);
+    if (response.job_id) pollRebuildJob(response.job_id);
+    else pollRebuild(response.task_id);
   } catch (error) {
     setStatus(error.message, "error");
   }
 });
+
+el.refreshDiagnostics.addEventListener("click", () => loadDiagnostics());
+el.verifyBlobs.addEventListener("click", async () => {
+  el.verifyBlobs.disabled = true;
+  try {
+    await loadDiagnostics({ verifyBlobs: true });
+    if (state.diagnostics) setStatus("Registry blob verification complete.", "success");
+  } finally {
+    el.verifyBlobs.disabled = false;
+  }
+});
+
+el.queueRows.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-job-action]");
+  if (!button) return;
+  const jobId = button.dataset.jobId;
+  const action = button.dataset.jobAction;
+  if (!jobId) return;
+  try {
+    if (action === "inspect") {
+      const job = await apiFetch(`/manual-library/rebuild-jobs/${encodeURIComponent(jobId)}`, { headers: headers(false) });
+      state.selectedJobId = jobId;
+      el.queueDetail.textContent = JSON.stringify(job, null, 2);
+      return;
+    }
+    if (action === "cancel") {
+      await apiFetch(`/manual-library/rebuild-jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST", headers: headers(false) });
+      setStatus("Rebuild job cancellation requested.", "warn");
+    }
+    if (action === "retry") {
+      const job = await apiFetch(`/manual-library/rebuild-jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST", headers: headers(false) });
+      setStatus("Rebuild job queued for retry.", "warn");
+      pollRebuildJob(job.job_id);
+    }
+    await loadDiagnostics();
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+});
+
+async function pollRebuildJob(jobId) {
+  state.rebuildTask = jobId;
+  el.rebuild.disabled = true;
+  setStatus(`Rebuild job ${jobId} is active...`, "warn");
+  const tick = async () => {
+    try {
+      const job = await apiFetch(`/manual-library/rebuild-jobs/${encodeURIComponent(jobId)}`, { headers: headers(false) });
+      await loadDiagnostics();
+      if (["queued", "running", "retrying", "cancel_requested"].includes(job.status)) {
+        setTimeout(tick, 1000);
+        return;
+      }
+      el.rebuild.disabled = false;
+      state.rebuildTask = null;
+      if (job.status === "succeeded") setStatus(`Rebuild job completed for ${job.kb_name || state.kbName}.`, "success");
+      else if (job.status === "cancelled") setStatus("Rebuild job cancelled. Dirty state remains pending.", "warn");
+      else setStatus(`Rebuild job failed: ${job.error?.message || JSON.stringify(job.error || job)}`, "error");
+      await loadManuals();
+    } catch (error) {
+      el.rebuild.disabled = false;
+      state.rebuildTask = null;
+      setStatus(error.message, "error");
+    }
+  };
+  tick();
+}
 
 async function pollRebuild(taskId) {
   state.rebuildTask = taskId;
@@ -1004,6 +1263,7 @@ async function pollRebuild(taskId) {
         setStatus(`Rebuild failed: ${task.error || JSON.stringify(task)}`, "error");
       }
       await loadManuals();
+      await loadDiagnostics();
     } catch (error) {
       el.rebuild.disabled = false;
       state.rebuildTask = null;
@@ -1016,3 +1276,5 @@ async function pollRebuild(taskId) {
 renderDetail();
 renderBulkPreview();
 loadManuals();
+loadDiagnostics();
+loadAuditTimeline(null);

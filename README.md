@@ -437,6 +437,17 @@ http://127.0.0.1:8000/admin/manual-library
 
 Use `?kb_name=product-a` to preselect another KB. The page is a server-rendered Jinja2 shell with static CSS and small vanilla JavaScript; it does not add a Node or SPA build step. The UI lists managed manuals, filters by text/status/searchable/rebuild state, validates metadata, suggests optional tags, uploads manuals, previews/imports bulk CSV/JSON/JSONL batches, edits sidecars, replaces source files, disables or hard deletes manuals, opens tag governance facets/drift/policy/rewrite controls, and triggers/polls managed library rebuilds.
 
+The operations band at the top is the M29 diagnostics console. It calls `GET /manual-library/diagnostics?kb_name=...` and shows registry mode, blob backend, dirty manual counts, queue state, latest build/impact/Qdrant summaries, and recovery recommendations. In file-sidecar mode the registry card says the registry is disabled; that is a normal local/default state, not an error. In SQLite registry mode, use **Verify blobs** to run explicit blob reference checks before a rebuild, especially with S3-compatible storage. Missing blob rows show only manual ids, safe blob keys, and blob backend names.
+
+When `manual_library.rebuild_queue_enabled=true`, rebuild/upload/bulk actions surface queued job ids and the queue panel can inspect, cancel active/queued/retrying jobs, or retry failed jobs. When queueing is disabled, the same rebuild button keeps the immediate `GET /rebuild/{task_id}` polling behavior. The audit timeline calls `GET /manual-library/registry/audit` and shows newest-first registry events for the selected manual or KB; file-sidecar mode returns an empty disabled timeline.
+
+Safe recovery flows:
+
+- Dirty state pending: inspect the dirty row list, retry `auto` or `incremental`, and use a full rebuild if fallback or identity compatibility is uncertain.
+- Missing blobs: restore object-store/local blob availability, run **Verify blobs** again, then retry the queued job or trigger a full rebuild.
+- Failed queue job: inspect the job error summary, retry if the failure is transient, or cancel superseded queued work before starting a higher-priority full rebuild.
+- Qdrant uncertainty: restore Qdrant connectivity and prefer a full rebuild when the diagnostics show sync fallback or unknown sync state. Switching temporarily to local NPZ/file mode is a config rollback path, not an automatic UI action.
+
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 
 ### Retrieval quality feedback

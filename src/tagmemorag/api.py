@@ -39,11 +39,15 @@ from .manual_library import (
     library_root,
     list_records,
     load_manifest,
+    registry_enabled,
+    registry_inspect,
     replace_manual_file,
     update_manual_metadata,
     upsert_manual,
     validate_metadata,
+    verify_registry_blobs,
 )
+from .manual_registry import create_registry
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
@@ -1181,6 +1185,60 @@ def get_manual_library_dirty(
     return report
 
 
+@app.get("/manual-library/diagnostics")
+def get_manual_library_diagnostics(
+    kb_name: str = "default",
+    verify_blobs: bool = False,
+    include_jobs: bool = True,
+    job_status: str | None = None,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    return _manual_library_diagnostics(
+        kb_name,
+        verify_blobs=verify_blobs,
+        include_jobs=include_jobs,
+        job_status=job_status,
+        api_key=api_key,
+    )
+
+
+@app.get("/manual-library/registry/audit")
+def get_manual_library_registry_audit(
+    kb_name: str = "default",
+    manual_id: str | None = None,
+    limit: int = 50,
+    api_key: ApiKey = Depends(require_scope("rebuild")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    safe_limit = max(1, min(int(limit), 200))
+    if not registry_enabled(settings):
+        return {"kb_name": kb_name, "enabled": False, "events": [], "limit": safe_limit}
+    events = create_registry(settings.manual_library.registry_path).audit_events(kb_name, manual_id=manual_id)
+    newest_first = list(reversed(events))[:safe_limit]
+    return {
+        "kb_name": kb_name,
+        "enabled": True,
+        "manual_id": manual_id,
+        "limit": safe_limit,
+        "events": [
+            {
+                "event_id": event.event_id,
+                "manual_id": event.manual_id,
+                "operation": event.operation,
+                "outcome": event.outcome,
+                "version": event.version,
+                "actor_id": event.actor_id,
+                "created_at": event.created_at,
+                "detail": _safe_audit_detail(event.detail),
+            }
+            for event in newest_first
+        ],
+    }
+
+
 @app.get("/manual-library/tags")
 def get_manual_library_tags(
     kb_name: str = "default",
@@ -1466,6 +1524,105 @@ def _request_library_rebuild(
     )
     payload = task.to_dict()
     return payload if top_level else {"rebuild_task": payload}
+
+
+def _manual_library_diagnostics(
+    kb_name: str,
+    *,
+    verify_blobs: bool,
+    include_jobs: bool,
+    job_status: str | None,
+    api_key: ApiKey,
+) -> dict[str, object]:
+    graph_state = app_state.kbs.get(kb_name)
+    registry = registry_inspect(kb_name, settings)
+    dirty_report = build_dirty_state_report(kb_name, settings, graph_state=graph_state)
+    blob_health: dict[str, object] = {
+        "checked": False,
+        "checked_count": 0,
+        "missing_count": 0,
+        "missing": [],
+        "blob_backend": settings.manual_library.blob_backend,
+    }
+    if registry.get("enabled") and verify_blobs:
+        verified = verify_registry_blobs(kb_name, settings)
+        blob_health.update(
+            {
+                "checked": True,
+                "checked_count": int(verified.get("checked_count") or 0),
+                "missing_count": int(verified.get("missing_count") or 0),
+                "missing": verified.get("missing") or [],
+            }
+        )
+    elif registry.get("enabled"):
+        blob_health["status"] = "unchecked"
+    else:
+        blob_health["status"] = "registry_disabled"
+
+    jobs: list[dict[str, object]] = []
+    if settings.manual_library.rebuild_queue_enabled and include_jobs:
+        queue = _get_rebuild_queue()
+        jobs = [
+            job
+            for job in queue.list_jobs(kb_name=kb_name, status=job_status)
+            if api_key.allows_kb(str(job.get("kb_name") or ""))
+        ]
+    queue_payload = {"enabled": settings.manual_library.rebuild_queue_enabled, "jobs": jobs}
+    operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
+    return {
+        "kb_name": kb_name,
+        "registry": registry,
+        "blob_health": blob_health,
+        "dirty": {
+            "pending_changes": bool(dirty_report.get("pending_changes")),
+            "dirty_manual_count": int(dirty_report.get("dirty_manual_count") or 0),
+            "dirty_manuals": dirty_report.get("dirty_manuals") or [],
+            "recovery_actions": dirty_report.get("recovery_actions") or [],
+            "operations_summary": operations,
+        },
+        "rebuild_queue": queue_payload,
+        "last_rebuild": {
+            "current_build_id": dirty_report.get("current_build_id") or "",
+            "last_successful_build_id": dirty_report.get("last_successful_build_id") or "",
+            "last_impact_summary": dirty_report.get("last_impact_summary"),
+            "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
+        },
+        "recommendations": _diagnostic_recommendations(registry, blob_health, dirty_report, jobs),
+    }
+
+
+def _diagnostic_recommendations(
+    registry: dict[str, object],
+    blob_health: dict[str, object],
+    dirty_report: dict[str, object],
+    jobs: list[dict[str, object]],
+) -> list[dict[str, str]]:
+    recommendations: list[dict[str, str]] = []
+    if registry.get("enabled") and not blob_health.get("checked"):
+        recommendations.append({"code": "verify_blobs", "label": "Verify registry blobs", "severity": "info"})
+    if int(blob_health.get("missing_count") or 0) > 0:
+        recommendations.append({"code": "restore_object_store", "label": "Restore missing blob objects before rebuild", "severity": "warning"})
+    if dirty_report.get("pending_changes"):
+        recommendations.append({"code": "inspect_dirty", "label": "Inspect dirty manuals", "severity": "warning"})
+    if any(str(job.get("status")) == "failed" for job in jobs):
+        recommendations.append({"code": "retry_rebuild", "label": "Retry failed queued rebuild", "severity": "warning"})
+    if any(str(job.get("status")) in {"queued", "retrying"} for job in jobs):
+        recommendations.append({"code": "inspect_queue", "label": "Inspect queued rebuild work", "severity": "info"})
+    qdrant_sync = dirty_report.get("last_qdrant_sync")
+    if isinstance(qdrant_sync, dict) and qdrant_sync.get("fallback_reason"):
+        recommendations.append({"code": "force_full_rebuild", "label": "Force a full rebuild after Qdrant fallback", "severity": "warning"})
+    if not registry.get("enabled"):
+        recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
+    return recommendations
+
+
+def _safe_audit_detail(detail: dict[str, object]) -> dict[str, object]:
+    allowed = {"source_file", "status", "checksum", "blob_backend", "size_bytes", "content_type"}
+    return {
+        key: value
+        for key, value in detail.items()
+        if key in allowed and (isinstance(value, (str, int, float, bool)) or value is None)
+    }
 
 
 def _get_rebuild_queue() -> RebuildQueue:
