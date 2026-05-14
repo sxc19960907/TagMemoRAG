@@ -49,6 +49,7 @@ Do not invent different names for the same concept in different modules.
 - Application startup and KB load result.
 - `POST /rebuild` accepted, rejected, completed, or failed.
 - Search request summary: `trace_id`, `kb_name`, `build_id`, `top_k`, and duration.
+- Search debug metadata may include low-cardinality lexical fields such as enabled/profile and candidate/source counts.
 - Anchor CRUD events by `anchor_key`, not by full anchor text.
 - Storage schema mismatch or corrupted file load failures.
 
@@ -57,6 +58,7 @@ Do not invent different names for the same concept in different modules.
 ## What NOT to Log
 
 - Full user queries by default.
+- Extracted lexical tokens or matched text snippets.
 - Full document chunks or raw manual text.
 - API keys, future auth tokens, environment secrets, or local credentials.
 - Embedding vectors.

@@ -68,7 +68,7 @@ def test_eval_cli_passes_product_manual_fixture(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["passed"] is True
-    assert report["summary"]["cases"] == 8
+    assert report["summary"]["cases"] == 14
     assert report["cases"][0]["search_strategy"] == "exact_local"
     assert report["cases"][0]["expected"][0]["metadata"]["manual_id"] == "fridge-nrk6192"
 

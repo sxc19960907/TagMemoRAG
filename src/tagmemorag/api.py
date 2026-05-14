@@ -636,6 +636,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             state=state,
             query_vec=query_vec,
             settings=settings,
+            query_text=request.question,
             top_k=int(params["top_k"]),
             source_k=int(params["source_k"]),
             steps=int(params["steps"]),

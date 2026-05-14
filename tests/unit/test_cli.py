@@ -151,6 +151,10 @@ storage:
     assert body["debug"]["ann_enabled"] is False
     assert body["debug"]["ann_candidate_count"] == 0
     assert body["debug"]["ann_fallback_reason"] == ""
+    assert body["debug"]["lexical_enabled"] is True
+    assert "lexical_candidate_count" in body["debug"]
+    assert "lexical_source_count" in body["debug"]
+    assert body["debug"]["lexical_profile"] == "source_boost"
 
 
 def test_cli_search_with_ann_preselection_qdrant(tmp_path):
@@ -385,17 +389,55 @@ manual_library:
     )
     result = json.loads(capsys.readouterr().out)
     assert result["imported_count"] == 1
+
+
+def test_cli_manual_library_registry_commands(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  registry_backend: sqlite
+  registry_path: {tmp_path / "registry.sqlite3"}
+  blob_backend: local
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+    manual_dir = tmp_path / "manuals" / "default" / "coffee"
+    manual_dir.mkdir(parents=True)
+    (manual_dir / "cm1.md").write_text("# Use\nClean weekly.\n", encoding="utf-8")
+    (manual_dir / "cm1.metadata.json").write_text(
+        '{"manual_id":"cm1","title":"CM1","source_file":"coffee/cm1.md","product_category":"coffee","language":"zh-CN"}',
+        encoding="utf-8",
+    )
+
+    assert cli.main(["manual-library", "registry", "migrate", "--config", str(config), "--dry-run"]) == 0
+    dry_run = json.loads(capsys.readouterr().out)
+    assert dry_run["dry_run"] is True
+    assert dry_run["imported_records"] == 1
+
+    assert cli.main(["manual-library", "registry", "migrate", "--config", str(config)]) == 0
+    committed = json.loads(capsys.readouterr().out)
+    assert committed["imported_records"] == 1
+
+    assert cli.main(["manual-library", "registry", "inspect", "--config", str(config)]) == 0
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["record_count"] == 1
+
+    assert cli.main(["manual-library", "registry", "verify-blobs", "--config", str(config)]) == 0
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["missing_count"] == 0
     assert (tmp_path / "manuals" / "default" / "coffee" / "cm1.md").exists()
 
-    assert cli.main(["manual-library", "dirty", "--config", str(config)]) == 0
-    dirty = json.loads(capsys.readouterr().out)
-    assert dirty["pending_changes"] is True
-    assert dirty["recovery_actions"] == ["inspect_dirty", "retry_incremental", "force_full_rebuild"]
-    assert dirty["operations_summary"]["recovery_hint"] == "inspect_dirty"
-    assert dirty["dirty_manuals"][0]["manual_id"] == "cm1"
-
-    assert cli.main(["manual-library", "dirty", "--config", str(config), "--format", "csv"]) == 0
-    assert "manual_id,source_file,operation" in capsys.readouterr().out
+    assert cli.main(["manual-library", "registry", "migrate", "--config", str(config)]) == 0
+    repeated = json.loads(capsys.readouterr().out)
+    assert repeated["skipped_records"] == 1
 
 
 def test_cli_feedback_workflow(tmp_path, capsys):

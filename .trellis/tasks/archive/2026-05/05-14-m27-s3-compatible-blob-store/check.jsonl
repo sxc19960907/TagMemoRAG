@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/prd.md", "reason": "Acceptance criteria for final M27 verification."}
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/design.md", "reason": "Check implementation against S3 design, safety boundaries, and rollback plan."}
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/implement.md", "reason": "Validation commands, checklist, and review gates."}
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/research/code-context.md", "reason": "Check current code integration points and external API assumptions."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check persistence, dirty-state, and rebuild failure safety."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check dependency scope, test coverage, and forbidden patterns."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check safe ServiceError mapping."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check logs/diagnostics do not leak credentials or document content."}

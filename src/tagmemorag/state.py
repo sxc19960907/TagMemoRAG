@@ -147,6 +147,7 @@ class AppState:
         mode: str = "full",
         allow_fallback: bool = True,
         is_library_rebuild: bool = False,
+        cleanup=None,
     ) -> RebuildTask:
         with self._lock:
             if self.is_shutting_down:
@@ -181,7 +182,7 @@ class AppState:
         )
         thread = threading.Thread(
             target=self._rebuild_worker,
-            args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock, on_success, mode, allow_fallback, is_library_rebuild),
+            args=(task, docs_dir, kb_name, cfg, embedder, rebuild_lock, on_success, mode, allow_fallback, is_library_rebuild, cleanup),
             daemon=True,
         )
         thread.start()
@@ -199,6 +200,7 @@ class AppState:
         mode: str,
         allow_fallback: bool,
         is_library_rebuild: bool,
+        cleanup,
     ) -> None:
         t0 = time.perf_counter()
         try:
@@ -282,6 +284,8 @@ class AppState:
         finally:
             task.finished_at = _now()
             get_metrics().set_rebuild_in_progress(kb_name=kb_name, value=0)
+            if cleanup is not None:
+                cleanup()
             rebuild_lock.release()
 
 
@@ -735,23 +739,66 @@ def start_library_rebuild(
     mode: str = "full",
     allow_fallback: bool = True,
 ) -> RebuildTask:
-    from .manual_library import library_root
-
-    docs_dir = library_root(kb_name, cfg)
+    from .manual_library import library_root, materialize_registry_build_source, registry_enabled
 
     def clear_pending(new_state: GraphState) -> None:
         clear_pending_after_success(kb_name, cfg, new_state.build_id)
 
-    task = app_state.start_rebuild(
-        docs_dir,
-        kb_name,
-        cfg,
-        embedder=embedder,
-        on_success=clear_pending,
-        mode=mode,
-        allow_fallback=allow_fallback,
-        is_library_rebuild=True,
-    )
+    if registry_enabled(cfg):
+        staging = materialize_registry_build_source(kb_name, cfg)
+        try:
+            docs_dir = staging.__enter__()
+        except Exception as exc:
+            task = RebuildTask(
+                task_id=str(uuid.uuid4()),
+                status="failed",
+                kb_name=kb_name,
+                started_at=_now(),
+                finished_at=_now(),
+                error={"type": type(exc).__name__, "message": str(exc)},
+                requested_mode=mode,
+                effective_mode="full" if mode == "full" else mode,
+            )
+            app_state.rebuild_tasks[task.task_id] = task
+            from .manual_library import build_rebuild_operations_summary
+
+            def failed_operations_summary() -> dict[str, Any]:
+                return build_rebuild_operations_summary(
+                    kb_name=kb_name,
+                    cfg=cfg,
+                    task=task,
+                    graph_state=app_state.kbs.get(kb_name),
+                )
+
+            task.operations_summary = failed_operations_summary  # type: ignore[attr-defined]
+            return task
+        try:
+            task = app_state.start_rebuild(
+                docs_dir,
+                kb_name,
+                cfg,
+                embedder=embedder,
+                on_success=clear_pending,
+                mode=mode,
+                allow_fallback=allow_fallback,
+                is_library_rebuild=True,
+                cleanup=lambda: staging.__exit__(None, None, None),
+            )
+        except Exception:
+            staging.__exit__(None, None, None)
+            raise
+    else:
+        docs_dir = library_root(kb_name, cfg)
+        task = app_state.start_rebuild(
+            docs_dir,
+            kb_name,
+            cfg,
+            embedder=embedder,
+            on_success=clear_pending,
+            mode=mode,
+            allow_fallback=allow_fallback,
+            is_library_rebuild=True,
+        )
     from .manual_library import build_rebuild_operations_summary
 
     def operations_summary() -> dict[str, Any]:

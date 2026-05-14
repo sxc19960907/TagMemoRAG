@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/prd.md", "reason": "M27 requirements and acceptance criteria for S3-compatible manual blob storage."}
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/design.md", "reason": "Technical design for S3 client creation, key strategy, error mapping, migration, rebuild staging, rollout, and rollback."}
+{"file": ".trellis/tasks/05-14-m27-s3-compatible-blob-store/research/code-context.md", "reason": "Current M26 blob-store/registry integration points and external S3 API research."}
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/design.md", "reason": "M26 registry/blob-store architecture that M27 extends."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and relevant spec routing."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Managed-library persistence, dirty-state, and rebuild safety contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, dependency, and rebuild double-buffer quality constraints."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServiceError and safe API error response requirements."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe logging and low-cardinality diagnostic constraints."}

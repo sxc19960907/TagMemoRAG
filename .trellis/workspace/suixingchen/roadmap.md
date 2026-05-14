@@ -193,6 +193,53 @@ M23 added `eval run` search-parameter overrides and report snapshots for repeata
 - Admin UI improvements for rebuild history and diagnostics.
 - Production deployment guide with Docker Compose, Qdrant backup notes, and observability examples.
 
+## 2026-05-14 Post-M25 Storage And Operations Roadmap
+
+M25 closed the first hybrid lexical retrieval gap. The next development wave should focus on production storage and operations rather than more ranking changes. Uploaded source manuals are still stored as local files plus `*.metadata.json` sidecars under `manual_library.root_dir/{kb}`. That is fine for local development, but production deployments need a durable registry, audit trail, and object-storage path.
+
+### Recommended Order
+
+1. **M26 Manual Registry + Local Blob Store**
+   - Add a SQLite-backed manual registry and audit timeline.
+   - Introduce a `ManualBlobStore` boundary for original uploaded files.
+   - Keep local disk as the default backend and preserve sidecar compatibility.
+   - Add sidecar-to-registry migration and registry-backed rebuild staging.
+
+2. **M27 S3-Compatible Blob Store**
+   - Implement S3-compatible storage behind the M26 blob-store interface.
+   - Support MinIO for local/dev validation and AWS S3 / R2 / OSS-compatible deployments through endpoint/env config.
+   - Keep live object storage out of default tests; use fake clients and optional integration tests.
+
+3. **M28 Background Rebuild Queue And Cancellation**
+   - Add queueing, cancellation, retry, and duplicate rebuild coalescing.
+   - Decouple API upload/update requests from long-running rebuild execution.
+   - Preserve old-graph serving and dirty-state safety.
+
+4. **M29 Admin UI History And Diagnostics**
+   - Surface registry records, blob status, audit timeline, migration state, rebuild queue, and failure recovery actions.
+   - Keep UI dense and operational rather than marketing-style.
+
+5. **M30 Import/Export Bundles**
+   - Export registry metadata, audit-safe manifest, and source blobs into portable bundles.
+   - Import bundles into local or object-storage-backed deployments.
+   - Support disaster recovery and environment migration.
+
+6. **M31 Production Deployment Guide**
+   - Document Docker Compose, Qdrant backup/restore, object storage backup, registry backup, metrics/tracing, and multi-replica topology.
+   - Include rollback playbooks for registry migration, blob-store outage, and rebuild queue failure.
+
+### Current Active Planning Task
+
+- `.trellis/tasks/05-14-m26-manual-registry-blob-storage/`
+
+### Sequencing Notes
+
+- M26 should not require S3 to ship. It should make S3 easy by creating the right internal boundary.
+- M27 should not change API semantics if M26’s `ManualBlobStore` contract is clean.
+- M28 benefits from M26 registry/audit state because queued rebuilds need durable job context and manual version references.
+- M29 should wait until M26/M28 produce useful data to display.
+- M30 should wait until registry and blob references are stable enough to define a portable bundle format.
+
 ## Current Working Guidance
 
 - Use Trellis tasks for future milestones rather than implementing directly from this roadmap.

@@ -98,7 +98,7 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 
 Response includes `build_id`, `search_time_ms`, and a `results` array. Each result has the existing `node_id / score / text / header / path / source_file / anchor_key` fields plus manual metadata such as `manual_id`, `manual_title`, `brand`, `product_category`, `product_model`, `language`, `version`, and `tags`.
 The response also includes `cache: "hit" | "miss"`.
-Set request `debug: true` or `search.debug_metadata_enabled=true` to include a `debug` object with search strategy, ANN candidate/fallback details, and effective search parameters. Diagnostics intentionally omit raw query text, vectors, trace/search ids, and candidate id lists.
+Set request `debug: true` or `search.debug_metadata_enabled=true` to include a `debug` object with search strategy, ANN candidate/fallback details, lexical candidate/source counts, and effective search parameters. Diagnostics intentionally omit raw query text, extracted tokens, document text, vectors, trace/search ids, and candidate id lists.
 
 ### `POST /rebuild`
 
@@ -149,7 +149,7 @@ Returns the manuals discovered in a loaded KB plus available metadata facets for
 
 ### Managed manual library
 
-M6 adds a file-backed library workflow under `manual_library.root_dir/{kb_name}`. The existing `GET /manuals` endpoint remains graph-derived for search-facing clients; `GET /manual-library?kb_name=...` lists uploaded or disabled manuals even before they have been rebuilt.
+M6 adds a file-backed library workflow under `manual_library.root_dir/{kb_name}`. The existing `GET /manuals` endpoint remains graph-derived for search-facing clients; `GET /manual-library?kb_name=...` lists uploaded or disabled manuals even before they have been rebuilt. Local sidecar mode remains the default.
 
 Validate metadata without writing files:
 
@@ -192,6 +192,74 @@ python -m tagmemorag manual-library dirty --kb default --format csv
 ```
 
 The JSON dirty response is also the operator status view. It includes `pending_changes`, dirty manual rows with `searchable` and `exists`, `current_build_id`, `last_successful_build_id`, `last_impact_summary`, low-cardinality Qdrant sync counts, `recovery_actions`, and an `operations_summary`. The CSV format keeps the stable dirty-manual columns for compact operational exports.
+
+#### SQLite registry and blob stores
+
+M26 adds an opt-in registry/blob-store mode for managed manuals. It stores manual metadata, lifecycle state, versions, checksums, blob keys, and audit events in SQLite while storing original uploaded bytes through a blob-store boundary. M27 adds an S3-compatible implementation for MinIO, AWS S3, R2, OSS-compatible endpoints, and similar services. Local file mode remains the default:
+
+```yaml
+manual_library:
+  registry_backend: file
+  blob_backend: local
+```
+
+Enable local registry mode for a KB:
+
+```yaml
+manual_library:
+  root_dir: product_manuals
+  registry_backend: sqlite
+  registry_path: data/manual_registry.sqlite3
+  blob_backend: local
+  blob_root_dir: data/manual_blobs
+```
+
+Migrate an existing sidecar library without moving or deleting source files:
+
+```bash
+python -m tagmemorag manual-library registry migrate --kb default --config config.yaml --dry-run
+python -m tagmemorag manual-library registry migrate --kb default --config config.yaml
+python -m tagmemorag manual-library registry verify-blobs --kb default --config config.yaml
+python -m tagmemorag manual-library registry inspect --kb default --config config.yaml
+```
+
+Registry-backed rebuilds stage active records into a temporary sidecar tree and then run the existing parser/build path, so chunk metadata and dirty-state safety stay compatible. If staging or blob reads fail, the active graph is not swapped and pending state remains set. Rollback is config-only: switch `manual_library.registry_backend` back to `file` because migration leaves the original sidecars and source files in place.
+
+Enable S3-compatible registry mode by installing the optional extra and configuring only bucket/endpoint metadata in YAML. Credentials are read from the environment variables named by config:
+
+```bash
+uv sync --extra s3
+export MINIO_ROOT_USER=minioadmin
+export MINIO_ROOT_PASSWORD=minioadmin
+```
+
+```yaml
+manual_library:
+  root_dir: product_manuals
+  registry_backend: sqlite
+  registry_path: data/manual_registry.sqlite3
+  blob_backend: s3
+  s3_bucket: tagmemorag-manuals
+  s3_prefix: manuals/dev
+  s3_endpoint_url: http://localhost:9000
+  s3_region: us-east-1
+  s3_access_key_env: MINIO_ROOT_USER
+  s3_secret_key_env: MINIO_ROOT_PASSWORD
+  s3_addressing_style: path
+```
+
+For AWS S3 or compatible hosted services, leave `s3_endpoint_url` blank for AWS or set the provider endpoint URL, set `s3_bucket`, and either keep `s3_access_key_env` / `s3_secret_key_env` pointed at environment variables or set both names to empty strings to use boto3's default credential chain. Object keys are stored in the registry as safe relative keys, not signed URLs or credential-bearing strings.
+
+Migration and verification use the same commands as local registry mode:
+
+```bash
+python -m tagmemorag manual-library registry migrate --kb default --config config.yaml --dry-run
+python -m tagmemorag manual-library registry migrate --kb default --config config.yaml
+python -m tagmemorag manual-library registry verify-blobs --kb default --config config.yaml
+python -m tagmemorag manual-library rebuild --kb default --config config.yaml
+```
+
+If an S3 upload fails, registry rows and dirty state are not committed. If a rebuild cannot read an object, the previous graph keeps serving and dirty state remains pending. Roll back by restoring object-store availability and retrying; if you migrated from sidecars and kept local files, you can switch `registry_backend` back to `file` for an emergency rebuild path.
 
 Rebuild recovery runbook:
 
@@ -460,6 +528,13 @@ search:
   aggregate: max          # max | sum
   metadata_field_boost: 0.05
   tag_boost: 0.03
+  lexical_enabled: true
+  lexical_candidate_k: 32
+  lexical_source_k: 3
+  lexical_min_token_chars: 2
+  lexical_boost: 0.2
+  lexical_exact_code_boost: 0.15
+  lexical_model_boost: 0.12
   debug_metadata_enabled: false
   ann_preselect_enabled: false
   ann_candidate_k: 64
@@ -633,13 +708,16 @@ Troubleshooting guide:
 | Dirty state remains pending after rebuild failure | `manual-library dirty --format json` | Fix Qdrant reachability, retry incremental, or full rebuild |
 | Qdrant outage blocks startup/load | provider config | Temporarily switch to `npz` and rebuild from managed sources |
 
-Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
+TagMemoRAG also adds a lightweight local lexical signal before WAVE-RAG ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
+
+Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
 
 The ANN path is intentionally conservative:
 
 - exact local search remains the default
 - NPZ-backed KBs always stay on the exact path
 - filters are still enforced locally
+- lexical candidates respect the same local filters and KB boundary
 - eligible anchor nodes are force-included in the ANN candidate set
 - if Qdrant ANN fails, returns invalid ids, or yields no safe filtered candidate set, search falls back to exact local scoring
 
@@ -731,6 +809,19 @@ uv run tagmemorag eval run \
   --config config.yaml \
   --output .tmp/eval-product-report.json \
   --eval-data-dir .tmp/eval/product-manuals
+```
+
+The product-manual suite includes lexical-sensitive cases for short Chinese terms, punctuation variants, fault codes, and model-like identifiers. To reproduce the M25 check with deterministic offline embeddings:
+
+```bash
+TAGMEMORAG__MODEL__PROVIDER=hashing TAGMEMORAG__MODEL__NAME=hashing TAGMEMORAG__MODEL__DIM=64 \
+uv run python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/product_manuals.jsonl \
+  --docs tests/fixtures/product_manuals \
+  --config config.yaml \
+  --eval-data-dir .tmp/eval/m25-product-post \
+  --output .tmp/eval/m25-reports/product-post.json \
+  --min-recall-at-k 0 --min-mrr 0 --min-hit-at-k 0
 ```
 
 For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
@@ -837,4 +928,5 @@ Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 | **M21** ✅ | Rebuild operations UX and failure recovery guidance |
 | **M22** ✅ | Qdrant operations documentation and inspection command |
 | **M23** ✅ | Retrieval tuning experiment loop; defaults preserved from eval evidence |
+| **M25** ✅ | Hybrid lexical retrieval for exact fault codes, model terms, and short product-manual phrases |
 | **Parking lot** | Payload-filtered ANN, database-backed manual registry/audit, background rebuild queue/cancellation, HA multi-replica, import/export bundles |

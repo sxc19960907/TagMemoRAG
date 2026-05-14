@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 import json
 from pathlib import Path
 import time
@@ -17,9 +18,13 @@ from tagmemorag.manual_library import (
     list_records,
     load_manifest,
     mark_pending,
+    materialize_registry_build_source,
+    migrate_sidecars_to_registry,
+    registry_inspect,
     safe_source_path,
     update_manual_metadata,
     upsert_manual,
+    verify_registry_blobs,
     validate_metadata,
 )
 from tagmemorag.search_runtime import execute_search
@@ -50,6 +55,44 @@ class KeywordEmbedder:
             vec[3] = 1.0
         norm = np.linalg.norm(vec)
         return vec / norm if norm else vec
+
+
+class FakeS3ClientError(Exception):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+class FakeS3Client:
+    def __init__(self):
+        self.objects = {}
+        self.fail_put = False
+
+    def put_object(self, **kwargs):
+        if self.fail_put:
+            raise FakeS3ClientError("AccessDenied")
+        self.objects[(kwargs["Bucket"], kwargs["Key"])] = {
+            "Body": kwargs["Body"],
+            "ContentType": kwargs.get("ContentType", ""),
+            "Metadata": kwargs.get("Metadata", {}),
+        }
+        return {}
+
+    def get_object(self, **kwargs):
+        try:
+            obj = self.objects[(kwargs["Bucket"], kwargs["Key"])]
+        except KeyError as exc:
+            raise FakeS3ClientError("NoSuchKey") from exc
+        return {"Body": BytesIO(obj["Body"])}
+
+    def head_object(self, **kwargs):
+        if (kwargs["Bucket"], kwargs["Key"]) not in self.objects:
+            raise FakeS3ClientError("404")
+        return {}
+
+    def delete_object(self, **kwargs):
+        self.objects.pop((kwargs["Bucket"], kwargs["Key"]), None)
+        return {}
 
 
 @pytest.fixture
@@ -251,6 +294,180 @@ def test_incremental_rebuild_falls_back_without_dirty_state(library_config, fake
     assert task.status == "done"
     assert task.effective_mode == "full"
     assert task.fallback_reason == "missing_dirty_state"
+
+
+def test_registry_mode_upload_list_migrate_and_rebuild(tmp_path, fake_embedder):
+    legacy_cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "legacy-data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        model={"dim": 64},
+    )
+    upsert_manual("default", _metadata("coffee/legacy.md", "legacy"), b"# Legacy\nSteam works.\n", legacy_cfg)
+
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite3"),
+            blob_backend="local",
+            blob_root_dir=str(tmp_path / "blobs"),
+        ),
+        model={"dim": 64},
+    )
+    dry_run = migrate_sidecars_to_registry("default", cfg, dry_run=True)
+    assert dry_run.imported_records == 1
+    committed = migrate_sidecars_to_registry("default", cfg, dry_run=False)
+    assert committed.imported_records == 1
+    second = migrate_sidecars_to_registry("default", cfg, dry_run=False)
+    assert second.skipped_records == 1
+
+    uploaded = upsert_manual("default", _metadata("coffee/new.md", "new"), b"# New\nClean weekly.\n", cfg)
+    assert uploaded.registry_backend == "sqlite"
+    assert uploaded.storage_backend == "local"
+    assert uploaded.blob_key
+    assert uploaded.size_bytes > 0
+    assert registry_inspect("default", cfg)["record_count"] == 2
+    assert verify_registry_blobs("default", cfg)["missing_count"] == 0
+
+    state = build_kb(library_root("default", legacy_cfg), "default", legacy_cfg, embedder=fake_embedder)
+    app = AppState(state)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder)
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    manual_ids = {node["metadata"]["manual_id"] for _, node in app.get_current("default").graph.nodes(data=True)}
+    assert manual_ids == {"legacy", "new"}
+    assert load_manifest("default", cfg).pending_changes is False
+
+
+def test_registry_s3_upload_migrate_verify_and_rebuild(monkeypatch, tmp_path, fake_embedder):
+    from tagmemorag.manual_blob_store import S3ManualBlobStore
+
+    legacy_cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "legacy-data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        model={"dim": 64},
+    )
+    upsert_manual("default", _metadata("coffee/legacy.md", "legacy"), b"# Legacy\nalpha steam.\n", legacy_cfg)
+
+    client = FakeS3Client()
+    monkeypatch.setattr(
+        "tagmemorag.manual_blob_store.create_blob_store",
+        lambda cfg: S3ManualBlobStore(cfg.manual_library.s3_bucket, cfg.manual_library.s3_prefix, client=client),
+    )
+    monkeypatch.setattr(
+        "tagmemorag.manual_library.create_blob_store",
+        lambda cfg: S3ManualBlobStore(cfg.manual_library.s3_bucket, cfg.manual_library.s3_prefix, client=client),
+    )
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite3"),
+            blob_backend="s3",
+            s3_bucket="manuals",
+            s3_prefix="/prod//",
+        ),
+        model={"dim": 64},
+    )
+
+    dry_run = migrate_sidecars_to_registry("default", cfg, dry_run=True)
+    assert dry_run.imported_records == 1
+    assert client.objects == {}
+    committed = migrate_sidecars_to_registry("default", cfg, dry_run=False)
+    assert committed.imported_records == 1
+    uploaded = upsert_manual("default", _metadata("coffee/new.md", "new"), b"# New\nbravo clean.\n", cfg)
+
+    assert uploaded.storage_backend == "s3"
+    assert uploaded.blob_key.startswith("prod/default/new/1/")
+    assert verify_registry_blobs("default", cfg)["missing_count"] == 0
+    assert len(client.objects) == 2
+
+    state = build_kb(library_root("default", legacy_cfg), "default", legacy_cfg, embedder=fake_embedder)
+    app = AppState(state)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder)
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    manual_ids = {node["metadata"]["manual_id"] for _, node in app.get_current("default").graph.nodes(data=True)}
+    assert manual_ids == {"legacy", "new"}
+    assert load_manifest("default", cfg).pending_changes is False
+
+
+def test_s3_upload_failure_does_not_commit_registry_or_dirty(monkeypatch, tmp_path):
+    from tagmemorag.manual_blob_store import S3ManualBlobStore
+    from tagmemorag.manual_registry import create_registry
+
+    client = FakeS3Client()
+    client.fail_put = True
+    monkeypatch.setattr(
+        "tagmemorag.manual_library.create_blob_store",
+        lambda cfg: S3ManualBlobStore(cfg.manual_library.s3_bucket, cfg.manual_library.s3_prefix, client=client),
+    )
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite3"),
+            blob_backend="s3",
+            s3_bucket="manuals",
+        ),
+        model={"dim": 64},
+    )
+
+    with pytest.raises(ServiceError) as exc:
+        upsert_manual("default", _metadata("coffee/new.md", "new"), b"# New\nbravo clean.\n", cfg)
+
+    assert exc.value.code == "STORAGE_LOAD_FAILED"
+    assert create_registry(cfg.manual_library.registry_path).list("default") == []
+    assert load_manifest("default", cfg).pending_changes is False
+
+
+def test_s3_missing_object_rebuild_preserves_old_graph_and_dirty(monkeypatch, tmp_path, fake_embedder):
+    from tagmemorag.manual_blob_store import S3ManualBlobStore
+
+    client = FakeS3Client()
+    monkeypatch.setattr(
+        "tagmemorag.manual_library.create_blob_store",
+        lambda cfg: S3ManualBlobStore(cfg.manual_library.s3_bucket, cfg.manual_library.s3_prefix, client=client),
+    )
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(
+            root_dir=str(tmp_path / "manuals"),
+            registry_backend="sqlite",
+            registry_path=str(tmp_path / "registry.sqlite3"),
+            blob_backend="s3",
+            s3_bucket="manuals",
+        ),
+        model={"dim": 64},
+    )
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# A\nSteam works.\n", cfg)
+    with materialize_registry_build_source("default", cfg) as docs_dir:
+        old_state = build_kb(docs_dir, "default", cfg, embedder=fake_embedder)
+    mark_pending("default", cfg, pending=False, build_id=old_state.build_id)
+    app = AppState(old_state)
+
+    upsert_manual("default", _metadata("coffee/b.md", "b"), b"# B\nClean weekly.\n", cfg)
+    client.objects.clear()
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder)
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "failed"
+    assert app.get_current("default").build_id == old_state.build_id
+    assert load_manifest("default", cfg).pending_changes is True
 
 
 @pytest.fixture

@@ -177,13 +177,7 @@ class QdrantVectorStore(VectorStore):
         vector = np.asarray(query_vec, dtype=np.float32)
         try:
             if self._uses_real_client():
-                records = self.client.search(
-                    collection_name=self.collection_name,
-                    query_vector=vector.astype(float).tolist(),
-                    limit=int(k),
-                    with_payload=False,
-                    with_vectors=False,
-                )
+                records = self._search_real_client(vector, int(k))
             else:
                 records = self.client.search(
                     collection_name=self.collection_name,
@@ -198,6 +192,29 @@ class QdrantVectorStore(VectorStore):
         for record in records:
             candidates.append((int(record.id), float(getattr(record, "score", 0.0))))
         return sorted(candidates, key=lambda item: (-item[1], item[0]))
+
+    def _search_real_client(self, vector: np.ndarray, k: int):
+        query_vector = vector.astype(float).tolist()
+        search = getattr(self.client, "search", None)
+        if callable(search):
+            return search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=k,
+                with_payload=False,
+                with_vectors=False,
+            )
+        query_points = getattr(self.client, "query_points", None)
+        if callable(query_points):
+            response = query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                limit=k,
+                with_payload=False,
+                with_vectors=False,
+            )
+            return list(getattr(response, "points", response))
+        raise NotImplementedError("Qdrant client does not support vector search.")
 
     def get(self, node_id: int) -> np.ndarray:
         _, vecs = self.load([node_id])

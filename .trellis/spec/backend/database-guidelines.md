@@ -151,6 +151,70 @@ os.replace(tmp_upload_path, target)
 
 Resolve and verify the path under the KB root, write metadata atomically, then replace the uploaded source in the target directory.
 
+## Scenario: S3-Compatible Manual Blob Store
+
+### 1. Scope / Trigger
+
+- Trigger: M27 adds `manual_library.blob_backend=s3` as an optional object-storage backend behind `ManualBlobStore`.
+- The registry remains the source of truth. S3 stores only original uploaded bytes and safe object metadata.
+
+### 2. Signatures
+
+- Config: `manual_library.blob_backend: local | s3`, `s3_bucket`, `s3_prefix`, `s3_endpoint_url`, `s3_region`, `s3_access_key_env`, `s3_secret_key_env`, `s3_session_token_env`, `s3_addressing_style`, `s3_timeout_seconds`.
+- Factory: `create_blob_store(cfg) -> ManualBlobStore`.
+- Store: `S3ManualBlobStore.put(kb_name, manual_id, source_file, content, metadata) -> BlobRef`, plus `get(blob_key)`, `exists(blob_key)`, and `delete(blob_key)`.
+- Dependency: S3 support is optional via the `s3` extra; default local mode must not require boto3.
+
+### 3. Contracts
+
+- Object keys are safe relative keys: `{normalized_prefix}/{safe_kb_name}/{safe_manual_id}/{version}/{sha256-prefix}-{safe_basename}`.
+- Registry rows store `blob_backend="s3"` and the object key only. Bucket, endpoint, and credentials stay in runtime config/env.
+- Credentials are read from environment variables named by config. If access/secret env names are blank, allow boto3's default credential chain.
+- Object metadata may include checksum, manual id, source filename basename, content type, and version. It must not include document text, raw paths, or secrets.
+- Registry-backed migration, verify, upload, replace, delete, and rebuild use the same `ManualBlobStore` interface as local blob storage.
+
+### 4. Validation & Error Matrix
+
+- Missing `s3_bucket` -> `INVALID_CONFIG`.
+- Missing optional boto3 dependency when `blob_backend=s3` -> `INVALID_CONFIG` with `{"dependency":"boto3","extra":"s3"}`.
+- Named credential env var is unset -> `INVALID_CONFIG` with only the env var name.
+- Unsafe blob key -> `INVALID_INPUT`.
+- Missing object during `get()` -> `STORAGE_LOAD_FAILED`.
+- S3 client failure during put/get/head/delete -> `STORAGE_LOAD_FAILED` with safe fields: backend, bucket, blob key, operation, and provider error code.
+
+### 5. Good/Base/Bad Cases
+
+- Good: registry upload writes the object first, then commits the registry row, then marks dirty.
+- Base: `blob_backend=local` remains the default and all default tests run without boto3, MinIO, network, or credentials.
+- Bad: returning or logging signed URLs, request headers, raw credential values, raw document bodies, absolute source paths, or object-store stack traces.
+
+### 6. Tests Required
+
+- Unit: prefix normalization, key safety, put/get/exists/delete, content type, size, checksum, metadata.
+- Unit: missing bucket, missing dependency, missing credential env, unsafe key, missing object.
+- Integration-style unit with fake client: S3-backed registry upload, replacement, sidecar migration, verify-blobs, and registry-backed rebuild.
+- Failure: upload failure does not create a registry row or dirty state; missing object during rebuild preserves old `GraphState` and leaves dirty state pending.
+- Env: `TAGMEMORAG__MANUAL_LIBRARY__S3_*` overrides load through `Settings`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+record.blob_key = f"s3://{bucket}/{key}?X-Amz-Signature=..."
+```
+
+This leaks deployment-specific URLs and may expose credential-bearing signed query parameters.
+
+#### Correct
+
+```python
+blob_ref = blob_store.put(kb_name, manual_id, source_file, content, {"version": next_version})
+registry.upsert(kb_name, metadata, blob_ref, operation="upsert")
+```
+
+Keep object storage behind `ManualBlobStore`, store only the safe object key in the registry, and commit registry state only after the object write succeeds.
+
 ---
 
 ## Common Mistakes

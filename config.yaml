@@ -25,6 +25,13 @@ search:
   propagation_boost: 1.0
   metadata_field_boost: 0.05
   tag_boost: 0.03
+  lexical_enabled: true
+  lexical_candidate_k: 32
+  lexical_source_k: 3
+  lexical_min_token_chars: 2
+  lexical_boost: 0.2
+  lexical_exact_code_boost: 0.15
+  lexical_model_boost: 0.12
   ann_preselect_enabled: false
   ann_candidate_k: 64
   ann_force_exact_on_filters: false
@@ -67,6 +74,24 @@ cache:
   enabled: true
   max_entries: 10000
   ttl_seconds: 3600
+manual_library:
+  root_dir: product_manuals
+  allow_overwrite: false
+  incremental_auto_max_dirty_manuals: 20
+  incremental_auto_max_dirty_chunks: 500
+  registry_backend: file
+  registry_path: data/manual_registry.sqlite3
+  blob_backend: local
+  blob_root_dir: data/manual_blobs
+  s3_bucket: ""
+  s3_prefix: ""
+  s3_endpoint_url: ""
+  s3_region: ""
+  s3_access_key_env: AWS_ACCESS_KEY_ID
+  s3_secret_key_env: AWS_SECRET_ACCESS_KEY
+  s3_session_token_env: ""
+  s3_addressing_style: auto
+  s3_timeout_seconds: 10.0
 observability:
   metrics:
     enabled: true

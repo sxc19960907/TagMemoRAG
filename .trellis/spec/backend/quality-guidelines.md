@@ -23,6 +23,7 @@ M0 quality is defined by the acceptance criteria in `.trellis/tasks/05-10-wave-r
 - Keep rebuild double-buffer behavior: build new state off to the side, then swap only after success.
 - Include `build_id` in search results and relevant logs.
 - Use explicit config objects instead of scattering constants across modules.
+- Keep hybrid lexical retrieval local and bounded: scan loaded graph node fields only, respect filters and KB boundaries, and keep WAVE-RAG as the final deterministic ranker.
 - For `BaseSettings` configs that merge YAML with env vars, explicitly test precedence. The M1 contract is `env > .env > YAML init data > defaults`; pydantic-settings does not preserve that order unless `settings_customise_sources` is configured.
 
 ---
@@ -35,6 +36,7 @@ M0 quality is defined by the acceptance criteria in `.trellis/tasks/05-10-wave-r
 - Do not make rebuild failures replace or clear the currently served graph.
 - Do not silently drop unresolved anchors after rebuild.
 - Do not introduce new production dependencies without updating `pyproject.toml`, tests, and this spec if behavior changes.
+- Do not emit raw lexical query tokens, matched document snippets, full candidate ids, vectors, or source-file lists in debug metadata, logs, metrics, traces, or cache suffixes.
 - Do not hand-roll string parsing for JSON/YAML/NPZ files when standard libraries or project storage helpers are available.
 
 ---

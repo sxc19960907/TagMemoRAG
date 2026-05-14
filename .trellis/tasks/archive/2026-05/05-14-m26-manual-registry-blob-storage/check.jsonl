@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/prd.md", "reason": "Acceptance criteria for final M26 verification."}
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/implement.md", "reason": "Validation commands and review gates for registry/blob-store implementation."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check persistence, dirty-state, and rebuild safety contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check test coverage, layer boundaries, and forbidden patterns."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check that storage/registry metadata remains low-cardinality and safe."}

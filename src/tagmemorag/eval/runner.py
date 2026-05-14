@@ -76,6 +76,7 @@ def run_eval(
             state=state,
             query_vec=query_vec,
             settings=run_cfg,
+            query_text=case.query,
             top_k=case_top_k,
             source_k=int(search_params["source_k"]),
             steps=int(search_params["steps"]),
@@ -211,6 +212,13 @@ def _resolve_search_params(
         "aggregate": aggregate if aggregate is not None else cfg.search.aggregate,
         "metadata_field_boost": metadata_field_boost if metadata_field_boost is not None else cfg.search.metadata_field_boost,
         "tag_boost": tag_boost if tag_boost is not None else cfg.search.tag_boost,
+        "lexical_enabled": cfg.search.lexical_enabled,
+        "lexical_candidate_k": cfg.search.lexical_candidate_k,
+        "lexical_source_k": cfg.search.lexical_source_k,
+        "lexical_min_token_chars": cfg.search.lexical_min_token_chars,
+        "lexical_boost": cfg.search.lexical_boost,
+        "lexical_exact_code_boost": cfg.search.lexical_exact_code_boost,
+        "lexical_model_boost": cfg.search.lexical_model_boost,
     }
     if int(resolved["source_k"]) <= 0:
         raise EvalSuiteError("source_k must be a positive integer")

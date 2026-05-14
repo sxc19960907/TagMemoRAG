@@ -25,6 +25,8 @@ def wave_search(
     filters: Mapping[str, Any] | None = None,
     metadata_field_boost: float = 0.0,
     tag_boost: float = 0.0,
+    lexical_scores: Mapping[int, float] | None = None,
+    lexical_source_k: int = 0,
 ) -> list[Result]:
     anchors = anchors or {}
     if aggregate not in {"max", "sum"}:
@@ -41,12 +43,19 @@ def wave_search(
     sims = vectors @ query_vec
     ranked_source_ids = sorted(eligible, key=lambda node_id: (-float(sims[node_id]), int(node_id)))
     source_ids = ranked_source_ids[: min(source_k, len(ranked_source_ids))]
+    lexical_scores = dict(lexical_scores or {})
+    if lexical_source_k > 0 and lexical_scores:
+        lexical_source_ids = sorted(
+            (node_id for node_id in eligible if node_id in lexical_scores and node_id not in source_ids),
+            key=lambda node_id: (-float(lexical_scores[node_id]), int(node_id)),
+        )
+        source_ids.extend(lexical_source_ids[: min(lexical_source_k, len(lexical_source_ids))])
 
     amplitudes: defaultdict[int, float] = defaultdict(float)
     current_wave: dict[int, float] = {}
     for nid in source_ids:
         node_id = int(nid)
-        amp = float(sims[node_id])
+        amp = max(float(sims[node_id]), float(lexical_scores.get(node_id, 0.0)))
         if node_id in anchors:
             amp *= anchors[node_id].boost
         if aggregate == "max":
@@ -83,17 +92,24 @@ def wave_search(
 
     normalized_filters = normalize_filters(filters)
     boosted = {
-        node_id: _apply_metadata_boost(
-            score,
-            metadata_from_node(graph.nodes[node_id]),
-            normalized_filters,
-            metadata_field_boost=metadata_field_boost,
-            tag_boost=tag_boost,
+        node_id: _apply_lexical_boost(
+            _apply_metadata_boost(
+                score,
+                metadata_from_node(graph.nodes[node_id]),
+                normalized_filters,
+                metadata_field_boost=metadata_field_boost,
+                tag_boost=tag_boost,
+            ),
+            lexical_scores.get(node_id, 0.0),
         )
         for node_id, score in amplitudes.items()
     }
     ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))[:top_k]
     return [_make_result(graph, node_id, score) for node_id, score in ranked]
+
+
+def _apply_lexical_boost(score: float, lexical_score: float) -> float:
+    return float(score) + max(0.0, float(lexical_score))
 
 
 def filter_node_ids(graph: nx.Graph, filters: Mapping[str, Any] | None = None) -> set[int]:

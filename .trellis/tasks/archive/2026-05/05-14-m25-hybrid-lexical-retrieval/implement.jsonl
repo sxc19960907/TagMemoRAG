@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend search changes must follow project quality, error, logging, and persistence conventions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Search changes touch config, API/CLI/eval, cache, and docs."}
+{"file": ".trellis/tasks/05-14-m25-hybrid-lexical-retrieval/research/code-context.md", "reason": "Current search flow and M23 evidence for lexical retrieval planning."}

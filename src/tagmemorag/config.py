@@ -43,6 +43,13 @@ class SearchConfig(BaseModel):
     ann_candidate_k: int = 64
     ann_force_exact_on_filters: bool = False
     debug_metadata_enabled: bool = False
+    lexical_enabled: bool = True
+    lexical_candidate_k: int = 32
+    lexical_source_k: int = 3
+    lexical_min_token_chars: int = 2
+    lexical_boost: float = 0.2
+    lexical_exact_code_boost: float = 0.15
+    lexical_model_boost: float = 0.12
 
 
 class ParserConfig(BaseModel):
@@ -111,6 +118,19 @@ class ManualLibraryConfig(BaseModel):
     allow_overwrite: bool = False
     incremental_auto_max_dirty_manuals: int = 20
     incremental_auto_max_dirty_chunks: int = 500
+    registry_backend: Literal["file", "sqlite"] = "file"
+    registry_path: str = "data/manual_registry.sqlite3"
+    blob_backend: Literal["local", "s3"] = "local"
+    blob_root_dir: str = "data/manual_blobs"
+    s3_bucket: str = ""
+    s3_prefix: str = ""
+    s3_endpoint_url: str = ""
+    s3_region: str = ""
+    s3_access_key_env: str = "AWS_ACCESS_KEY_ID"
+    s3_secret_key_env: str = "AWS_SECRET_ACCESS_KEY"
+    s3_session_token_env: str = ""
+    s3_addressing_style: Literal["auto", "virtual", "path"] = "auto"
+    s3_timeout_seconds: float = 10.0
 
 
 class MetricsConfig(BaseModel):

@@ -17,7 +17,7 @@ from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
-from .manual_library import build_dirty_state_report
+from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .qdrant_ops import inspect_qdrant
 from .retrieval_feedback import (
     create_feedback,
@@ -131,6 +131,18 @@ def main(argv: list[str] | None = None) -> int:
     library_dirty.add_argument("--kb", default="default")
     library_dirty.add_argument("--config", default="config.yaml")
     library_dirty.add_argument("--format", choices=["json", "csv"], default="json")
+    library_registry = manual_library_sub.add_parser("registry")
+    library_registry_sub = library_registry.add_subparsers(dest="manual_registry_command", required=True)
+    registry_inspect_parser = library_registry_sub.add_parser("inspect")
+    registry_inspect_parser.add_argument("--kb", default="default")
+    registry_inspect_parser.add_argument("--config", default="config.yaml")
+    registry_migrate = library_registry_sub.add_parser("migrate")
+    registry_migrate.add_argument("--kb", default="default")
+    registry_migrate.add_argument("--config", default="config.yaml")
+    registry_migrate.add_argument("--dry-run", action="store_true", default=False)
+    registry_verify = library_registry_sub.add_parser("verify-blobs")
+    registry_verify.add_argument("--kb", default="default")
+    registry_verify.add_argument("--config", default="config.yaml")
 
     tag = sub.add_parser("tag")
     tag_sub = tag.add_subparsers(dest="tag_command", required=True)
@@ -212,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             state=state,
             query_vec=query_vec,
             settings=cfg,
+            query_text=args.question,
             top_k=int(params["top_k"]),
             source_k=int(params["source_k"]),
             steps=int(params["steps"]),
@@ -377,6 +390,19 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
+    if args.command == "manual-library" and args.manual_library_command == "registry":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        if args.manual_registry_command == "inspect":
+            print(json.dumps(registry_inspect(args.kb, cfg), ensure_ascii=False, indent=2))
+            return 0
+        if args.manual_registry_command == "migrate":
+            report = migrate_sidecars_to_registry(args.kb, cfg, dry_run=args.dry_run)
+            print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+            return 0
+        if args.manual_registry_command == "verify-blobs":
+            print(json.dumps(verify_registry_blobs(args.kb, cfg), ensure_ascii=False, indent=2))
+            return 0
     if args.command == "tag" and args.tag_command == "stats":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

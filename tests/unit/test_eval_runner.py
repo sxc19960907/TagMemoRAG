@@ -48,7 +48,7 @@ def test_run_eval_product_manual_suite_is_reproducible(tmp_path, test_config):
     )
 
     assert report.summary.passed
-    assert report.summary.cases == 8
+    assert report.summary.cases == 14
     assert {case.id for case in report.cases} >= {"washer-e21-fault", "dishwasher-cleaning-anchor"}
     first_case = report.cases[0].to_dict()
     assert first_case["search_strategy"] == "exact_local"
@@ -93,6 +93,13 @@ def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
         "aggregate": "sum",
         "metadata_field_boost": 0.08,
         "tag_boost": 0.05,
+        "lexical_enabled": True,
+        "lexical_candidate_k": 32,
+        "lexical_source_k": 3,
+        "lexical_min_token_chars": 2,
+        "lexical_boost": 0.2,
+        "lexical_exact_code_boost": 0.15,
+        "lexical_model_boost": 0.12,
     }
 
 

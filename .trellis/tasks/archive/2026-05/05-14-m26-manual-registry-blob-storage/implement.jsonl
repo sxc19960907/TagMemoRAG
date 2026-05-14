@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/prd.md", "reason": "M26 requirements and acceptance criteria for registry, blob storage, migration, rebuild staging, and docs."}
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/design.md", "reason": "Target architecture, SQLite schema, blob key strategy, migration, and rebuild staging design."}
+{"file": ".trellis/tasks/05-14-m26-manual-registry-blob-storage/research/code-context.md", "reason": "Current managed-library flow and likely implementation files."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and relevant spec routing."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Persistence contracts, managed-library dirty-state safety, and atomic write expectations."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, dependency, and rebuild double-buffer quality constraints."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "ServiceError and API-safe error shape requirements."}

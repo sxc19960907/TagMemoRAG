@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from tagmemorag.api import SearchRequest, _compute_cache_key, _compute_search_id
 from tagmemorag.cache.lru_ttl import LRUTTLCache
+from tagmemorag.config import SearchConfig
 from tagmemorag.types import GraphState
+from tagmemorag import api
 
 import networkx as nx
 import numpy as np
@@ -78,6 +80,22 @@ def test_cache_key_includes_canonical_filters():
 
     assert base != filtered
     assert filtered == same_filtered
+
+
+def test_cache_key_includes_lexical_settings():
+    graph = nx.Graph()
+    state = GraphState(graph=graph, vectors=np.zeros((0, 64)), build_id="build-a", kb_name="kb-a", anchors_version=1)
+    request = SearchRequest(question="a", kb_name="kb-a")
+    old_settings = api.settings
+    try:
+        api.settings = old_settings.model_copy(deep=True)
+        enabled = _compute_cache_key(request, state)
+        api.settings.search = SearchConfig(lexical_enabled=False)
+        disabled = _compute_cache_key(request, state)
+    finally:
+        api.settings = old_settings
+
+    assert enabled != disabled
 
 
 def test_search_id_changes_with_trace_but_uses_same_request_canonicalization():

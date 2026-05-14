@@ -71,6 +71,32 @@ def test_vector_store_env_overrides(tmp_path, monkeypatch):
     assert cfg.vector_store.collection_prefix == "tmr"
 
 
+def test_manual_library_s3_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__BLOB_BACKEND", "s3")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_BUCKET", "tagmemorag-manuals")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_PREFIX", "/manuals//prod/")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_ENDPOINT_URL", "http://localhost:9000")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_REGION", "us-east-1")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_ACCESS_KEY_ENV", "MINIO_ROOT_USER")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_SECRET_KEY_ENV", "MINIO_ROOT_PASSWORD")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_SESSION_TOKEN_ENV", "AWS_SESSION_TOKEN")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_ADDRESSING_STYLE", "path")
+    monkeypatch.setenv("TAGMEMORAG__MANUAL_LIBRARY__S3_TIMEOUT_SECONDS", "5")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.manual_library.blob_backend == "s3"
+    assert cfg.manual_library.s3_bucket == "tagmemorag-manuals"
+    assert cfg.manual_library.s3_prefix == "/manuals//prod/"
+    assert cfg.manual_library.s3_endpoint_url == "http://localhost:9000"
+    assert cfg.manual_library.s3_region == "us-east-1"
+    assert cfg.manual_library.s3_access_key_env == "MINIO_ROOT_USER"
+    assert cfg.manual_library.s3_secret_key_env == "MINIO_ROOT_PASSWORD"
+    assert cfg.manual_library.s3_session_token_env == "AWS_SESSION_TOKEN"
+    assert cfg.manual_library.s3_addressing_style == "path"
+    assert cfg.manual_library.s3_timeout_seconds == 5
+
+
 def test_search_ann_env_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv("TAGMEMORAG__SEARCH__ANN_PRESELECT_ENABLED", "true")
     monkeypatch.setenv("TAGMEMORAG__SEARCH__ANN_CANDIDATE_K", "32")
@@ -83,6 +109,26 @@ def test_search_ann_env_overrides(tmp_path, monkeypatch):
     assert cfg.search.ann_candidate_k == 32
     assert cfg.search.ann_force_exact_on_filters is True
     assert cfg.search.debug_metadata_enabled is True
+
+
+def test_search_lexical_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_ENABLED", "false")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_CANDIDATE_K", "12")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_SOURCE_K", "2")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_MIN_TOKEN_CHARS", "3")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_BOOST", "0.04")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_EXACT_CODE_BOOST", "0.11")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_MODEL_BOOST", "0.09")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.lexical_enabled is False
+    assert cfg.search.lexical_candidate_k == 12
+    assert cfg.search.lexical_source_k == 2
+    assert cfg.search.lexical_min_token_chars == 3
+    assert cfg.search.lexical_boost == 0.04
+    assert cfg.search.lexical_exact_code_boost == 0.11
+    assert cfg.search.lexical_model_boost == 0.09
 
 
 def test_metrics_public_by_default():

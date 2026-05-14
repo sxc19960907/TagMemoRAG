@@ -3,6 +3,9 @@
 ## Cooling Mode
 Use cooling mode when the room is hot. Set the AC mode to cool, choose 24°C, close windows, and wait ten minutes before lowering the temperature again.
 
+## F07 Sensor Fault
+F07 means the room sensor wire is loose on model DHQE800BW2. Turn power off, reseat the small white connector, and restart after one minute.
+
 ## Filter Cleaning
 Clean the air conditioner filter every two weeks. Turn power off, slide out the filter, rinse dust from the mesh, dry fully, then reinstall before cooling mode.
 

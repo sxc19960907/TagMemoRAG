@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from contextlib import contextmanager
 import hashlib
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
 from .config import Settings
 from .errors import ErrorCode, ServiceError
+from .manual_blob_store import BlobRef, create_blob_store, guess_content_type
+from .manual_registry import ManualRecord, RegistryMigrationReport, create_registry
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, metadata_sidecar_path
 from .parser import SUPPORTED_DOCUMENT_SUFFIXES
 from .storage.atomic import atomic_write
@@ -117,6 +122,12 @@ class ManualLibraryRecord:
     chunk_count: int | None = None
     searchable: bool = False
     rebuild_required: bool = False
+    storage_backend: str = ""
+    blob_key: str = ""
+    size_bytes: int = 0
+    content_type: str = ""
+    registry_backend: str = "file"
+    registry_version: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -140,6 +151,13 @@ class ManualLibraryRecord:
             "chunk_count": self.chunk_count,
             "searchable": self.searchable,
             "rebuild_required": self.rebuild_required,
+            "storage_backend": self.storage_backend,
+            "blob_key": self.blob_key,
+            "blob_ref_present": bool(self.blob_key),
+            "size_bytes": self.size_bytes,
+            "content_type": self.content_type,
+            "registry_backend": self.registry_backend,
+            "registry_version": self.registry_version,
         }
 
 
@@ -164,6 +182,10 @@ def library_root(kb_name: str, cfg: Settings) -> Path:
 
 def manifest_path(kb_name: str, cfg: Settings) -> Path:
     return library_root(kb_name, cfg) / MANIFEST_NAME
+
+
+def registry_enabled(cfg: Settings) -> bool:
+    return cfg.manual_library.registry_backend == "sqlite"
 
 
 def load_manifest(kb_name: str, cfg: Settings) -> ManualLibraryManifest:
@@ -321,6 +343,8 @@ def upsert_manual(
     *,
     overwrite: bool = False,
 ) -> ManualLibraryRecord:
+    if registry_enabled(cfg):
+        return _upsert_manual_registry(kb_name, metadata_data, file_bytes, cfg, overwrite=overwrite)
     validation = validate_metadata(kb_name, metadata_data, cfg, mode="upsert")
     if not validation.valid or validation.normalized is None:
         _raise_validation_error(validation)
@@ -367,6 +391,8 @@ def update_manual_metadata(
     metadata_data: dict[str, Any],
     cfg: Settings,
 ) -> ManualLibraryRecord:
+    if registry_enabled(cfg):
+        return _update_manual_metadata_registry(kb_name, manual_id, metadata_data, cfg)
     existing = find_record_by_manual_id(kb_name, manual_id, cfg)
     if existing is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
@@ -406,6 +432,8 @@ def replace_manual_file(
     file_bytes: bytes,
     cfg: Settings,
 ) -> ManualLibraryRecord:
+    if registry_enabled(cfg):
+        return _replace_manual_file_registry(kb_name, manual_id, file_bytes, cfg)
     existing = find_record_by_manual_id(kb_name, manual_id, cfg)
     if existing is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
@@ -431,6 +459,8 @@ def replace_manual_file(
 
 
 def disable_manual(kb_name: str, manual_id: str, cfg: Settings, *, archived: bool = False) -> ManualLibraryRecord:
+    if registry_enabled(cfg):
+        return _disable_manual_registry(kb_name, manual_id, cfg, archived=archived)
     existing = find_record_by_manual_id(kb_name, manual_id, cfg)
     if existing is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
@@ -450,6 +480,8 @@ def disable_manual(kb_name: str, manual_id: str, cfg: Settings, *, archived: boo
 
 
 def delete_manual(kb_name: str, manual_id: str, cfg: Settings) -> dict[str, Any]:
+    if registry_enabled(cfg):
+        return _delete_manual_registry(kb_name, manual_id, cfg)
     existing = find_record_by_manual_id(kb_name, manual_id, cfg)
     if existing is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
@@ -464,6 +496,8 @@ def delete_manual(kb_name: str, manual_id: str, cfg: Settings) -> dict[str, Any]
 
 
 def list_records(kb_name: str, cfg: Settings, *, graph_state: GraphState | None = None) -> list[ManualLibraryRecord]:
+    if registry_enabled(cfg):
+        return _list_records_registry(kb_name, cfg, graph_state=graph_state)
     root = library_root(kb_name, cfg)
     manifest = load_manifest(kb_name, cfg)
     if not root.exists():
@@ -508,6 +542,113 @@ def find_record_by_manual_id(kb_name: str, manual_id: str, cfg: Settings) -> Man
         if record.manual_id == manual_id:
             return record
     return None
+
+
+def migrate_sidecars_to_registry(kb_name: str, cfg: Settings, *, dry_run: bool = True) -> RegistryMigrationReport:
+    if not registry_enabled(cfg):
+        raise ServiceError(ErrorCode.INVALID_CONFIG, "manual_library.registry_backend must be sqlite for registry migration.")
+    root = library_root(kb_name, cfg)
+    registry = create_registry(cfg.manual_library.registry_path)
+    blob_store = create_blob_store(cfg)
+    imported = skipped = invalid = missing = duplicates = 0
+    seen_manual_ids: set[str] = set()
+    if not root.exists():
+        return RegistryMigrationReport(kb_name=kb_name, dry_run=dry_run)
+    for sidecar in sorted(root.rglob("*.metadata.json")):
+        try:
+            data = json.loads(sidecar.read_text(encoding="utf-8"))
+            metadata = ManualMetadata.from_dict(data)
+            source_path = safe_source_path(kb_name, metadata.source_file, cfg)
+        except (OSError, json.JSONDecodeError, ServiceError):
+            invalid += 1
+            continue
+        if metadata.manual_id in seen_manual_ids:
+            duplicates += 1
+            continue
+        seen_manual_ids.add(metadata.manual_id)
+        if registry.get(kb_name, metadata.manual_id) is not None:
+            skipped += 1
+            continue
+        if not source_path.exists():
+            missing += 1
+            continue
+        content = source_path.read_bytes()
+        if dry_run:
+            imported += 1
+            continue
+        checksum = hashlib.sha256(content).hexdigest()
+        metadata = replace(metadata, checksum=metadata.checksum or checksum, uploaded_at=metadata.uploaded_at or _now())
+        blob_ref = blob_store.put(
+            kb_name,
+            metadata.manual_id,
+            metadata.source_file,
+            content,
+            {"content_type": guess_content_type(metadata.source_file), "version": 1},
+        )
+        registry.upsert(kb_name, metadata, blob_ref, operation="migrate")
+        imported += 1
+    return RegistryMigrationReport(
+        kb_name=kb_name,
+        dry_run=dry_run,
+        imported_records=imported,
+        skipped_records=skipped,
+        invalid_metadata=invalid,
+        missing_files=missing,
+        duplicate_manual_ids=duplicates,
+    )
+
+
+def verify_registry_blobs(kb_name: str, cfg: Settings) -> dict[str, Any]:
+    if not registry_enabled(cfg):
+        raise ServiceError(ErrorCode.INVALID_CONFIG, "manual_library.registry_backend must be sqlite to verify registry blobs.")
+    registry = create_registry(cfg.manual_library.registry_path)
+    blob_store = create_blob_store(cfg)
+    missing: list[dict[str, str]] = []
+    for record in registry.list(kb_name):
+        if record.blob_backend != blob_store.backend or not blob_store.exists(record.blob_key):
+            missing.append({"manual_id": record.manual_id, "blob_key": record.blob_key, "blob_backend": record.blob_backend})
+    return {"kb_name": kb_name, "checked_count": len(registry.list(kb_name)), "missing_count": len(missing), "missing": missing}
+
+
+def registry_inspect(kb_name: str, cfg: Settings) -> dict[str, Any]:
+    backend = cfg.manual_library.registry_backend
+    if backend != "sqlite":
+        return {"kb_name": kb_name, "registry_backend": backend, "enabled": False}
+    registry = create_registry(cfg.manual_library.registry_path)
+    records = registry.list(kb_name, include_deleted=True)
+    status_counts: dict[str, int] = {}
+    for record in records:
+        status_counts[record.status] = status_counts.get(record.status, 0) + 1
+    return {
+        "kb_name": kb_name,
+        "registry_backend": backend,
+        "enabled": True,
+        "registry_path": str(Path(cfg.manual_library.registry_path).expanduser()),
+        "record_count": len(records),
+        "status_counts": status_counts,
+        "blob_backend": cfg.manual_library.blob_backend,
+    }
+
+
+@contextmanager
+def materialize_registry_build_source(kb_name: str, cfg: Settings):
+    if not registry_enabled(cfg):
+        raise ServiceError(ErrorCode.INVALID_CONFIG, "manual registry is not enabled.")
+    staging_root = Path(tempfile.mkdtemp(prefix=f"tagmemorag-{kb_name}-registry-"))
+    try:
+        registry = create_registry(cfg.manual_library.registry_path)
+        blob_store = create_blob_store(cfg)
+        for record in registry.list(kb_name):
+            if not is_active_status(record.status):
+                continue
+            source_path = (staging_root / _safe_relative_path(record.source_file)).resolve()
+            _ensure_under_root(source_path, staging_root)
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(blob_store.get(record.blob_key))
+            _write_metadata(metadata_sidecar_path(source_path), record.metadata)
+        yield staging_root
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def metadata_to_dict(metadata: ManualMetadata | None) -> dict[str, Any] | None:
@@ -705,6 +846,147 @@ def _record_from_paths(
         chunk_count=chunk_count,
         searchable=searchable,
         rebuild_required=manifest.pending_changes,
+    )
+
+
+def _upsert_manual_registry(
+    kb_name: str,
+    metadata_data: dict[str, Any],
+    file_bytes: bytes,
+    cfg: Settings,
+    *,
+    overwrite: bool,
+) -> ManualLibraryRecord:
+    validation = validate_metadata(kb_name, metadata_data, cfg, mode="upsert")
+    if not validation.valid or validation.normalized is None:
+        _raise_validation_error(validation)
+    metadata = validation.normalized
+    registry = create_registry(cfg.manual_library.registry_path)
+    existing = registry.get(kb_name, metadata.manual_id)
+    source_duplicate = next((record for record in registry.list(kb_name) if record.source_file == metadata.source_file and record.manual_id != metadata.manual_id), None)
+    if not overwrite and (existing is not None or source_duplicate is not None):
+        raise ServiceError(
+            ErrorCode.INVALID_REQUEST,
+            "Manual already exists. Set overwrite=true to replace it.",
+            {"manual_id": metadata.manual_id, "source_file": metadata.source_file},
+        )
+    checksum = hashlib.sha256(file_bytes).hexdigest()
+    metadata = replace(metadata, checksum=checksum, uploaded_at=metadata.uploaded_at or _now())
+    next_version = (existing.version + 1) if existing is not None else 1
+    blob_ref = create_blob_store(cfg).put(
+        kb_name,
+        metadata.manual_id,
+        metadata.source_file,
+        file_bytes,
+        {"content_type": guess_content_type(metadata.source_file), "version": next_version},
+    )
+    record = registry.upsert(kb_name, metadata, blob_ref, operation="upsert")
+    mark_dirty(kb_name, cfg, manual_id=metadata.manual_id, source_file=metadata.source_file, operation="upsert", checksum=checksum)
+    return _record_from_registry(record, load_manifest(kb_name, cfg), graph_state=None)
+
+
+def _update_manual_metadata_registry(
+    kb_name: str,
+    manual_id: str,
+    metadata_data: dict[str, Any],
+    cfg: Settings,
+) -> ManualLibraryRecord:
+    existing = find_record_by_manual_id(kb_name, manual_id, cfg)
+    if existing is None:
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    merged = {**metadata_to_dict(existing.metadata), **metadata_data}
+    merged["manual_id"] = manual_id
+    validation = validate_metadata(kb_name, merged, cfg, mode="update", current_manual_id=manual_id)
+    if not validation.valid or validation.normalized is None:
+        _raise_validation_error(validation)
+    registry_record = create_registry(cfg.manual_library.registry_path).update_metadata(kb_name, manual_id, validation.normalized)
+    mark_dirty(
+        kb_name,
+        cfg,
+        manual_id=manual_id,
+        source_file=validation.normalized.source_file,
+        operation="metadata_update",
+        checksum=registry_record.checksum,
+    )
+    return _record_from_registry(registry_record, load_manifest(kb_name, cfg), graph_state=None)
+
+
+def _replace_manual_file_registry(kb_name: str, manual_id: str, file_bytes: bytes, cfg: Settings) -> ManualLibraryRecord:
+    registry = create_registry(cfg.manual_library.registry_path)
+    current = registry.get(kb_name, manual_id)
+    if current is None:
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    checksum = hashlib.sha256(file_bytes).hexdigest()
+    metadata = replace(current.metadata, checksum=checksum, uploaded_at=_now())
+    blob_ref = create_blob_store(cfg).put(
+        kb_name,
+        manual_id,
+        current.source_file,
+        file_bytes,
+        {"content_type": guess_content_type(current.source_file), "version": current.version + 1},
+    )
+    updated = registry.upsert(kb_name, metadata, blob_ref, operation="file_replace")
+    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=current.source_file, operation="file_replace", checksum=checksum)
+    return _record_from_registry(updated, load_manifest(kb_name, cfg), graph_state=None)
+
+
+def _disable_manual_registry(kb_name: str, manual_id: str, cfg: Settings, *, archived: bool) -> ManualLibraryRecord:
+    status = "archived" if archived else "disabled"
+    operation = "archive" if archived else "disable"
+    registry_record = create_registry(cfg.manual_library.registry_path).set_status(kb_name, manual_id, status, operation=operation)
+    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=registry_record.source_file, operation=operation, checksum=registry_record.checksum)
+    return _record_from_registry(registry_record, load_manifest(kb_name, cfg), graph_state=None)
+
+
+def _delete_manual_registry(kb_name: str, manual_id: str, cfg: Settings) -> dict[str, Any]:
+    registry = create_registry(cfg.manual_library.registry_path)
+    current = registry.get(kb_name, manual_id)
+    if current is None:
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    deleted = registry.hard_delete(kb_name, manual_id)
+    create_blob_store(cfg).delete(current.blob_key)
+    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=current.source_file, operation="hard_delete", checksum=current.checksum)
+    return {"manual_id": manual_id, "status": "deleted", "rebuild_required": True, "registry_backend": "sqlite", "registry_version": deleted.version}
+
+
+def _list_records_registry(kb_name: str, cfg: Settings, *, graph_state: GraphState | None) -> list[ManualLibraryRecord]:
+    manifest = load_manifest(kb_name, cfg)
+    registry = create_registry(cfg.manual_library.registry_path)
+    records = [_record_from_registry(record, manifest, graph_state=graph_state) for record in registry.list(kb_name)]
+    return sorted(records, key=lambda record: record.manual_id)
+
+
+def _record_from_registry(
+    record: ManualRecord,
+    manifest: ManualLibraryManifest,
+    *,
+    graph_state: GraphState | None,
+) -> ManualLibraryRecord:
+    chunk_count = None
+    searchable = False
+    if graph_state is not None:
+        count = _chunk_count(graph_state, record.manual_id)
+        chunk_count = count
+        searchable = count > 0
+    status = record.status if record.status in INACTIVE_STATUSES else "active"
+    return ManualLibraryRecord(
+        kb_name=record.kb_name,
+        manual_id=record.manual_id,
+        source_file=record.source_file,
+        metadata=record.metadata,
+        status=status,  # type: ignore[arg-type]
+        exists=True,
+        checksum=record.checksum,
+        updated_at=record.updated_at,
+        chunk_count=chunk_count,
+        searchable=searchable,
+        rebuild_required=manifest.pending_changes,
+        storage_backend=record.blob_backend,
+        blob_key=record.blob_key,
+        size_bytes=record.size_bytes,
+        content_type=record.content_type,
+        registry_backend="sqlite",
+        registry_version=record.version,
     )
 
 
