@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and project conventions."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundaries for adding manual_bundle.py and CLI/API orchestration."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Manual library, registry, blob-store, dirty-state, and persistence contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Structured service errors for corrupt bundles, checksum failures, and import conflicts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and safety requirements for storage and CLI changes."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Safe operational logging fields and sensitive-data exclusions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Bundle feature crosses CLI/API, service, registry, blob store, and dirty state."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing safe path, metadata, registry, and blob-store helpers."}
+{"file": ".trellis/tasks/05-14-m30-import-export-bundles/research/code-context.md", "reason": "Task-specific code context and integration risks."}
+{"file": ".trellis/tasks/archive/2026-05/05-14-m26-manual-registry-blob-storage/design.md", "reason": "Registry/blob-store source-of-truth and rebuild staging contracts."}
+{"file": ".trellis/tasks/archive/2026-05/05-14-m27-s3-compatible-blob-store/design.md", "reason": "S3 blob key, credential, and safe object-storage boundaries."}
+{"file": ".trellis/tasks/archive/2026-05/05-14-m28-background-rebuild-queue-cancellation/design.md", "reason": "Rebuild queue integration and dirty-state safety."}
+{"file": ".trellis/tasks/archive/2026-05/05-14-m29-admin-ui-history-diagnostics/design.md", "reason": "Diagnostics and audit-safe payload conventions."}

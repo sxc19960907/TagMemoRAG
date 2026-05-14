@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality checklist and required focused tests."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Persistence, atomic write, dirty-state, registry, and blob-store contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify structured safe error responses for invalid bundles and failed imports."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check no sensitive bundle data is logged or emitted."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check data contracts across CLI/API/service/storage boundaries."}
+{"file": ".trellis/tasks/05-14-m30-import-export-bundles/prd.md", "reason": "Acceptance criteria for M30."}
+{"file": ".trellis/tasks/05-14-m30-import-export-bundles/design.md", "reason": "Bundle format, import/export flow, and error matrix to verify."}
+{"file": ".trellis/tasks/05-14-m30-import-export-bundles/implement.md", "reason": "Implementation checklist and validation plan."}
+{"file": ".trellis/tasks/05-14-m30-import-export-bundles/research/code-context.md", "reason": "Known integration risks and relevant test surfaces."}
