@@ -133,6 +133,31 @@ class Metrics:
             ["operation"],
             registry=registry,
         )
+        self.tag_embeddings = Counter(
+            "tagmemorag_tag_embeddings_total",
+            "Tag embedding operations by KB and outcome (added|skipped|failed).",
+            ["kb_name", "outcome"],
+            registry=registry,
+        )
+        self.tags_total = Gauge(
+            "tagmemorag_tags_total",
+            "Canonical tag count by KB.",
+            ["kb_name"],
+            registry=registry,
+        )
+        self.epa_basis_retrain = Counter(
+            "tagmemorag_epa_basis_retrain_total",
+            "EPA basis retrain events by outcome (cold-start|real-pca|skipped|failed).",
+            ["outcome"],
+            registry=registry,
+        )
+        self.epa_basis_retrain_duration = Histogram(
+            "tagmemorag_epa_basis_retrain_duration_seconds",
+            "EPA basis retrain duration.",
+            ["outcome"],
+            registry=registry,
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
+        )
 
     def record_http_request(self, *, method: str, route: str, status_code: str | int, duration: float) -> None:
         self.http_requests.labels(method=method, route=route, status_code=str(status_code)).inc()
@@ -202,6 +227,18 @@ class Metrics:
         self.embedding_duration.labels(operation=operation, outcome=outcome).observe(max(duration, 0.0))
         if outcome != "success":
             self.embedding_failures.labels(operation=operation).inc()
+
+    def record_tag_embeddings(self, *, kb_name: str, outcome: str, count: int = 1) -> None:
+        if count <= 0:
+            return
+        self.tag_embeddings.labels(kb_name=kb_name, outcome=outcome).inc(int(count))
+
+    def set_tags_total(self, *, kb_name: str, count: int) -> None:
+        self.tags_total.labels(kb_name=kb_name).set(max(int(count), 0))
+
+    def record_epa_basis_retrain(self, *, outcome: str, duration: float) -> None:
+        self.epa_basis_retrain.labels(outcome=outcome).inc()
+        self.epa_basis_retrain_duration.labels(outcome=outcome).observe(max(duration, 0.0))
 
 
 _metrics: Metrics | NoopMetrics = NoopMetrics()
