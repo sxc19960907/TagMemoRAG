@@ -59,6 +59,14 @@ class EmbeddingError(ServiceError):
         super().__init__(ErrorCode.EMBEDDING_FAILED, message, detail)
 
 
+class EmbeddingDimMismatchError(EmbeddingError):
+    def __init__(self, expected_dim: int, actual_dim: int):
+        super().__init__(
+            "Embedding dimension does not match the configured model dimension.",
+            {"expected_dim": expected_dim, "actual_dim": actual_dim},
+        )
+
+
 class InvalidConfigError(ServiceError):
     def __init__(self, message: str, detail: dict[str, Any] | None = None):
         super().__init__(ErrorCode.INVALID_CONFIG, message, detail)
