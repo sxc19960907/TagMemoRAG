@@ -105,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
     eval_run.add_argument("--min-recall-at-k", type=float, default=0.8)
     eval_run.add_argument("--min-mrr", type=float, default=0.75)
     eval_run.add_argument("--min-hit-at-k", type=float, default=0.8)
+    eval_run.add_argument(
+        "--baseline",
+        default=None,
+        help="Path to baseline JSON. Suite-level thresholds are clamped to baseline - 0.02 (clipped to existing min_* values).",
+    )
 
     auth = sub.add_parser("auth")
     auth_sub = auth.add_subparsers(dest="auth_command", required=True)
@@ -298,6 +303,23 @@ def main(argv: list[str] | None = None) -> int:
             min_mrr=args.min_mrr,
             min_hit_at_k=args.min_hit_at_k,
         )
+        if args.baseline:
+            from .eval.runner import baseline_thresholds_for, load_baseline
+
+            try:
+                baseline = load_baseline(args.baseline)
+            except EvalSuiteError as exc:
+                print(f"eval error: {exc}", file=sys.stderr)
+                return 2
+            suite_name = Path(args.suite).name
+            suite_metrics = baseline.get(suite_name)
+            if suite_metrics is None:
+                print(
+                    f"eval error: suite {suite_name!r} missing from baseline {args.baseline!r}",
+                    file=sys.stderr,
+                )
+                return 2
+            thresholds = baseline_thresholds_for(suite_metrics, case_thresholds=thresholds)
         try:
             report = run_eval(
                 cfg=cfg,

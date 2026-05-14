@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from .metrics import aggregate_metrics, compute_ranking_metrics
 from .report import EvalCaseReport, EvalReport, EvalSummary, expected_to_dict
 
 DEFAULT_THRESHOLDS = EvalThresholds(min_recall_at_k=0.8, min_mrr=0.75, min_hit_at_k=0.8)
+BASELINE_FLOOR_DELTA = 0.02
 
 
 def run_eval(
@@ -257,3 +259,56 @@ def _result_to_report(result, matched_expected_indexes: set[int]) -> dict:
     if isinstance(text, str) and len(text) > 500:
         data["text"] = text[:500]
     return data
+
+
+def load_baseline(path: str | Path) -> dict[str, dict[str, float]]:
+    """Load a baseline JSON written by scripts/build_eval_baseline.py.
+
+    Returns the inner ``suites`` map keyed by suite filename.
+    """
+    baseline_path = Path(path)
+    if not baseline_path.exists():
+        raise EvalSuiteError(f"baseline file not found: {baseline_path}")
+    try:
+        payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise EvalSuiteError(f"baseline file {baseline_path} is not valid JSON: {exc.msg}") from exc
+    suites = payload.get("suites")
+    if not isinstance(suites, dict):
+        raise EvalSuiteError(f"baseline file {baseline_path} is missing the 'suites' object")
+    return {str(name): {str(k): float(v) for k, v in metrics.items()} for name, metrics in suites.items()}
+
+
+def baseline_thresholds_for(
+    baseline_metrics: dict[str, float],
+    *,
+    floor_delta: float = BASELINE_FLOOR_DELTA,
+    case_thresholds: EvalThresholds = DEFAULT_THRESHOLDS,
+) -> EvalThresholds:
+    """Derive suite-level thresholds = max(baseline - floor_delta, case_threshold).
+
+    Returns ``EvalThresholds`` with each metric clamped to [0.0, 1.0].
+    """
+    return EvalThresholds(
+        min_precision_at_k=_baseline_threshold(
+            baseline_metrics.get("precision_at_k"), floor_delta, case_thresholds.min_precision_at_k
+        ),
+        min_recall_at_k=_baseline_threshold(
+            baseline_metrics.get("recall_at_k"), floor_delta, case_thresholds.min_recall_at_k
+        ),
+        min_mrr=_baseline_threshold(
+            baseline_metrics.get("mrr"), floor_delta, case_thresholds.min_mrr
+        ),
+        min_hit_at_k=_baseline_threshold(
+            baseline_metrics.get("hit_at_k"), floor_delta, case_thresholds.min_hit_at_k
+        ),
+    )
+
+
+def _baseline_threshold(baseline: float | None, floor_delta: float, case_threshold: float | None) -> float | None:
+    if baseline is None:
+        return case_threshold
+    derived = max(0.0, min(1.0, float(baseline) - float(floor_delta)))
+    if case_threshold is None:
+        return derived
+    return max(derived, float(case_threshold))
