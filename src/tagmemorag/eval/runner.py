@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,11 +11,12 @@ from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import build_kb, load_kb, save_kb
 
 from .dataset import EvalCase, EvalSuiteError, EvalThresholds, load_eval_suite
-from .matching import match_expectations
+from .matching import NegativeHit, match_expectations, match_negatives
 from .metrics import aggregate_metrics, compute_ranking_metrics
 from .report import EvalCaseReport, EvalReport, EvalSummary, expected_to_dict
 
 DEFAULT_THRESHOLDS = EvalThresholds(min_recall_at_k=0.8, min_mrr=0.75, min_hit_at_k=0.8)
+BASELINE_FLOOR_DELTA = 0.02
 
 
 def run_eval(
@@ -88,7 +90,10 @@ def run_eval(
         results = execution.results
         rank_matches = match_expectations(results, case.relevant, case_id=case.id)
         metrics = compute_ranking_metrics(rank_matches, len(case.relevant), case_top_k)
-        failures = _threshold_failures(metrics.to_dict(), case.thresholds, prefix="case")
+        negative_hits = match_negatives(results[:case_top_k], case.negatives, case_id=case.id)
+        threshold_failures = _threshold_failures(metrics.to_dict(), case.thresholds, prefix="case")
+        negative_failures = _negative_violations(negative_hits)
+        failures = negative_failures + threshold_failures
         passed = not failures
         case_reports.append(
             EvalCaseReport(
@@ -105,6 +110,8 @@ def run_eval(
                 search_strategy=execution.strategy,
                 ann_candidate_count=execution.ann_candidate_count,
                 ann_fallback_reason=execution.ann_fallback_reason,
+                negatives=[expected_to_dict(item, f"{case.id}#neg{index + 1}") for index, item in enumerate(case.negatives)],
+                negative_hits=[hit.to_dict() for hit in negative_hits],
             )
         )
 
@@ -182,6 +189,13 @@ def _threshold_failures(metrics: dict[str, float], thresholds: EvalThresholds, *
     return failures
 
 
+def _negative_violations(hits: list[NegativeHit]) -> list[str]:
+    return [
+        f"negative #{hit.negative_index} matched at rank {hit.rank} ({hit.source_file})"
+        for hit in hits
+    ]
+
+
 def _validate_thresholds(thresholds: EvalThresholds) -> None:
     for key, value in thresholds.to_dict().items():
         if value < 0.0 or value > 1.0:
@@ -245,3 +259,56 @@ def _result_to_report(result, matched_expected_indexes: set[int]) -> dict:
     if isinstance(text, str) and len(text) > 500:
         data["text"] = text[:500]
     return data
+
+
+def load_baseline(path: str | Path) -> dict[str, dict[str, float]]:
+    """Load a baseline JSON written by scripts/build_eval_baseline.py.
+
+    Returns the inner ``suites`` map keyed by suite filename.
+    """
+    baseline_path = Path(path)
+    if not baseline_path.exists():
+        raise EvalSuiteError(f"baseline file not found: {baseline_path}")
+    try:
+        payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise EvalSuiteError(f"baseline file {baseline_path} is not valid JSON: {exc.msg}") from exc
+    suites = payload.get("suites")
+    if not isinstance(suites, dict):
+        raise EvalSuiteError(f"baseline file {baseline_path} is missing the 'suites' object")
+    return {str(name): {str(k): float(v) for k, v in metrics.items()} for name, metrics in suites.items()}
+
+
+def baseline_thresholds_for(
+    baseline_metrics: dict[str, float],
+    *,
+    floor_delta: float = BASELINE_FLOOR_DELTA,
+    case_thresholds: EvalThresholds = DEFAULT_THRESHOLDS,
+) -> EvalThresholds:
+    """Derive suite-level thresholds = max(baseline - floor_delta, case_threshold).
+
+    Returns ``EvalThresholds`` with each metric clamped to [0.0, 1.0].
+    """
+    return EvalThresholds(
+        min_precision_at_k=_baseline_threshold(
+            baseline_metrics.get("precision_at_k"), floor_delta, case_thresholds.min_precision_at_k
+        ),
+        min_recall_at_k=_baseline_threshold(
+            baseline_metrics.get("recall_at_k"), floor_delta, case_thresholds.min_recall_at_k
+        ),
+        min_mrr=_baseline_threshold(
+            baseline_metrics.get("mrr"), floor_delta, case_thresholds.min_mrr
+        ),
+        min_hit_at_k=_baseline_threshold(
+            baseline_metrics.get("hit_at_k"), floor_delta, case_thresholds.min_hit_at_k
+        ),
+    )
+
+
+def _baseline_threshold(baseline: float | None, floor_delta: float, case_threshold: float | None) -> float | None:
+    if baseline is None:
+        return case_threshold
+    derived = max(0.0, min(1.0, float(baseline) - float(floor_delta)))
+    if case_threshold is None:
+        return derived
+    return max(derived, float(case_threshold))

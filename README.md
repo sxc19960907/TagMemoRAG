@@ -986,6 +986,28 @@ uv run pytest tests/ -v
 
 Uses `HashingEmbedder` (no HF download required) for all unit and E2E tests.
 
+## Quality CI
+
+`.github/workflows/quality.yml` runs on every PR and push to `master`. It runs the unit + e2e tests and then walks every JSON Lines suite under `tests/fixtures/eval/` with the hashing embedder, comparing each suite's `precision_at_k / recall_at_k / mrr / hit_at_k` against `tests/fixtures/eval/baselines/hashing.json`. Suite thresholds are derived as `max(baseline - 0.02, case-level minimum)`.
+
+Reproduce CI locally:
+
+```bash
+uv sync --extra dev
+uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py
+uv run python scripts/run_eval_ci.py
+```
+
+Refresh the baseline (after deliberate quality changes):
+
+```bash
+uv run python scripts/build_eval_baseline.py \
+  --embedder hashing \
+  --output tests/fixtures/eval/baselines/hashing.json
+```
+
+For a SiliconFlow sanity run with `BAAI/bge-small-zh-v1.5`, set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The SiliconFlow baseline lives at `tests/fixtures/eval/baselines/siliconflow.json` and is **not** part of CI; it serves as a smoke test for divergence between hashing and the production embedder.
+
 ## Tag Data Model
 
 TagMemoRAG persists `manual.metadata.tags` into a structured, position-aware SQLite layer alongside the existing `manual_records` table, plus a global EPA basis file. Search behavior is unchanged at this layer — these tables are populated for downstream analytics and ranking experiments.
