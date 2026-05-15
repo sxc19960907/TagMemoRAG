@@ -1064,6 +1064,25 @@ rm -rf data/_global/
 
 The next rebuild recreates everything; `execute_search` output is byte-identical regardless of whether the data is present.
 
+### Wave Phase 1 — co-occurrence + spike propagation
+
+Phase 1 turns tag data into a query-vector enhancement. Each rebuild now also writes a directed co-occurrence matrix at `data/_global/tag_cooccurrence/{kb}.npz`, and an opt-in spike walk over that matrix can fuse a "tag context vector" into the query before vector search runs. **Defaults to off** so existing deployments keep current behaviour.
+
+```yaml
+wave_phase1:
+  enabled: true                # master switch (rebuild + search)
+  spike_enabled: false         # query-vector enhancement — flip to true to activate
+  cooccurrence_enabled: true   # rebuild step on/off
+  legacy_chunk_tag_boost: false  # escape hatch: keep chunk-side tag bonus when spike is on
+```
+
+Relationship to existing knobs:
+- `search.tag_boost = 0.03` keeps its numeric value. With `spike_enabled=true`, it is consumed as the base alpha for the query-vector blend; the chunk-side `tags`-field bonus inside `wave_searcher` is silenced unless `legacy_chunk_tag_boost=true`.
+- Setting `spike_enabled=false` returns the search path to Phase 0 byte-for-byte.
+- `rm -rf data/_global/tag_cooccurrence/` is safe — the loader returns `None` on missing files and `apply_tag_boost` short-circuits.
+
+Full design and tuning notes live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
+
 ## Roadmap
 
 | Milestone | Scope |

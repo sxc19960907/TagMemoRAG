@@ -149,6 +149,44 @@ class WavePhase0Config(BaseModel):
     epa_lock_timeout_seconds: float = Field(default=30.0, gt=0.0)
 
 
+class WavePhase1Config(BaseModel):
+    enabled: bool = True
+    spike_enabled: bool = False
+    cooccurrence_enabled: bool = True
+
+    # Co-occurrence builder (mirror VCPToolBox PHI_MAX/PHI_MIN/LEGACY_PHI)
+    phi_max: float = Field(default=0.9, gt=0.0, le=1.0)
+    phi_min: float = Field(default=0.5, ge=0.0, le=1.0)
+    legacy_phi: float = Field(default=0.7, ge=0.0, le=1.0)
+    max_tags_per_manual: int = Field(default=100, ge=2)
+
+    # Spike propagation (mirror srConfig defaults from TagMemoEngine.js:187-195)
+    spike_max_hops: int = Field(default=4, ge=1)
+    spike_base_momentum: float = Field(default=2.0, ge=0.0)
+    spike_firing_threshold: float = Field(default=0.10, ge=0.0)
+    spike_base_decay: float = Field(default=0.25, gt=0.0, le=1.0)
+    spike_wormhole_decay: float = Field(default=0.70, gt=0.0, le=1.0)
+    spike_tension_threshold: float = Field(default=1.0, gt=0.0)
+    spike_max_emergent_nodes: int = Field(default=50, ge=1)
+    spike_max_neighbors_per_node: int = Field(default=20, ge=1)
+
+    # Seed selection (top-K cosine substitute for ResidualPyramid in Phase 1)
+    seed_top_k: int = Field(default=8, ge=1)
+    seed_min_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
+
+    # Boost factor strategy (D2: constant=1.0 default, "epa" routes via epa_projector)
+    dynamic_boost_factor_strategy: Literal["constant", "epa"] = "constant"
+    dynamic_boost_min: float = Field(default=0.3, ge=0.0)
+    dynamic_boost_max: float = Field(default=2.0, gt=0.0)
+
+    # Semantic dedup
+    dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
+    dedup_weight_transfer: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    # Compatibility (D3: chunk-side tag_boost is silenced when spike is on)
+    legacy_chunk_tag_boost: bool = False
+
+
 class MetricsConfig(BaseModel):
     enabled: bool = True
     path: str = "/metrics"
@@ -190,6 +228,7 @@ class Settings(BaseSettings):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
+    wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod

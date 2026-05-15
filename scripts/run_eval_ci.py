@@ -86,6 +86,8 @@ def _hashing_config_yaml(data_dir: Path) -> str:
         "  batch_size: 16\n"
         "storage:\n"
         f"  data_dir: {data_dir}\n"
+        "wave_phase1:\n"
+        "  spike_enabled: true\n"
     )
 
 

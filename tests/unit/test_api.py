@@ -63,6 +63,7 @@ def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_conf
         "steps": test_config.search.steps,
         "aggregate": test_config.search.aggregate,
         "eligible_node_count": state.graph.number_of_nodes(),
+        "legacy_tag_boost_disabled": False,
     }
     assert not {"trace_id", "search_id", "question", "candidate_ids"} & set(body["debug"])
 

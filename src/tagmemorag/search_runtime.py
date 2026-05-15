@@ -8,9 +8,11 @@ import numpy as np
 from .config import Settings
 from .errors import ServiceError
 from .lexical_search import lexical_score_map, lexical_search
+from .observability.metrics import get_metrics
 from .state import _vector_store
 from .types import GraphState
 from .wave_searcher import filter_node_ids, wave_search
+from .wave_tag_spike import TagBoostInfo, apply_tag_boost
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,8 @@ class SearchExecution:
     lexical_candidate_count: int = 0
     lexical_source_count: int = 0
     lexical_profile: str = "disabled"
+    tag_boost_info: TagBoostInfo | None = None
+    legacy_tag_boost_disabled: bool = False
 
 
 def execute_search(
@@ -61,6 +65,24 @@ def execute_search(
             if strategy == "ann_preselect_then_wave" and lexical_candidate_ids:
                 eligible_node_ids = set(eligible_node_ids) | lexical_candidate_ids
 
+    boost_info: TagBoostInfo | None = None
+    legacy_tag_boost_disabled = False
+    phase1 = settings.wave_phase1
+    if phase1.enabled and phase1.spike_enabled:
+        boosted_vec, boost_info = apply_tag_boost(
+            query_vec=query_vec,
+            kb_name=state.kb_name,
+            settings=settings,
+            base_tag_boost=float(settings.search.tag_boost),
+        )
+        get_metrics().record_tag_spike_propagation(
+            kb_name=state.kb_name,
+            outcome=_spike_outcome(boost_info),
+        )
+        if boost_info.boost_factor_applied > 0.0:
+            query_vec = boosted_vec
+            legacy_tag_boost_disabled = not phase1.legacy_chunk_tag_boost
+
     results = wave_search(
         query_vec,
         state.graph,
@@ -78,6 +100,7 @@ def execute_search(
         tag_boost=settings.search.tag_boost,
         lexical_scores=lexical_scores,
         lexical_source_k=int(settings.search.lexical_source_k) if settings.search.lexical_enabled else 0,
+        disable_legacy_tag_boost=legacy_tag_boost_disabled,
     )
     return SearchExecution(
         results=results,
@@ -93,6 +116,8 @@ def execute_search(
         if settings.search.lexical_enabled
         else 0,
         lexical_profile=_lexical_profile(settings),
+        tag_boost_info=boost_info,
+        legacy_tag_boost_disabled=legacy_tag_boost_disabled,
     )
 
 
@@ -119,7 +144,7 @@ def search_debug_payload(
     *,
     ann_enabled: bool,
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "search_strategy": execution.strategy,
         "ann_enabled": bool(ann_enabled),
         "ann_candidate_count": int(execution.ann_candidate_count),
@@ -132,7 +157,19 @@ def search_debug_payload(
         "steps": int(params["steps"]),
         "aggregate": str(params["aggregate"]),
         "eligible_node_count": len(execution.eligible_node_ids),
+        "legacy_tag_boost_disabled": bool(execution.legacy_tag_boost_disabled),
     }
+    if execution.tag_boost_info is not None:
+        payload["tag_boost"] = execution.tag_boost_info.to_dict()
+    return payload
+
+
+def _spike_outcome(info: TagBoostInfo) -> str:
+    if info.skipped_reason:
+        return "skipped"
+    if info.boost_factor_applied > 0.0:
+        return "applied"
+    return "skipped"
 
 
 def _ann_enabled(state: GraphState, settings: Settings) -> bool:

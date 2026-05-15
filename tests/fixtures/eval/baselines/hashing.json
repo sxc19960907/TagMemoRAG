@@ -1,6 +1,6 @@
 {
-  "captured_at": "2026-05-14T13:48:44+00:00",
-  "config_hash": "sha256:b5c102790f2414c06659cffddbe0d054dec37a6d7838ae14b15b31674113857c",
+  "captured_at": "2026-05-15T00:52:47+00:00",
+  "config_hash": "sha256:f54b09e69e6a2ddee9812b26ab165481e7b5090a3298ce49e88988f744e7559e",
   "embedder": "hashing",
   "suites": {
     "coffee.jsonl": {

@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 from typing import Iterable, Mapping
 
 from .config import Settings
 from .manual_registry import create_registry
 from .observability.metrics import get_metrics
+from .tag_cooccurrence import (
+    build_cooccurrence_for_kb,
+    cooccurrence_path,
+    save_cooccurrence,
+)
 from .tag_embedder import embed_dirty_tags
 from .tag_store import delete_manual_tags, delete_tags, find_orphan_tags, upsert_manual_tags
 
@@ -18,6 +24,8 @@ class TagRebuildReport:
     tag_embeddings_failed: int = 0
     orphan_tags_removed: int = 0
     tag_embedding_error: str = ""
+    tag_cooccurrence_edges: int = 0
+    tag_cooccurrence_error: str = ""
 
     def to_dict(self) -> dict[str, int | str]:
         return {
@@ -26,6 +34,8 @@ class TagRebuildReport:
             "tag_embeddings_failed": self.tag_embeddings_failed,
             "orphan_tags_removed": self.orphan_tags_removed,
             "tag_embedding_error": self.tag_embedding_error,
+            "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": self.tag_cooccurrence_error,
         }
 
 
@@ -69,11 +79,15 @@ def sync_rebuild_tags(
         metrics.record_tag_embeddings(kb_name=kb_name, outcome="failed", count=int(embed_report.get("failed", 0)))
         metrics.set_tags_total(kb_name=kb_name, count=_total_tag_count(conn, kb_name))
 
+    cooc_edges, cooc_error = _rebuild_cooccurrence(kb_name, cfg)
+
     return TagRebuildReport(
         tag_embeddings_added=int(embed_report.get("added", 0)),
         tag_embeddings_skipped=int(embed_report.get("skipped", 0)),
         tag_embeddings_failed=int(embed_report.get("failed", 0)),
         orphan_tags_removed=orphan_tags_removed,
+        tag_cooccurrence_edges=cooc_edges,
+        tag_cooccurrence_error=cooc_error,
     )
 
 
@@ -87,6 +101,42 @@ def _delete_missing_manual_tags(conn, kb_name: str, manual_ids: Iterable[str]) -
         f"DELETE FROM manual_tags WHERE kb_name=? AND manual_id NOT IN ({placeholders})",
         (kb_name, *ids),
     )
+
+
+def _rebuild_cooccurrence(kb_name: str, cfg: Settings) -> tuple[int, str]:
+    """Rebuild and persist the directed cooccurrence matrix for one KB.
+
+    Returns (edge_count, error_type). Failure does NOT raise — the rebuild task
+    keeps going and the error is surfaced via TagRebuildReport.tag_cooccurrence_error.
+    Empty matrices are not written; the file (if any) from a previous build is left
+    in place — the caller can rm -rf the data dir for a hard reset.
+    """
+    if not cfg.wave_phase1.enabled or not cfg.wave_phase1.cooccurrence_enabled:
+        return 0, ""
+    metrics = get_metrics()
+    started = time.perf_counter()
+    try:
+        registry = create_registry(_phase0_registry_path(cfg))
+        with registry.connection() as conn:
+            matrix = build_cooccurrence_for_kb(
+                kb_name,
+                conn,
+                phi_max=cfg.wave_phase1.phi_max,
+                phi_min=cfg.wave_phase1.phi_min,
+                legacy_phi=cfg.wave_phase1.legacy_phi,
+                max_tags_per_manual=cfg.wave_phase1.max_tags_per_manual,
+            )
+        edge_count = matrix.edge_count
+        if edge_count > 0:
+            save_cooccurrence(cooccurrence_path(cfg, kb_name), matrix)
+        duration = time.perf_counter() - started
+        metrics.record_tag_cooccurrence_rebuild(kb_name=kb_name, outcome="success", duration=duration)
+        metrics.set_tag_cooccurrence_edges(kb_name=kb_name, count=edge_count)
+        return edge_count, ""
+    except Exception as exc:
+        duration = time.perf_counter() - started
+        metrics.record_tag_cooccurrence_rebuild(kb_name=kb_name, outcome="failed", duration=duration)
+        return 0, type(exc).__name__
 
 
 def _dirty_tag_count(conn, kb_name: str) -> int:

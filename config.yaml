@@ -100,6 +100,30 @@ wave_phase0:
   epa_energy_threshold: 0.95
   epa_retrain_growth_ratio: 0.20
   epa_lock_timeout_seconds: 30.0
+wave_phase1:
+  enabled: true
+  spike_enabled: false
+  cooccurrence_enabled: true
+  phi_max: 0.9
+  phi_min: 0.5
+  legacy_phi: 0.7
+  max_tags_per_manual: 100
+  spike_max_hops: 4
+  spike_base_momentum: 2.0
+  spike_firing_threshold: 0.10
+  spike_base_decay: 0.25
+  spike_wormhole_decay: 0.70
+  spike_tension_threshold: 1.0
+  spike_max_emergent_nodes: 50
+  spike_max_neighbors_per_node: 20
+  seed_top_k: 8
+  seed_min_similarity: 0.3
+  dynamic_boost_factor_strategy: constant
+  dynamic_boost_min: 0.3
+  dynamic_boost_max: 2.0
+  dedup_threshold: 0.88
+  dedup_weight_transfer: 0.2
+  legacy_chunk_tag_boost: false
 observability:
   metrics:
     enabled: true

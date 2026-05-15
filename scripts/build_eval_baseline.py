@@ -52,9 +52,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--docs", type=Path, default=DEFAULT_DOCS_DIR)
     parser.add_argument("--suite-dir", type=Path, default=SUITE_DIR)
+    spike_group = parser.add_mutually_exclusive_group()
+    spike_group.add_argument(
+        "--spike-on",
+        dest="spike",
+        action="store_true",
+        help="Enable wave_phase1.spike_enabled when capturing the baseline (default).",
+    )
+    spike_group.add_argument(
+        "--spike-off",
+        dest="spike",
+        action="store_false",
+        help="Disable wave_phase1.spike_enabled when capturing the baseline.",
+    )
+    parser.set_defaults(spike=True)
     args = parser.parse_args(argv)
 
-    cfg = _build_config(args.embedder)
+    cfg = _build_config(args.embedder, spike_enabled=args.spike)
     suites = sorted(_iter_suites(args.suite_dir))
     if not suites:
         print(f"no suites found under {args.suite_dir}", file=sys.stderr)
@@ -90,20 +104,26 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _build_config(embedder: str) -> Settings:
+def _build_config(embedder: str, *, spike_enabled: bool = True) -> Settings:
     if embedder == EMBEDDER_HASHING:
-        return Settings(model={"provider": "hashing", "dim": 64, "batch_size": 16})
+        return Settings(
+            model={"provider": "hashing", "dim": 64, "batch_size": 16},
+            wave_phase1={"spike_enabled": spike_enabled},
+        )
     if embedder == EMBEDDER_SILICONFLOW:
         if not os.environ.get("SILICONFLOW_API_KEY"):
             raise SystemExit("SILICONFLOW_API_KEY is required for the siliconflow baseline")
-        return Settings(model={
-            "provider": "http",
-            "name": "BAAI/bge-small-zh-v1.5",
-            "dim": 384,
-            "base_url": "https://api.siliconflow.cn/v1",
-            "api_key_env": "SILICONFLOW_API_KEY",
-            "normalize": True,
-        })
+        return Settings(
+            model={
+                "provider": "http",
+                "name": "BAAI/bge-small-zh-v1.5",
+                "dim": 384,
+                "base_url": "https://api.siliconflow.cn/v1",
+                "api_key_env": "SILICONFLOW_API_KEY",
+                "normalize": True,
+            },
+            wave_phase1={"spike_enabled": spike_enabled},
+        )
     raise ValueError(f"unsupported embedder: {embedder}")
 
 
@@ -137,6 +157,7 @@ def _config_hash(embedder: str, cfg: Settings, suites: list[Path]) -> str:
     h.update(f"tag_boost={cfg.search.tag_boost}\n".encode())
     h.update(f"metadata_field_boost={cfg.search.metadata_field_boost}\n".encode())
     h.update(f"lexical_enabled={cfg.search.lexical_enabled}\n".encode())
+    h.update(f"spike_enabled={cfg.wave_phase1.spike_enabled}\n".encode())
     for suite_path in suites:
         digest = hashlib.sha256(suite_path.read_bytes()).hexdigest()
         h.update(f"{suite_path.name}={digest}\n".encode())

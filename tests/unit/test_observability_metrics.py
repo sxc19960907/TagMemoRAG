@@ -64,6 +64,24 @@ def test_metric_label_contract_blocks_sensitive_dimensions():
     assert not (metrics.ALLOWED_LABEL_NAMES & metrics.FORBIDDEN_LABEL_NAMES)
 
 
+def test_phase1_cooccurrence_and_spike_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.set_tag_cooccurrence_edges(kb_name="default", count=24)
+    collector.record_tag_cooccurrence_rebuild(kb_name="default", outcome="success", duration=0.12)
+    collector.record_tag_cooccurrence_rebuild(kb_name="default", outcome="failed", duration=0.05)
+    collector.record_tag_spike_propagation(kb_name="default", outcome="applied")
+    collector.record_tag_spike_propagation(kb_name="default", outcome="skipped")
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_tag_cooccurrence_edges{kb_name="default"} 24.0' in body
+    assert 'tagmemorag_tag_cooccurrence_rebuild_duration_seconds_bucket' in body
+    assert 'kb_name="default"' in body and 'outcome="success"' in body
+    assert 'tagmemorag_tag_spike_propagations_total{kb_name="default",outcome="applied"} 1.0' in body
+    assert 'tagmemorag_tag_spike_propagations_total{kb_name="default",outcome="skipped"} 1.0' in body
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 
