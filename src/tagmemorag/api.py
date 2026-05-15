@@ -17,6 +17,7 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import numpy as np
 from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
@@ -66,6 +67,7 @@ from .search_runtime import (
     search_debug_enabled,
     search_debug_payload,
 )
+from .wave_tag_spike import GhostTag
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
@@ -172,6 +174,18 @@ app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
 app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
 
 
+class GhostTagSpec(BaseModel):
+    """Caller-supplied tag with explicit vector, bypassing the KB tag store.
+
+    `vector` length must equal the model embedding dim at request time;
+    mismatched ghosts are silently skipped and counted in `info.ghost_skipped_dim_mismatch`.
+    """
+
+    name: str = Field(..., min_length=1, max_length=128)
+    vector: list[float] = Field(..., min_length=1)
+    is_core: bool = False
+
+
 class SearchRequest(BaseModel):
     question: str
     top_k: int | None = None
@@ -183,6 +197,12 @@ class SearchRequest(BaseModel):
     kb_name: str = "default"
     filters: "SearchFilters | None" = None
     debug: bool | None = None
+    # Phase 2b-2: caller-supplied "spotlight" tags. Only take effect under
+    # `wave_phase1.dynamic_boost_factor_strategy="pyramid"` (PRD R10);
+    # otherwise they round-trip through `info.core_tags_input/resolved` for
+    # diagnostics with no impact on weights.
+    core_tags: list[str] = Field(default_factory=list)
+    ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
 
 
 class SearchFilters(BaseModel):
@@ -381,12 +401,40 @@ def _search_param_values(request: SearchRequest) -> dict[str, object]:
     }
 
 
+def _spotlight_cache_suffix(request: SearchRequest) -> str:
+    """Stable hash of caller-supplied core_tags / ghost_tags for cache keying.
+
+    Different spotlight inputs ⇒ different results, so cache must split on them.
+    Empty lists ⇒ stable empty suffix (no cache busting for default callers).
+    """
+    if not request.core_tags and not request.ghost_tags:
+        return "spot:none"
+    payload = {
+        "core": [str(t).strip().lower() for t in request.core_tags],
+        "ghost": [
+            {
+                "name": str(g.name).strip().lower(),
+                "is_core": bool(g.is_core),
+                "vec_hash": hashlib.sha256(
+                    np.asarray(g.vector, dtype=np.float32).tobytes()
+                ).hexdigest()[:16],
+            }
+            for g in request.ghost_tags
+        ],
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"spot:{digest}"
+
+
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
     filter_dict = _governed_filter_dict(request.kb_name, request.filters)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
+    spotlight_suffix = _spotlight_cache_suffix(request)
     parts = [
         request.kb_name,
         state.build_id,
@@ -401,6 +449,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
         debug_suffix,
+        spotlight_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -410,6 +459,7 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
     canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
+    spotlight_suffix = _spotlight_cache_suffix(request)
     parts = [
         state.kb_name,
         state.build_id,
@@ -424,6 +474,7 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
         debug_suffix,
+        spotlight_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
@@ -643,6 +694,14 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
         filter_dict = _governed_filter_dict(request.kb_name, request.filters)
+        ghost_tag_args = tuple(
+            GhostTag(
+                name=str(g.name),
+                vector=np.asarray(g.vector, dtype=np.float32),
+                is_core=bool(g.is_core),
+            )
+            for g in request.ghost_tags
+        )
         execution = execute_search(
             state=state,
             query_vec=query_vec,
@@ -655,6 +714,8 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=aggregate,
             filters=filter_dict,
+            core_tags=tuple(request.core_tags),
+            ghost_tags=ghost_tag_args,
         )
         results = execution.results
     search_time_ms = (time.perf_counter() - t0) * 1000.0

@@ -82,6 +82,58 @@ def test_phase1_cooccurrence_and_spike_metrics_register_custom_series():
     assert 'tagmemorag_tag_spike_propagations_total{kb_name="default",outcome="skipped"} 1.0' in body
 
 
+def test_phase2b1_pyramid_dynamic_factor_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_dynamic_factor(kb_name="default", strategy="constant", value=1.0)
+    collector.record_tag_dynamic_factor(kb_name="default", strategy="pyramid", value=0.42)
+    collector.record_tag_pyramid(
+        kb_name="default",
+        levels=2,
+        explained_energy=0.85,
+        tag_memo_activation=0.31,
+        coverage=0.85,
+        coherence=0.42,
+    )
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert "tagmemorag_tag_dynamic_factor_bucket" in body
+    assert 'kb_name="default"' in body and 'strategy="constant"' in body
+    assert 'strategy="pyramid"' in body
+    assert "tagmemorag_tag_pyramid_levels_bucket" in body
+    assert "tagmemorag_tag_pyramid_explained_energy_bucket" in body
+    assert 'tagmemorag_tag_pyramid_features{feature="tag_memo_activation",kb_name="default"} 0.31' in body
+    assert 'tagmemorag_tag_pyramid_features{feature="coverage",kb_name="default"} 0.85' in body
+    assert 'tagmemorag_tag_pyramid_features{feature="coherence",kb_name="default"} 0.42' in body
+
+
+def test_phase2b2_modulator_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="unknown")
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="unknown")
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="social")
+    collector.record_tag_core_tags_resolved(kb_name="default", count=3)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="hard", count=2)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="soft", count=1)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="skipped_dim", count=1)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    # Counter samples are exposed as `..._total`.
+    assert "tagmemorag_tag_lang_penalty_applied_total" in body
+    assert 'query_world_kind="unknown"' in body
+    assert 'query_world_kind="social"' in body
+    assert "tagmemorag_tag_core_tags_resolved_bucket" in body
+    assert "tagmemorag_tag_ghosts_injected_bucket" in body
+    assert 'kind="hard"' in body
+    assert 'kind="soft"' in body
+    assert 'kind="skipped_dim"' in body
+    # Label contract still passes after we register all new label names.
+    metrics.assert_label_contract()
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 

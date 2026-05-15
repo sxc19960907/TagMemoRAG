@@ -1090,7 +1090,88 @@ distribution passes. The Phase 2a hashing fixture uses
 `epa_logic_depth_scale: 2.0` and `epa_floor: 0.0`; if EPA mode looks noisy in a
 deployment, switch the strategy back to `constant`.
 
+Phase 2b-1 adds a third option `dynamic_boost_factor_strategy: pyramid`. It
+swaps the top-K cosine seed selector for a multi-level Gram-Schmidt residual
+pyramid (V6 source `applyTagBoost`'s `[2] Residual Pyramid` step) and uses the
+full source formula:
+
+```
+activation_mult = act_min + tag_memo_activation * (act_max - act_min)
+dynamic = (logicDepth * (1 + log(1+resonance)) / (1 + entropy*0.5)) * activation_mult
+        * pyramid_post_scale     # then floored at epa_floor
+```
+
+`resonance` stays stubbed at `0` (Phase 2b-2 territory). Defaults
+(`pyramid_post_scale=4.0` calibrated on hashing dim=64 fixture, `act_min=0.5`,
+`act_max=1.5`) are wired to keep alpha series within the same magnitude as the
+`epa` path. To switch: confirm
+`uv run python scripts/diag_pyramid_dynamic_boost.py` returns
+`overall: PASS`, then set `dynamic_boost_factor_strategy: pyramid`. Roll back to
+`epa` or `constant` if hashing-dim noise dominates `coherence`; alternatively
+set `pyramid_use_handshake_features: false` to disable the handshake submodule
+without removing pyramid (degenerates `tag_memo_activation` to 0, equivalent to
+`act_mult = act_min`).
+
 Full design and tuning notes live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
+
+#### External modulators (Phase 2b-2)
+
+When `dynamic_boost_factor_strategy: pyramid` is on, the search request can pass
+two extra "spotlight" hints that map to V6 `applyTagBoost`'s 4 peripheral
+modulators (langPenalty + dynamicCoreBoostFactor + core completion + ghost
+injection). All inputs are optional and default off; under `constant`/`epa`
+strategies they round-trip through `info` without changing weights (`R10`).
+
+`SearchRequest` adds:
+
+```jsonc
+{
+  "core_tags": ["filter-cleaning", "cooling"],   // synonym-resolved to canonical
+  "ghost_tags": [
+    {"name": "airflow", "vector": [0.12, ...], "is_core": true},
+    {"name": "noise",   "vector": [0.04, ...], "is_core": false}
+  ]
+}
+```
+
+- **`core_tags`**: caller already knows the query's key tag(s). The matcher first
+  resolves synonyms (e.g. `cooling-mode → cooling`) via `tag_governance`, then
+  forces those tags into the candidate set under `strategy="pyramid"`. If a
+  named tag is present in the KB but missed by the pyramid pass, it is pulled
+  via SQL and weighted at `max_base × dynamicCoreBoostFactor`.
+- **`ghost_tags`**: caller has KB-external tags with vectors (e.g. expansion
+  tags from another model). Vector dim must match the embedding model;
+  mismatched ghosts are silently skipped and counted in
+  `info.ghost_skipped_dim_mismatch`. Hard ghosts (`is_core=true`) get the
+  dynamic core-boost multiplier; soft ghosts use unit weight.
+- **`wave_phase1.lang_penalty_enabled` (default `false`)**: turn on to
+  re-introduce V6's "tag is technical noise in non-technical world" penalty.
+  Defaults preserve hashing-fixture invariance because the cold-start EPA basis
+  emits axis labels like `axis-0` / `cooling`, which match the technical-world
+  regex and thus never fire the penalty. Once a real-PCA basis surfaces a
+  non-technical label (e.g. a Politics-themed cluster), enabling the flag will
+  start dampening pure-ASCII technical tags.
+
+Example:
+
+```bash
+curl -s -X POST http://localhost:8000/search \
+  -H 'content-type: application/json' \
+  -d '{
+    "question": "F07 sensor wire loose",
+    "kb_name": "default",
+    "core_tags": ["filter-cleaning"],
+    "ghost_tags": [
+      {"name": "airflow", "vector": [0.1, 0.2, 0.0, ...], "is_core": true}
+    ]
+  }'
+```
+
+`info.tag_boost` in the debug payload now includes
+`core_tags_input / core_tags_resolved / core_completion_count / ghosts_injected
+/ ghost_skipped_dim_mismatch / lang_penalty_applied_count / query_world` for
+post-mortem diagnostics. Phase 3 will replace the stubbed `resonance` term and
+add real `detectCrossDomainResonance` worldview gating.
 
 ## Roadmap
 

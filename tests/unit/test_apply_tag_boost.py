@@ -340,3 +340,128 @@ def test_to_dict_serializable():
     assert d["matched_tag_names"] == ["a", "b"]
     assert d["boost_factor_applied"] == 0.5
     assert d["matrix_loaded"] is True
+    # Phase 2b-2 fields default to empty / 0 / "" so old callers see no change in shape.
+    assert d["core_tags_input"] == []
+    assert d["core_tags_resolved"] == []
+    assert d["core_completion_count"] == 0
+    assert d["ghosts_injected"] == 0
+    assert d["ghost_skipped_dim_mismatch"] == 0
+    assert d["lang_penalty_applied_count"] == 0
+    assert d["query_world"] == ""
+
+
+def test_apply_tag_boost_constant_strategy_ignores_core_ghost(tmp_path: Path):
+    """R10 review-gate: strategy=constant + core/ghost args ⇒ boost_factor unchanged.
+
+    The new fields appear in TagBoostInfo (with the resolved canonical names) but
+    no candidate weight is modified — the fused vector and alpha must match the
+    no-args call byte-for-byte.
+    """
+    from tagmemorag.wave_tag_spike import GhostTag
+
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="constant")
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("a", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("b", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("c", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("a", 1), ("b", 2), ("c", 3)],
+            [("a", 1), ("b", 2)],
+            [("a", 1), ("b", 2)],
+        ],
+    )
+    edges = _build_and_save_matrix(cfg, "kb-x")
+    assert edges > 0
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+    boosted_a, info_a = apply_tag_boost(query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5)
+    boosted_b, info_b = apply_tag_boost(
+        query,
+        kb_name="kb-x",
+        settings=cfg,
+        base_tag_boost=0.5,
+        core_tags=["a", "kitchen"],
+        ghost_tags=[GhostTag(name="ghost", vector=np.zeros(4, dtype=np.float32), is_core=True)],
+    )
+
+    # Output vectors and alpha are identical: strategy=constant blocks core/ghost effects.
+    assert np.array_equal(boosted_a, boosted_b)
+    assert info_a.boost_factor_applied == info_b.boost_factor_applied
+    assert info_b.core_tags_input == ("a", "kitchen")
+    assert info_b.core_tags_resolved == ("a", "kitchen")
+    assert info_b.core_completion_count == 0
+    assert info_b.ghosts_injected == 0
+    assert info_a.matched_tag_names == info_b.matched_tag_names
+
+
+def test_apply_tag_boost_pyramid_records_core_tags_in_info(tmp_path: Path):
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="pyramid")
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    cfg.wave_phase1.dynamic_boost_min = 0.001  # let alpha pass through under hashing fixture
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("cooling", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("kitchen", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("filter", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("cooling", 1), ("kitchen", 2), ("filter", 3)],
+            [("cooling", 1), ("kitchen", 2)],
+            [("cooling", 1), ("kitchen", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    _boosted, info = apply_tag_boost(
+        query,
+        kb_name="kb-x",
+        settings=cfg,
+        base_tag_boost=0.5,
+        core_tags=["cooling", "Cooling"],  # dedup to canonical 'cooling'
+    )
+    assert info.core_tags_input == ("cooling",)
+    assert info.core_tags_resolved == ("cooling",)
+    assert info.matrix_loaded is True
+
+
+def test_apply_tag_boost_pyramid_ghost_appears_in_matched_names(tmp_path: Path):
+    from tagmemorag.wave_tag_spike import GhostTag
+
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="pyramid")
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    cfg.wave_phase1.dynamic_boost_min = 0.001
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("cooling", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("kitchen", np.array([0, 1, 0, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("cooling", 1), ("kitchen", 2)],
+            [("cooling", 1), ("kitchen", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    ghosts = [
+        GhostTag(name="airflow", vector=np.array([0, 0, 1, 0], dtype=np.float32), is_core=True),
+        GhostTag(name="bad", vector=np.zeros(8, dtype=np.float32), is_core=False),  # dim mismatch
+    ]
+    _boosted, info = apply_tag_boost(
+        query,
+        kb_name="kb-x",
+        settings=cfg,
+        base_tag_boost=0.5,
+        ghost_tags=ghosts,
+    )
+    assert info.ghosts_injected == 1
+    assert info.ghost_skipped_dim_mismatch == 1
+    assert "airflow" in info.matched_tag_names

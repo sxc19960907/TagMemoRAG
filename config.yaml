@@ -123,6 +123,19 @@ wave_phase1:
   dynamic_boost_max: 2.0
   epa_logic_depth_scale: 2.0
   epa_floor: 0.0
+  pyramid_max_levels: 3
+  pyramid_top_k: 10
+  pyramid_min_energy_ratio: 0.1
+  pyramid_layer_decay_base: 0.7
+  pyramid_use_handshake_features: true
+  activation_multiplier_min: 0.5
+  activation_multiplier_max: 1.5
+  pyramid_post_scale: 4.0
+  lang_penalty_enabled: false
+  lang_penalty_unknown: 0.4
+  lang_penalty_cross_domain: 0.3
+  core_boost_min: 1.20
+  core_boost_max: 1.40
   dedup_threshold: 0.88
   dedup_weight_transfer: 0.2
   legacy_chunk_tag_boost: false

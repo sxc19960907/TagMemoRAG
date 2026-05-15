@@ -16,6 +16,11 @@ ALLOWED_LABEL_NAMES = {
     "error_code",
     "operation",
     "outcome",
+    # Phase 2b-1 / 2b-2 tag-boost telemetry labels.
+    "strategy",
+    "feature",
+    "query_world_kind",
+    "kind",
 }
 FORBIDDEN_LABEL_NAMES = {"question", "query", "trace_id", "task_id", "api_key", "api_key_id", "build_id", "path"}
 
@@ -177,6 +182,55 @@ class Metrics:
             ["kb_name", "outcome"],
             registry=registry,
         )
+        # Phase 2b-1 (D7): dynamic boost factor + ResidualPyramid telemetry
+        self.tag_dynamic_factor = Histogram(
+            "tagmemorag_tag_dynamic_factor",
+            "Dynamic boost factor (post-clamp) per tag-boost call, by strategy.",
+            ["kb_name", "strategy"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0),
+        )
+        self.tag_pyramid_levels = Histogram(
+            "tagmemorag_tag_pyramid_levels",
+            "ResidualPyramid: number of levels actually computed.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 4, 5),
+        )
+        self.tag_pyramid_explained_energy = Histogram(
+            "tagmemorag_tag_pyramid_explained_energy",
+            "ResidualPyramid: total explained energy ratio (0..1).",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0),
+        )
+        self.tag_pyramid_features = Gauge(
+            "tagmemorag_tag_pyramid_features",
+            "ResidualPyramid: latest feature values per KB (tag_memo_activation/coverage/coherence).",
+            ["kb_name", "feature"],
+            registry=registry,
+        )
+        # Phase 2b-2 (D8): external modulator telemetry.
+        self.tag_lang_penalty_applied = Counter(
+            "tagmemorag_tag_lang_penalty_applied",
+            "Counter incremented each time langPenalty fires (< 1.0) on a candidate.",
+            ["kb_name", "query_world_kind"],
+            registry=registry,
+        )
+        self.tag_core_tags_resolved = Histogram(
+            "tagmemorag_tag_core_tags_resolved",
+            "Number of caller-supplied core_tags surviving synonym resolve + dedup.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8, 13),
+        )
+        self.tag_ghosts_injected = Histogram(
+            "tagmemorag_tag_ghosts_injected",
+            "Ghost tag injection counts per call, by kind (hard/soft/skipped_dim).",
+            ["kb_name", "kind"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8, 13),
+        )
 
     def record_http_request(self, *, method: str, route: str, status_code: str | int, duration: float) -> None:
         self.http_requests.labels(method=method, route=route, status_code=str(status_code)).inc()
@@ -268,6 +322,38 @@ class Metrics:
     def record_tag_spike_propagation(self, *, kb_name: str, outcome: str) -> None:
         self.tag_spike_propagations.labels(kb_name=kb_name, outcome=outcome).inc()
 
+    def record_tag_dynamic_factor(self, *, kb_name: str, strategy: str, value: float) -> None:
+        self.tag_dynamic_factor.labels(kb_name=kb_name, strategy=strategy).observe(max(float(value), 0.0))
+
+    def record_tag_pyramid(
+        self,
+        *,
+        kb_name: str,
+        levels: int,
+        explained_energy: float,
+        tag_memo_activation: float,
+        coverage: float,
+        coherence: float,
+    ) -> None:
+        self.tag_pyramid_levels.labels(kb_name=kb_name).observe(max(int(levels), 0))
+        self.tag_pyramid_explained_energy.labels(kb_name=kb_name).observe(
+            max(min(float(explained_energy), 1.0), 0.0)
+        )
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="tag_memo_activation").set(float(tag_memo_activation))
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="coverage").set(float(coverage))
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="coherence").set(float(coherence))
+
+    def record_tag_lang_penalty_applied(self, *, kb_name: str, query_world_kind: str) -> None:
+        self.tag_lang_penalty_applied.labels(
+            kb_name=kb_name, query_world_kind=query_world_kind
+        ).inc()
+
+    def record_tag_core_tags_resolved(self, *, kb_name: str, count: int) -> None:
+        self.tag_core_tags_resolved.labels(kb_name=kb_name).observe(max(int(count), 0))
+
+    def record_tag_ghosts_injected(self, *, kb_name: str, kind: str, count: int = 1) -> None:
+        self.tag_ghosts_injected.labels(kb_name=kb_name, kind=kind).observe(max(int(count), 0))
+
 
 _metrics: Metrics | NoopMetrics = NoopMetrics()
 _registry: CollectorRegistry = REGISTRY
@@ -339,6 +425,10 @@ def assert_label_contract() -> None:
         "error_code",
         "operation",
         "outcome",
+        "strategy",
+        "feature",
+        "query_world_kind",
+        "kind",
     }
     forbidden_used = used & FORBIDDEN_LABEL_NAMES
     if forbidden_used:

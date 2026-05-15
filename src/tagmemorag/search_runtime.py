@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from .observability.metrics import get_metrics
 from .state import _vector_store
 from .types import GraphState
 from .wave_searcher import filter_node_ids, wave_search
-from .wave_tag_spike import TagBoostInfo, apply_tag_boost
+from .wave_tag_spike import GhostTag, TagBoostInfo, apply_tag_boost
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,8 @@ def execute_search(
     aggregate: str,
     filters: Mapping[str, Any] | None = None,
     query_text: str = "",
+    core_tags: Sequence[str] = (),
+    ghost_tags: Sequence[GhostTag] = (),
 ) -> SearchExecution:
     filter_dict = dict(filters or {})
     filtered_node_ids = filter_node_ids(state.graph, filter_dict)
@@ -74,6 +76,8 @@ def execute_search(
             kb_name=state.kb_name,
             settings=settings,
             base_tag_boost=float(settings.search.tag_boost),
+            core_tags=tuple(core_tags),
+            ghost_tags=tuple(ghost_tags),
         )
         get_metrics().record_tag_spike_propagation(
             kb_name=state.kb_name,

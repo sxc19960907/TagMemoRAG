@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
@@ -174,15 +174,43 @@ class WavePhase1Config(BaseModel):
     seed_top_k: int = Field(default=8, ge=1)
     seed_min_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
 
-    # Boost factor strategy (D2: constant=1.0 default, "epa" routes via epa_projector)
-    dynamic_boost_factor_strategy: Literal["constant", "epa"] = "constant"
+    # Boost factor strategy (D2/D5: constant=1.0 default; "epa" = Phase 2a logicDepth*scale;
+    # "pyramid" = Phase 2b-1 full source formula via ResidualPyramid features).
+    dynamic_boost_factor_strategy: Literal["constant", "epa", "pyramid"] = "constant"
     dynamic_boost_min: float = Field(default=0.3, ge=0.0)
     dynamic_boost_max: float = Field(default=2.0, gt=0.0)
 
     # Phase 2a: EPA dynamic boost shape — `dynamic = max(epa_floor, logicDepth * scale)`.
     # Defaults (1.0 / 0.0) keep behavior equivalent to Phase 1 strategy="epa" path.
+    # D4: also applied as post-multiplier/floor to strategy="pyramid" output for ops escape hatch.
     epa_logic_depth_scale: float = Field(default=1.0, ge=0.0)
     epa_floor: float = Field(default=0.0, ge=0.0)
+
+    # Phase 2b-1: ResidualPyramid (multi-level Gram-Schmidt) seed selector + full
+    # dynamicBoostFactor formula. See ResidualPyramid source defaults.
+    pyramid_max_levels: int = Field(default=3, ge=1, le=10)
+    pyramid_top_k: int = Field(default=10, ge=1, le=100)
+    pyramid_min_energy_ratio: float = Field(default=0.1, gt=0.0, le=1.0)
+    pyramid_layer_decay_base: float = Field(default=0.7, gt=0.0, le=1.0)
+    pyramid_use_handshake_features: bool = Field(default=True)
+    activation_multiplier_min: float = Field(default=0.5, ge=0.0)
+    activation_multiplier_max: float = Field(default=1.5, ge=0.0)
+    # D8: post-scale applied AFTER the full pyramid dynamicBoostFactor formula,
+    # decoupled from `epa_logic_depth_scale` (which is strategy="epa" only).
+    # Calibrated to 4.0 on hashing dim=64 / 12-tag fixture so the alpha series
+    # passes D2 thresholds (std > 0.005, range/mean > 0.1) — see
+    # scripts/diag_pyramid_dynamic_boost.py and PRD D8.
+    pyramid_post_scale: float = Field(default=4.0, ge=0.0)
+
+    # Phase 2b-2: external modulators (langPenalty + coreBoost). Defaults preserve
+    # Phase 2b-1 behavior (lang_penalty_enabled=False ⇒ all helpers return 1.0).
+    # Source defaults: TagMemoEngine.js:140-180 (penaltyUnknown=0.4, penaltyCrossDomain=0.3,
+    # coreBoostRange=[1.20, 1.40]).
+    lang_penalty_enabled: bool = False
+    lang_penalty_unknown: float = Field(default=0.4, ge=0.0, le=1.0)
+    lang_penalty_cross_domain: float = Field(default=0.3, ge=0.0, le=1.0)
+    core_boost_min: float = Field(default=1.20, ge=1.0)
+    core_boost_max: float = Field(default=1.40, ge=1.0)
 
     # Semantic dedup
     dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
@@ -190,6 +218,14 @@ class WavePhase1Config(BaseModel):
 
     # Compatibility (D3: chunk-side tag_boost is silenced when spike is on)
     legacy_chunk_tag_boost: bool = False
+
+    @model_validator(mode="after")
+    def _validate_core_boost_range(self) -> "WavePhase1Config":
+        if self.core_boost_max < self.core_boost_min:
+            raise ValueError(
+                f"core_boost_max ({self.core_boost_max}) must be >= core_boost_min ({self.core_boost_min})"
+            )
+        return self
 
 
 class MetricsConfig(BaseModel):
