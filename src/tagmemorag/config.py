@@ -179,6 +179,11 @@ class WavePhase1Config(BaseModel):
     dynamic_boost_min: float = Field(default=0.3, ge=0.0)
     dynamic_boost_max: float = Field(default=2.0, gt=0.0)
 
+    # Phase 2a: EPA dynamic boost shape — `dynamic = max(epa_floor, logicDepth * scale)`.
+    # Defaults (1.0 / 0.0) keep behavior equivalent to Phase 1 strategy="epa" path.
+    epa_logic_depth_scale: float = Field(default=1.0, ge=0.0)
+    epa_floor: float = Field(default=0.0, ge=0.0)
+
     # Semantic dedup
     dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
     dedup_weight_transfer: float = Field(default=0.2, ge=0.0, le=1.0)

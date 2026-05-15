@@ -1081,6 +1081,15 @@ Relationship to existing knobs:
 - Setting `spike_enabled=false` returns the search path to Phase 0 byte-for-byte.
 - `rm -rf data/_global/tag_cooccurrence/` is safe — the loader returns `None` on missing files and `apply_tag_boost` short-circuits.
 
+EPA dynamic boost remains opt-in. Keep `dynamic_boost_factor_strategy: constant`
+until `data/_global/epa_basis.npz` reports `train_kind="real-pca"`; with the
+default `wave_phase0.epa_min_k=8`, that means at least 16 canonical tags. Before
+switching to `dynamic_boost_factor_strategy: epa`, run
+`uv run python scripts/diag_epa_logic_depth.py` and confirm the real-PCA alpha
+distribution passes. The Phase 2a hashing fixture uses
+`epa_logic_depth_scale: 2.0` and `epa_floor: 0.0`; if EPA mode looks noisy in a
+deployment, switch the strategy back to `constant`.
+
 Full design and tuning notes live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
 
 ## Roadmap

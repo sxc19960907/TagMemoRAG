@@ -324,8 +324,10 @@ def _resolve_dynamic_boost(query_vec: np.ndarray, settings: Settings) -> float:
     """Resolve dynamic_boost_factor.
 
     "constant" (default per D2): always 1.0 — visible spike under cold-start EPA.
-    "epa": logicDepth * activationMultiplier-equivalent. Falls back to constant
-           if the projector cannot be loaded (defensive — never crash search).
+    "epa": ``max(epa_floor, logicDepth * epa_logic_depth_scale)``. Falls back to
+           constant if the projector cannot be loaded (defensive — never crash
+           search). Class defaults (scale=1.0, floor=0.0) are equivalent to
+           Phase 1's raw logicDepth pass-through; config.yaml may tune scale.
     """
     strategy = settings.wave_phase1.dynamic_boost_factor_strategy
     if strategy == "constant":
@@ -344,7 +346,10 @@ def _resolve_dynamic_boost(query_vec: np.ndarray, settings: Settings) -> float:
             projection = projector.project(np.asarray(query_vec, dtype=np.float32))
         except Exception:
             return 1.0
-        return max(0.0, float(projection.get("logicDepth", 0.0)))
+        logic_depth = max(0.0, float(projection.get("logicDepth", 0.0)))
+        scale = float(settings.wave_phase1.epa_logic_depth_scale)
+        floor = float(settings.wave_phase1.epa_floor)
+        return max(floor, logic_depth * scale)
     return 1.0
 
 

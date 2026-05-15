@@ -121,6 +121,8 @@ wave_phase1:
   dynamic_boost_factor_strategy: constant
   dynamic_boost_min: 0.3
   dynamic_boost_max: 2.0
+  epa_logic_depth_scale: 2.0
+  epa_floor: 0.0
   dedup_threshold: 0.88
   dedup_weight_transfer: 0.2
   legacy_chunk_tag_boost: false

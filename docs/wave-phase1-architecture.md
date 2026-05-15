@@ -105,8 +105,32 @@ from VCPToolBox `srConfig` and exposed under `wave_phase1.spike_*`.
 
 The `dynamic_boost_factor_strategy` knob picks how `dynamic_factor` is computed:
 - `"constant"` (default) — `1.0`. Visible boost while EPA is cold-start.
-- `"epa"` — derived from `epa_projector.project(query).logicDepth`. Falls back
-  to constant if the basis cannot be loaded.
+- `"epa"` — `max(epa_floor, logicDepth * epa_logic_depth_scale)`, where
+  `logicDepth` comes from `epa_projector.project(query)`. Falls back to
+  constant if the basis cannot be loaded.
+
+### EPA dynamic boost: cold-start vs real-PCA
+
+Keep `dynamic_boost_factor_strategy: constant` until the global EPA basis has
+graduated to `train_kind="real-pca"`. With the default production
+`wave_phase0.epa_min_k=8`, that requires at least 16 canonical tags across the
+registry. Below that threshold EPA writes an identity cold-start basis; this is
+safe, but the resulting logicDepth is a bootstrap signal rather than a trained
+PCA signal.
+
+Before switching a deployment to `dynamic_boost_factor_strategy: epa`, run:
+
+```bash
+uv run python scripts/diag_epa_logic_depth.py
+```
+
+The diagnostic prints cold-start and real-PCA logicDepth/alpha distributions
+and the PCA explained-variance ratio. The Phase 2a fixture needs
+`epa_logic_depth_scale: 2.0` to make real-PCA alpha variation clear under the
+hashing embedder; `epa_floor` stays `0.0`, so degenerate projections still fall
+through to `dynamic_boost_min`. If EPA tuning regresses quality, switch back to
+`constant`; Phase 2b will add ResidualPyramid features to complete the broader
+dynamicBoostFactor formula.
 
 Failures degrade silently: missing matrix, no seeds, degenerate context vector,
 or zero α each return the original query plus a `TagBoostInfo` with
@@ -140,6 +164,8 @@ wave_phase1:
   dynamic_boost_factor_strategy: constant   # "constant" | "epa"
   dynamic_boost_min: 0.3
   dynamic_boost_max: 2.0
+  epa_logic_depth_scale: 2.0
+  epa_floor: 0.0
 
   dedup_threshold: 0.88
   dedup_weight_transfer: 0.2
