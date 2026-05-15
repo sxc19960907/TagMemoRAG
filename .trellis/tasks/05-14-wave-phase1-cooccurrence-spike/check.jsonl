@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/05-14-wave-phase1-cooccurrence-spike/prd.md", "reason": "Acceptance criteria AC1-AC10 are the verification target. Definition of Done lists test layers."}
+{"file": ".trellis/tasks/05-14-wave-phase1-cooccurrence-spike/design.md", "reason": "Cross-layer data flow + failure semantics. Checks must verify each skipped_reason path is exercised."}
+{"file": ".trellis/tasks/05-14-wave-phase1-cooccurrence-spike/implement.md", "reason": "Per-step validation commands + review gates. Each gate is a check item."}
+{"file": ".trellis/tasks/05-14-wave-phase1-cooccurrence-spike/research/source-cooccurrence-matrix.md", "reason": "phi formula and direction convention must match source byte-for-byte; checks must verify."}
+{"file": ".trellis/tasks/05-14-wave-phase1-cooccurrence-spike/research/source-tag-boost-and-spike.md", "reason": "Spike algorithm constants + step ordering must match; checks verify wormhole branch and cap behaviour."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "pytest scope and forbidden patterns; deterministic baseline output is a hard requirement (AC6)."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify new errors (matrix-load failure, builder failure) follow ServiceError conventions where applicable; degrade-quietly path doesn't surface ServiceError."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify 3 new Prometheus metrics use low-cardinality labels (kb_name + outcome only); skipped reasons go to structured logs not metrics labels."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify the spike on/off toggle propagates correctly across rebuild → search → debug payload."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify atomic-write, cosine, iter_canonical_tags_with_vectors are reused not duplicated."}
