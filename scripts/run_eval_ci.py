@@ -1,6 +1,10 @@
-"""CI entry point: run every eval suite under tests/fixtures/eval/ with hashing
-embedder and the baseline-derived suite thresholds. Exit non-zero if any suite
-fails. Used by .github/workflows/quality.yml.
+"""CI entry point: run every eval suite under tests/fixtures/eval/ with the
+selected embedder and the baseline-derived suite thresholds. Exit non-zero
+if any suite fails. Used by .github/workflows/quality.yml.
+
+Default --embedder=hashing (offline, fast, used as the always-on PR gate).
+Use --embedder=siliconflow with --baseline=tests/fixtures/eval/baselines/siliconflow.json
+for readiness / pre-release validation against the production embedder.
 """
 from __future__ import annotations
 
@@ -16,6 +20,10 @@ SUITE_DIR = REPO_ROOT / "tests" / "fixtures" / "eval"
 BASELINE_PATH = SUITE_DIR / "baselines" / "hashing.json"
 DEFAULT_DOCS_DIR = REPO_ROOT / "tests" / "fixtures" / "product_manuals"
 
+EMBEDDER_HASHING = "hashing"
+EMBEDDER_SILICONFLOW = "siliconflow"
+SUPPORTED_EMBEDDERS = (EMBEDDER_HASHING, EMBEDDER_SILICONFLOW)
+
 SUITE_DOCS_OVERRIDES = {
     "coffee.jsonl": REPO_ROOT / "tests" / "fixtures",
 }
@@ -26,6 +34,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", type=Path, default=BASELINE_PATH)
     parser.add_argument("--suite-dir", type=Path, default=SUITE_DIR)
     parser.add_argument(
+        "--embedder",
+        choices=SUPPORTED_EMBEDDERS,
+        default=EMBEDDER_HASHING,
+        help="Embedder to use for the CI run; must match the baseline JSON's embedder field.",
+    )
+    parser.add_argument(
+        "--no-default-thresholds",
+        action="store_true",
+        help="Skip the project-wide DEFAULT_THRESHOLDS floor (recall/mrr/hit ≥ 0.8) and "
+        "rely solely on baseline-derived thresholds. Used for siliconflow path where the "
+        "baseline is informational only — see Phase 4 readiness PRD D4.",
+    )
+    parser.add_argument(
         "--geodesic",
         action="store_true",
         help="Run with Phase 4 geodesic_rerank_enabled=true (informational; "
@@ -35,7 +56,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.baseline.exists():
         print(f"baseline missing: {args.baseline}", file=sys.stderr)
-        print("regenerate with: uv run python scripts/build_eval_baseline.py --embedder hashing --output " f"{args.baseline}", file=sys.stderr)
+        print(
+            "regenerate with: uv run python scripts/build_eval_baseline.py "
+            f"--embedder {args.embedder} --output {args.baseline}",
+            file=sys.stderr,
+        )
         return 1
 
     suites = sorted(p for p in args.suite_dir.iterdir() if p.is_file() and p.suffix == ".jsonl")
@@ -46,8 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     failed: list[str] = []
     with tempfile.TemporaryDirectory(prefix="ci-eval-") as tmp:
         tmp_root = Path(tmp)
-        config_path = tmp_root / "ci-hashing.yaml"
-        config_path.write_text(_hashing_config_yaml(tmp_root / "data", geodesic=args.geodesic), encoding="utf-8")
+        config_path = tmp_root / f"ci-{args.embedder}.yaml"
+        config_path.write_text(
+            _config_yaml(tmp_root / "data", embedder=args.embedder, geodesic=args.geodesic),
+            encoding="utf-8",
+        )
         for suite in suites:
             data_dir = tmp_root / suite.stem
             docs_for_suite = SUITE_DOCS_OVERRIDES.get(suite.name, DEFAULT_DOCS_DIR)
@@ -68,6 +96,12 @@ def main(argv: list[str] | None = None) -> int:
                 "--eval-data-dir",
                 str(data_dir),
             ]
+            if args.no_default_thresholds:
+                cmd.extend([
+                    "--min-recall-at-k", "0.0",
+                    "--min-mrr", "0.0",
+                    "--min-hit-at-k", "0.0",
+                ])
             result = subprocess.run(cmd, text=True, capture_output=True)
             tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
             print(f"[{suite.name}] {tail[0]}")
@@ -97,17 +131,42 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _hashing_config_yaml(data_dir: Path, *, geodesic: bool = False) -> str:
-    base = (
-        "model:\n"
-        "  provider: hashing\n"
-        "  dim: 64\n"
-        "  batch_size: 16\n"
-        "storage:\n"
-        f"  data_dir: {data_dir}\n"
-        "wave_phase1:\n"
-        "  spike_enabled: true\n"
-    )
+def _config_yaml(data_dir: Path, *, embedder: str = EMBEDDER_HASHING, geodesic: bool = False) -> str:
+    """Generate the YAML config consumed by `tagmemorag eval run`.
+
+    Hashing path is byte-equivalent to the previous `_hashing_config_yaml`
+    output (master baseline invariance). Siliconflow path requires
+    SILICONFLOW_API_KEY in the env; the YAML references it by name, never
+    inlines the secret.
+    """
+    if embedder == EMBEDDER_HASHING:
+        base = (
+            "model:\n"
+            "  provider: hashing\n"
+            "  dim: 64\n"
+            "  batch_size: 16\n"
+            "storage:\n"
+            f"  data_dir: {data_dir}\n"
+            "wave_phase1:\n"
+            "  spike_enabled: true\n"
+        )
+    elif embedder == EMBEDDER_SILICONFLOW:
+        base = (
+            "model:\n"
+            "  provider: http\n"
+            "  name: Qwen/Qwen3-VL-Embedding-8B\n"
+            "  dim: 4096\n"
+            "  base_url: https://api.siliconflow.cn/v1\n"
+            "  api_key_env: SILICONFLOW_API_KEY\n"
+            "  normalize: true\n"
+            "storage:\n"
+            f"  data_dir: {data_dir}\n"
+            "wave_phase1:\n"
+            "  spike_enabled: true\n"
+        )
+    else:
+        raise ValueError(f"unsupported embedder: {embedder}")
+
     if geodesic:
         base += (
             "  geodesic_rerank_enabled: true\n"

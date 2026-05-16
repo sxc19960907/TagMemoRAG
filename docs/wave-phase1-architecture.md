@@ -569,3 +569,33 @@ recovery is the responsibility of a separate readiness task.
 `scripts/diag_geodesic_rerank.py` on the product-manual fixture set hits
 `applied_pct=100% / max_geo_zero=0%`, confirming V8 has real signal in this
 repo.
+
+## Eval baselines (hashing vs siliconflow)
+
+Two baseline files live under `tests/fixtures/eval/baselines/`:
+
+| File | Embedder | Role | CI consumed by default? |
+|------|----------|------|--------------------------|
+| `hashing.json` | hashing 64-dim | Quality gate — `run_eval_ci.py` default | Yes (always) |
+| `siliconflow.json` | Qwen3-VL-Embedding-8B 4096-dim | Informational reference for readiness work | No |
+
+`hashing.json` is the byte-stable PR gate (offline, fast, deterministic). It
+is what every commit on this branch exercises through GitHub Actions.
+
+`siliconflow.json` captures the production embedder's measurements over the
+same 8 fixture suites. It is **not** a quality gate today because:
+
+1. Fixture eval suites' case-level thresholds (`min_hit_at_k`, `min_mrr`, etc.)
+   were authored against hashing-embedder-recall; the same chunks won't
+   necessarily be top-K under a real semantic embedder.
+2. Several wave_phase1 parameters (`spike_firing_threshold`, etc.) are tuned
+   on hashing dim=64; magnitudes shift at 4096 dim.
+
+Refresh siliconflow.json with `scripts/build_eval_baseline.py --embedder
+siliconflow --compare-with tests/fixtures/eval/baselines/hashing.json` —
+the script does an upfront single-query smoke test, runs each suite under
+exponential-backoff retry (1s/2s/4s/8s/16s, hard errors like 401/403/404
+short-circuit), writes atomically, and prints a per-suite per-metric delta
+table to stdout. Diagnosing the gap and (eventually) reauthoring the
+fixture suite to match the production embedder is the job of a separate
+readiness task.

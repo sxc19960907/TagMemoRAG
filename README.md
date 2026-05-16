@@ -1006,7 +1006,16 @@ uv run python scripts/build_eval_baseline.py \
   --output tests/fixtures/eval/baselines/hashing.json
 ```
 
-For a SiliconFlow sanity run with `BAAI/bge-small-zh-v1.5`, set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The SiliconFlow baseline lives at `tests/fixtures/eval/baselines/siliconflow.json` and is **not** part of CI; it serves as a smoke test for divergence between hashing and the production embedder.
+For a SiliconFlow run with the production target model (`Qwen/Qwen3-VL-Embedding-8B`, 4096 dim), set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The script wraps `build_eval_baseline.py --embedder siliconflow` (with smoke test, exponential-backoff retry, and atomic write). To diff against hashing in one shot, append `--compare-with tests/fixtures/eval/baselines/hashing.json`:
+
+```bash
+uv run python scripts/build_eval_baseline.py \
+  --embedder siliconflow \
+  --output tests/fixtures/eval/baselines/siliconflow.json \
+  --compare-with tests/fixtures/eval/baselines/hashing.json
+```
+
+`tests/fixtures/eval/baselines/siliconflow.json` is **informational only** — it captures the production embedder's measurements but is **not** a CI quality gate. Today's eval fixtures' case-level thresholds were authored against hashing-embedder-recall, so siliconflow rankings often miss the same case-level cuts; `run_eval_ci.py --baseline siliconflow.json --embedder siliconflow --no-default-thresholds` is the closest you get to a self-pass run, but case-level fixture thresholds are not bypassable. Diagnosing or reauthoring the fixture suite to match the production embedder is a separate readiness task.
 
 ## Tag Data Model
 
