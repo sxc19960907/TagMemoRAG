@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/05-15-wave-phase2b-residualpyramid/research/source-residual-pyramid.md", "reason": "ResidualPyramid.js 394 行源 + caller 用法 + Python 移植深度 L2 选项；Step 2 实现时按本文 §2-§5 写算法"}
+{"file": ".trellis/tasks/archive/2026-05/05-14-wave-phase1-cooccurrence-spike/research/source-tag-boost-and-spike.md", "reason": "源 [3] dynamicBoostFactor 公式 + [4] candidate 收集逐行注释；Step 3 接公式时对照"}
+{"file": ".trellis/tasks/archive/2026-05/05-15-wave-phase2a-epa-realpca/prd.md", "reason": "Phase 2a D4-D7 锁的 epa_logic_depth_scale=2.0 / epa_floor=0.0 / strategy 默认 constant 等约束沿用本任务"}
