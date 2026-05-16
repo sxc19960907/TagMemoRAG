@@ -162,3 +162,55 @@ def test_metadata_boost_is_deterministic_after_wave_scores():
 
     assert [result.node_id for result in unboosted] == [1, 0]
     assert [result.node_id for result in boosted] == [0, 1]
+
+
+def test_rerank_pool_size_none_matches_top_k_baseline():
+    """Phase 4: rerank_pool_size=None must yield byte-equivalent output to current behavior."""
+    chunks = [
+        Chunk(f"chunk-{i}", f"h{i}", (f"h{i}",), 1, i, "x.md") for i in range(6)
+    ]
+    vectors = np.eye(6, dtype=np.float32)
+    graph = build_graph(chunks, vectors, GraphConfig(sim_threshold=0.0))
+    query = np.array([1, 0, 0, 0, 0, 0], dtype=np.float32)
+
+    baseline = wave_search(query, graph, vectors, top_k=3, source_k=2, steps=0)
+    explicit_none = wave_search(
+        query, graph, vectors, top_k=3, source_k=2, steps=0, rerank_pool_size=None
+    )
+
+    assert [r.node_id for r in baseline] == [r.node_id for r in explicit_none]
+    assert [r.score for r in baseline] == [r.score for r in explicit_none]
+
+
+def test_rerank_pool_size_returns_oversampled_candidates():
+    """Phase 4: rerank_pool_size > top_k returns the larger pool intact (caller reranks)."""
+    chunks = [
+        Chunk(f"chunk-{i}", f"h{i}", (f"h{i}",), 1, i, "x.md") for i in range(6)
+    ]
+    vectors = np.eye(6, dtype=np.float32)
+    graph = build_graph(chunks, vectors, GraphConfig(sim_threshold=0.0))
+    query = np.array([1, 0, 0, 0, 0, 0], dtype=np.float32)
+
+    pool = wave_search(
+        query, graph, vectors, top_k=2, source_k=6, steps=0, rerank_pool_size=5
+    )
+    top_k_only = wave_search(query, graph, vectors, top_k=2, source_k=6, steps=0)
+
+    assert len(pool) == 5
+    # Top-K subset of the oversampled pool must equal the baseline ranking.
+    assert [r.node_id for r in pool[:2]] == [r.node_id for r in top_k_only]
+
+
+def test_rerank_pool_size_smaller_than_top_k_clamps_to_pool():
+    """Phase 4: rerank_pool_size < top_k is honored (caller-side contract)."""
+    chunks = [
+        Chunk(f"chunk-{i}", f"h{i}", (f"h{i}",), 1, i, "x.md") for i in range(4)
+    ]
+    vectors = np.eye(4, dtype=np.float32)
+    graph = build_graph(chunks, vectors, GraphConfig(sim_threshold=0.0))
+    query = np.array([1, 0, 0, 0], dtype=np.float32)
+
+    result = wave_search(
+        query, graph, vectors, top_k=10, source_k=4, steps=0, rerank_pool_size=2
+    )
+    assert len(result) == 2

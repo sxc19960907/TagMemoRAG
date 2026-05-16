@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and quality scope."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundary for new wave_geodesic_rerank.py and search_runtime integration."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Fail-soft rerank skip + service error envelope conventions."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Metric label safety; new geodesic_rerank_* counters/histogram + reason whitelist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing/baseline-invariance bar for flag-off path bytewise stability."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans config, spike output, wave_search, search_runtime, metrics, eval, docs."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse metadata_from_node, tag_store.lookup_tag_id, normalize_tag, existing TagBoostInfo dataclass."}
+{"file": ".trellis/tasks/archive/2026-05/05-16-wave-phase3-5-intrinsic-residuals/prd.md", "reason": "Phase 3.5 producer/consumer-flag pattern reused here for V8."}
+{"file": ".trellis/tasks/archive/2026-05/05-16-wave-phase3-5-intrinsic-residuals/design.md", "reason": "Reference for flag-off byte equivalence and rebuild fail-soft analogy."}
+{"file": ".trellis/tasks/archive/2026-05/05-16-wave-phase3-residuals-resonance/prd.md", "reason": "Phase 3 single-flag default-false template (cross_domain_resonance_enabled)."}
+{"file": ".trellis/tasks/archive/2026-05/05-15-wave-phase2b-residualpyramid/research/source-residual-pyramid.md", "reason": "Source-side wave engine reference; V8 sits one stage downstream."}

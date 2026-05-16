@@ -143,3 +143,42 @@ def test_yaml_fallback(tmp_path, monkeypatch):
     config.write_text("server:\n  port: 8123\n", encoding="utf-8")
 
     assert load_config(config).server.port == 8123
+
+
+def test_phase4_geodesic_rerank_defaults():
+    cfg = load_config("missing.yaml")
+
+    assert cfg.wave_phase1.geodesic_rerank_enabled is False
+    assert cfg.wave_phase1.geodesic_alpha == 0.3
+    assert cfg.wave_phase1.geodesic_oversample_factor == 2.0
+    assert cfg.wave_phase1.geodesic_min_geo_samples == 2
+
+
+def test_phase4_geodesic_rerank_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__WAVE_PHASE1__GEODESIC_RERANK_ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__WAVE_PHASE1__GEODESIC_ALPHA", "0.5")
+    monkeypatch.setenv("TAGMEMORAG__WAVE_PHASE1__GEODESIC_OVERSAMPLE_FACTOR", "3.0")
+    monkeypatch.setenv("TAGMEMORAG__WAVE_PHASE1__GEODESIC_MIN_GEO_SAMPLES", "4")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.wave_phase1.geodesic_rerank_enabled is True
+    assert cfg.wave_phase1.geodesic_alpha == 0.5
+    assert cfg.wave_phase1.geodesic_oversample_factor == 3.0
+    assert cfg.wave_phase1.geodesic_min_geo_samples == 4
+
+
+def test_phase4_geodesic_rerank_validation_rejects_out_of_range():
+    import pytest
+    from pydantic import ValidationError
+
+    from tagmemorag.config import WavePhase1Config
+
+    with pytest.raises(ValidationError):
+        WavePhase1Config(geodesic_alpha=1.5)
+    with pytest.raises(ValidationError):
+        WavePhase1Config(geodesic_alpha=-0.1)
+    with pytest.raises(ValidationError):
+        WavePhase1Config(geodesic_oversample_factor=0.5)
+    with pytest.raises(ValidationError):
+        WavePhase1Config(geodesic_min_geo_samples=0)

@@ -489,3 +489,83 @@ implementation time.
 **Future work:** Phase 3.5 trains real `tag_intrinsic_residuals` and feeds
 them into the ResidualPyramid as a prior; Phase 4 covers V8
 `geodesicRerank`.
+
+## Geodesic rerank (Phase 4)
+
+Phase 4 ports VCPToolBox V8 `TagMemoEngine.geodesicRerank`
+(`TagMemoEngine.js:537-640`). After Phase 1 spike propagation has produced
+a tag-energy field (`SpikeResult.accumulated_energy`), V8 reranks the
+KNN+wave candidates by mean tag energy per chunk, blending with the
+original score:
+
+```
+geo_score      = sum(energy_field[tid] for tid in chunk.tags) / hit_count
+normalized_geo = geo_score / max_geo                  # [0, 1] across pool
+final_score    = (1 - α) * knn_score + α * normalized_geo
+```
+
+Three-layer fallback (matches source-side defense):
+
+| Layer | Trigger | Behavior |
+|-------|---------|----------|
+| L0 | `energy_field` is empty / None | Return input candidates verbatim, reason `energy_field_empty` |
+| L1 | per-candidate hit count < `min_geo_samples` | That candidate's `geo_score = 0` |
+| L2 | global `max_geo == 0` | Return input order verbatim, reason `max_geo_zero` |
+
+### Configuration
+
+| Setting | Default | Note |
+|---------|---------|------|
+| `wave_phase1.geodesic_rerank_enabled` | `false` | Single consumer flag; honors Phase 2b-2 / 3 / 3.5 default-off pattern |
+| `wave_phase1.geodesic_alpha` | `0.3` | Blend weight; clamped to `[0, 1]` |
+| `wave_phase1.geodesic_oversample_factor` | `2.0` | `pool = top_k × factor`; lower bound 1.0 |
+| `wave_phase1.geodesic_min_geo_samples` | `2` | **Differs from source default 4** because this repo's manuals carry ~3 tags/chunk on average; raise to 4 once tag density is ≥6/chunk |
+
+### Hard dependency on Phase 1 spike
+
+V8 only runs when `wave_phase1.spike_enabled=true` AND
+`geodesic_rerank_enabled=true` AND `apply_tag_boost` succeeded with a
+non-empty `accumulated_energy`. If the flag is on but any precondition
+fails, V8 silently no-ops and records `geodesic_rerank_skipped_total{reason}`
+with a fixed-cardinality reason from this whitelist:
+
+```
+spike_disabled       — kill switch off
+matrix_missing       — cooccurrence matrix not on disk yet
+no_tag_vectors       — KB tags exist but no vectors loaded
+no_seeds             — pyramid / cosine seed selection produced empty set
+no_candidates        — spike + dedup left no candidates to fuse
+degenerate_context   — fused context vector was zero
+zero_alpha           — base_tag_boost × dynamic clamped to 0
+degenerate_fused     — boosted vector had near-zero norm
+energy_field_empty   — spike ran but produced no energy entries
+max_geo_zero         — V8 ran, every candidate's geo_score was 0 (L2)
+lexical_only_path    — execute_search fell back before spike (no boost_info)
+unknown              — catchall (should not happen if config is valid)
+```
+
+### Observability
+
+Four metrics, all gated to record only when `geodesic_rerank_enabled=true`:
+
+- `tagmemorag_geodesic_rerank_applied_total{kb_name}` — Counter, V8 actually
+  contributed a reranking (`applied=True`).
+- `tagmemorag_geodesic_rerank_skipped_total{kb_name, reason}` — Counter.
+  `reason` is bounded to the whitelist above.
+- `tagmemorag_geodesic_rerank_swap_total{kb_name, kind}` — Counter,
+  `kind ∈ {rank_changed, new_entry, lost_entry}`. Per-query swap
+  classification against the input top_k.
+- `tagmemorag_geodesic_rerank_hit_count_observed{kb_name}` — Histogram,
+  per-candidate tag hit count, buckets `(0, 1, 2, 3, 4, 6, 10)`.
+
+### Default off rationale
+
+8 hashing eval suites are anchored to baseline (Phase 2b-2 + 3 + 3.5
+behavior). `geodesic_rerank_enabled=false` keeps `wave_search` byte-equivalent
+to the previous shape (no oversampling, no rerank, no metric registration).
+With the flag on at default α=0.3 / min_samples=2, `scripts/run_eval_ci.py
+--geodesic` reports informational deltas; the column does NOT gate CI —
+recovery is the responsibility of a separate readiness task.
+`scripts/diag_geodesic_rerank.py` on the product-manual fixture set hits
+`applied_pct=100% / max_geo_zero=0%`, confirming V8 has real signal in this
+repo.

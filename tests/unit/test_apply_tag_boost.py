@@ -601,3 +601,48 @@ def test_apply_tag_boost_resonance_enabled_records_metric(tmp_path: Path):
         # Bridges count is non-negative integer, resonance is non-negative float.
         assert info.cross_domain_resonance >= 0.0
         assert info.cross_domain_bridges_count >= 0
+
+
+def test_accumulated_energy_none_when_spike_skipped(tmp_path: Path):
+    """Phase 4: skipped_reason early-return paths must keep accumulated_energy=None."""
+    cfg = _settings(tmp_path, spike=False)
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    _boosted, info = apply_tag_boost(query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5)
+
+    assert info.skipped_reason == "spike_disabled"
+    assert info.accumulated_energy is None
+    # to_dict surfaces the size as 0 even when None.
+    assert info.to_dict()["geodesic_energy_field_size"] == 0
+
+
+def test_accumulated_energy_populated_on_spike_success(tmp_path: Path):
+    """Phase 4: spike-success path must expose the energy field for V8 consumption."""
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5)
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("a", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("b", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("c", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("a", 1), ("b", 2), ("c", 3)],
+            [("a", 1), ("b", 2)],
+            [("a", 1), ("b", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    _boosted, info = apply_tag_boost(query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5)
+
+    assert info.accumulated_energy is not None
+    assert len(info.accumulated_energy) >= 1
+    # Energy field is read-only (MappingProxyType) so callers can't mutate spike state.
+    with pytest.raises(TypeError):
+        info.accumulated_energy[0] = 0.0  # type: ignore[index]
+    # to_dict reports size only, not the raw mapping.
+    body = info.to_dict()
+    assert "accumulated_energy" not in body
+    assert body["geodesic_energy_field_size"] == len(info.accumulated_energy)

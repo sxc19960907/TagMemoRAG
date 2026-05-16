@@ -29,6 +29,7 @@ def wave_search(
     lexical_source_k: int = 0,
     *,
     disable_legacy_tag_boost: bool = False,
+    rerank_pool_size: int | None = None,
 ) -> list[Result]:
     anchors = anchors or {}
     if aggregate not in {"max", "sum"}:
@@ -107,7 +108,9 @@ def wave_search(
         )
         for node_id, score in amplitudes.items()
     }
-    ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))[:top_k]
+    ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))
+    limit = top_k if rerank_pool_size is None else max(int(rerank_pool_size), 0)
+    ranked = ranked[:limit]
     return [_make_result(graph, node_id, score) for node_id, score in ranked]
 
 

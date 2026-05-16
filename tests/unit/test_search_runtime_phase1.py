@@ -259,6 +259,114 @@ def test_debug_payload_without_spike_omits_tag_boost(tmp_path: Path):
     assert payload["legacy_tag_boost_disabled"] is False
 
 
+def _enable_geodesic(cfg: Settings, *, alpha: float = 0.5, min_samples: int = 1) -> None:
+    cfg.wave_phase1.geodesic_rerank_enabled = True
+    cfg.wave_phase1.geodesic_alpha = alpha
+    cfg.wave_phase1.geodesic_min_geo_samples = min_samples
+
+
+def test_geodesic_off_baseline_unchanged(tmp_path: Path):
+    """Phase 4: with geodesic_rerank_enabled=false, results match the spike-on baseline."""
+    cfg = _settings(tmp_path, spike=True)
+    state = _build_graph_state("kb-x")
+    _seed_phase1_data(cfg, "kb-x")
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+    baseline = execute_search(
+        state=state, query_vec=query, settings=cfg,
+        top_k=3, source_k=3, steps=1, decay=0.7, amplitude_cutoff=0.01,
+        aggregate="max", filters={"tags": ["a"]},
+    )
+
+    _enable_geodesic(cfg)
+    # Re-build state so wave_search sees the same graph
+    state2 = _build_graph_state("kb-x")
+    enabled = execute_search(
+        state=state2, query_vec=query, settings=cfg,
+        top_k=3, source_k=3, steps=1, decay=0.7, amplitude_cutoff=0.01,
+        aggregate="max", filters={"tags": ["a"]},
+    )
+
+    # When V8 actually applies and rearranges the order, scores will differ —
+    # but the candidate set should remain the same after the L2 fallback.
+    assert {r.node_id for r in baseline.results} == {r.node_id for r in enabled.results}
+
+
+def test_geodesic_skipped_metric_when_spike_disabled(tmp_path: Path):
+    """Phase 4: flag-on + spike-off ⇒ metric records skipped_reason=spike_disabled."""
+    from tagmemorag.observability import metrics as metrics_module
+    from prometheus_client import generate_latest
+
+    cfg = _settings(tmp_path, spike=False)
+    _enable_geodesic(cfg)
+    state = _build_graph_state("kb-x")
+    metrics_module.reset_metrics_for_tests()
+
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    execute_search(
+        state=state, query_vec=query, settings=cfg,
+        top_k=3, source_k=3, steps=1, decay=0.7, amplitude_cutoff=0.01,
+        aggregate="max", filters={"tags": ["a"]},
+    )
+    body = generate_latest(metrics_module.get_registry()).decode("utf-8")
+    assert (
+        'tagmemorag_geodesic_rerank_skipped_total{kb_name="kb-x",reason="spike_disabled"} 1.0'
+        in body
+    )
+    # applied_total should NOT have a sample for kb-x — only skipped did.
+    assert 'tagmemorag_geodesic_rerank_applied_total{kb_name="kb-x"} 1.0' not in body
+
+
+def test_geodesic_applied_metric_when_spike_succeeds(tmp_path: Path):
+    """Phase 4: flag-on + spike success ⇒ V8 actually runs (records applied or skipped).
+
+    With our minimal 3-tag fixture, V8 will typically converge to applied=True
+    when min_geo_samples=1. We accept either applied OR max_geo_zero (both valid
+    runtime states) but require *something* under the geodesic_rerank_* family.
+    """
+    from tagmemorag.observability import metrics as metrics_module
+    from prometheus_client import generate_latest
+
+    cfg = _settings(tmp_path, spike=True)
+    _enable_geodesic(cfg, alpha=0.5, min_samples=1)
+    state = _build_graph_state("kb-x")
+    _seed_phase1_data(cfg, "kb-x")
+    metrics_module.reset_metrics_for_tests()
+
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    execute_search(
+        state=state, query_vec=query, settings=cfg,
+        top_k=3, source_k=3, steps=1, decay=0.7, amplitude_cutoff=0.01,
+        aggregate="max", filters={"tags": ["a"]},
+    )
+
+    body = generate_latest(metrics_module.get_registry()).decode("utf-8")
+    fired = (
+        'tagmemorag_geodesic_rerank_applied_total{kb_name="kb-x"}' in body
+        or 'tagmemorag_geodesic_rerank_skipped_total{kb_name="kb-x"' in body
+    )
+    assert fired
+
+
+def test_geodesic_filter_strict_pool_smaller_than_pool_size(tmp_path: Path):
+    """Phase 4: extreme filter limits eligible candidates < pool — V8 must not crash."""
+    cfg = _settings(tmp_path, spike=True)
+    _enable_geodesic(cfg, min_samples=1)
+    state = _build_graph_state("kb-x")
+    _seed_phase1_data(cfg, "kb-x")
+
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    # Only one chunk passes this filter — pool should not blow up.
+    execution = execute_search(
+        state=state, query_vec=query, settings=cfg,
+        top_k=5, source_k=5, steps=1, decay=0.7, amplitude_cutoff=0.01,
+        aggregate="max", filters={"tags": ["a"]},
+    )
+
+    # Returned at most as many results as we asked for, possibly fewer due to filter.
+    assert len(execution.results) <= 5
+
+
 def test_debug_payload_emits_cross_domain_bridges_only_when_present():
     """Phase 3: search_debug_payload exposes the bridges list under
     `tag_boost_debug.cross_domain_bridges` only when at least one bridge

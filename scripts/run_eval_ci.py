@@ -25,6 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path, default=BASELINE_PATH)
     parser.add_argument("--suite-dir", type=Path, default=SUITE_DIR)
+    parser.add_argument(
+        "--geodesic",
+        action="store_true",
+        help="Run with Phase 4 geodesic_rerank_enabled=true (informational; "
+        "does NOT change the baseline gate — recall delta is recorded for ops review).",
+    )
     args = parser.parse_args(argv)
 
     if not args.baseline.exists():
@@ -41,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="ci-eval-") as tmp:
         tmp_root = Path(tmp)
         config_path = tmp_root / "ci-hashing.yaml"
-        config_path.write_text(_hashing_config_yaml(tmp_root / "data"), encoding="utf-8")
+        config_path.write_text(_hashing_config_yaml(tmp_root / "data", geodesic=args.geodesic), encoding="utf-8")
         for suite in suites:
             data_dir = tmp_root / suite.stem
             docs_for_suite = SUITE_DOCS_OVERRIDES.get(suite.name, DEFAULT_DOCS_DIR)
@@ -72,14 +78,27 @@ def main(argv: list[str] | None = None) -> int:
             shutil.rmtree(data_dir, ignore_errors=True)
 
     if failed:
+        if args.geodesic:
+            # Phase 4 D6: enabled-on column is informational only — record the
+            # delta but never block CI on it. Recovery is the responsibility
+            # of the readiness task, not the algorithm-introduction task.
+            print(
+                f"\n[geodesic enabled-on] {len(failed)} suite(s) below baseline: {failed}",
+                file=sys.stderr,
+            )
+            print(
+                "[geodesic enabled-on] not gating CI (Phase 4 default-off + informational policy)",
+                file=sys.stderr,
+            )
+            return 0
         print(f"\nFAILED suites: {failed}", file=sys.stderr)
         return 1
     print(f"\nAll {len(suites)} eval suites passed (baseline = {args.baseline.name})")
     return 0
 
 
-def _hashing_config_yaml(data_dir: Path) -> str:
-    return (
+def _hashing_config_yaml(data_dir: Path, *, geodesic: bool = False) -> str:
+    base = (
         "model:\n"
         "  provider: hashing\n"
         "  dim: 64\n"
@@ -89,6 +108,14 @@ def _hashing_config_yaml(data_dir: Path) -> str:
         "wave_phase1:\n"
         "  spike_enabled: true\n"
     )
+    if geodesic:
+        base += (
+            "  geodesic_rerank_enabled: true\n"
+            "  geodesic_alpha: 0.3\n"
+            "  geodesic_min_geo_samples: 2\n"
+            "  geodesic_oversample_factor: 2.0\n"
+        )
+    return base
 
 
 if __name__ == "__main__":

@@ -88,10 +88,11 @@ M4 introduces Prometheus metrics and OTel hook points. M0 should keep function b
 ### 3. Metrics Contract
 
 - Custom metric names start with `tagmemorag_`.
-- Allowed labels are low-cardinality only. Current custom labels include `method`, `route`, `status_code`, `kb_name`, `cache_status`, `error_code`, `operation`, `outcome`, `strategy`, `feature`, `query_world_kind`, `kind`, and `consumer`.
+- Allowed labels are low-cardinality only. Current custom labels include `method`, `route`, `status_code`, `kb_name`, `cache_status`, `error_code`, `operation`, `outcome`, `strategy`, `feature`, `query_world_kind`, `kind`, `consumer`, and `reason`.
 - Never use raw query text, trace IDs, task IDs, API key identifiers or hashes, build IDs, source paths, document text, exception messages, or vectors as metric labels.
 - Metrics recording helpers must not raise into the request or rebuild path.
 - Intrinsic residual metrics use `consumer="wormhole"|"pyramid_prior"` only; do not label by tag id, tag name, manual id, or source file.
+- Phase 4 V8 geodesicRerank metrics use `reason` only from the bounded whitelist enforced in `Metrics.GEODESIC_RERANK_REASONS` (`spike_disabled / matrix_missing / no_tag_vectors / no_seeds / no_candidates / degenerate_context / zero_alpha / degenerate_fused / energy_field_empty / max_geo_zero / lexical_only_path / unknown`) and `kind` only from `Metrics.GEODESIC_RERANK_SWAP_KINDS` (`rank_changed / new_entry / lost_entry`). Unrecognized values are clamped to `unknown` (skipped) or dropped (swap).
 
 ### 4. Trace Contract
 

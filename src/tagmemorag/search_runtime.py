@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -11,6 +12,7 @@ from .lexical_search import lexical_score_map, lexical_search
 from .observability.metrics import get_metrics
 from .state import _vector_store
 from .types import GraphState
+from .wave_geodesic_rerank import geodesic_rerank
 from .wave_searcher import filter_node_ids, wave_search
 from .wave_tag_spike import GhostTag, TagBoostInfo, apply_tag_boost
 
@@ -87,6 +89,22 @@ def execute_search(
             query_vec = boosted_vec
             legacy_tag_boost_disabled = not phase1.legacy_chunk_tag_boost
 
+    # Phase 4 V8 geodesicRerank — only oversample when V8 will actually run.
+    v8_should_run = (
+        phase1.enabled
+        and phase1.spike_enabled
+        and phase1.geodesic_rerank_enabled
+        and boost_info is not None
+        and not boost_info.skipped_reason
+        and bool(boost_info.accumulated_energy)
+    )
+    rerank_pool_size: int | None = None
+    if v8_should_run:
+        rerank_pool_size = max(
+            int(top_k),
+            int(math.ceil(int(top_k) * float(phase1.geodesic_oversample_factor))),
+        )
+
     results = wave_search(
         query_vec,
         state.graph,
@@ -105,7 +123,45 @@ def execute_search(
         lexical_scores=lexical_scores,
         lexical_source_k=int(settings.search.lexical_source_k) if settings.search.lexical_enabled else 0,
         disable_legacy_tag_boost=legacy_tag_boost_disabled,
+        rerank_pool_size=rerank_pool_size,
     )
+
+    if v8_should_run:
+        rerank_result = geodesic_rerank(
+            results,
+            energy_field=boost_info.accumulated_energy if boost_info is not None else None,
+            graph=state.graph,
+            kb_name=state.kb_name,
+            settings=settings,
+            top_k=top_k,
+        )
+        metrics = get_metrics()
+        if rerank_result.applied:
+            metrics.record_geodesic_rerank_applied(kb_name=state.kb_name)
+            for kind, count in rerank_result.swap_kinds.items():
+                metrics.record_geodesic_rerank_swap(
+                    kb_name=state.kb_name, kind=kind, count=int(count)
+                )
+            for hits in rerank_result.hit_count_observed:
+                metrics.record_geodesic_rerank_hit_count(
+                    kb_name=state.kb_name, hit_count=int(hits)
+                )
+        else:
+            metrics.record_geodesic_rerank_skipped(
+                kb_name=state.kb_name,
+                reason=rerank_result.skipped_reason or "unknown",
+            )
+        results = list(rerank_result.candidates[:top_k])
+    elif phase1.geodesic_rerank_enabled:
+        # Flag-on but a precondition prevented V8 from running — surface why
+        # so dashboards can localize ops issues (config off vs missing data
+        # vs lexical-only path).
+        get_metrics().record_geodesic_rerank_skipped(
+            kb_name=state.kb_name,
+            reason=_classify_geodesic_skipped_reason(
+                phase1=phase1, boost_info=boost_info
+            ),
+        )
     return SearchExecution(
         results=results,
         eligible_node_ids=eligible_node_ids,
@@ -182,6 +238,37 @@ def _spike_outcome(info: TagBoostInfo) -> str:
     if info.boost_factor_applied > 0.0:
         return "applied"
     return "skipped"
+
+
+def _classify_geodesic_skipped_reason(
+    *, phase1, boost_info: TagBoostInfo | None
+) -> str:
+    """Map runtime state to a fixed-cardinality reason for V8 skipped metric.
+
+    Called only when `geodesic_rerank_enabled=true` AND V8 didn't actually run
+    (i.e. v8_should_run was False). Mirrors `Metrics.GEODESIC_RERANK_REASONS`.
+    """
+    if not phase1.spike_enabled:
+        return "spike_disabled"
+    if boost_info is None:
+        # Phase 1 spike branch wasn't entered at all (e.g. phase1.enabled=False
+        # while flag-on, or some upstream lexical-only fallback path).
+        return "lexical_only_path"
+    reason = boost_info.skipped_reason or ""
+    if reason in {
+        "matrix_missing",
+        "no_tag_vectors",
+        "no_seeds",
+        "no_candidates",
+        "degenerate_context",
+        "zero_alpha",
+        "degenerate_fused",
+        "spike_disabled",
+    }:
+        return reason
+    if not boost_info.accumulated_energy:
+        return "energy_field_empty"
+    return "unknown"
 
 
 def _ann_enabled(state: GraphState, settings: Settings) -> bool:

@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import re
 import threading
+from types import MappingProxyType
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -203,6 +204,11 @@ class TagBoostInfo:
     # to `search_debug_payload` but kept off `to_dict` to avoid bloating the
     # default tag_boost shape. Use the leading underscore to mark private.
     _cross_domain_bridges: tuple[dict, ...] = field(default=(), repr=False, compare=False)
+    # Phase 4 debug-only: spike accumulated_energy field (tag_id -> energy) used
+    # by V8 geodesicRerank as the sole input. Kept private to avoid bloating
+    # to_dict; downstream consumers must reach in explicitly. None when spike
+    # didn't run (any skipped_reason early-return path).
+    accumulated_energy: Mapping[int, float] | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict:
         return {
@@ -223,6 +229,9 @@ class TagBoostInfo:
             "query_world": str(self.query_world),
             "cross_domain_resonance": float(self.cross_domain_resonance),
             "cross_domain_bridges_count": int(self.cross_domain_bridges_count),
+            "geodesic_energy_field_size": (
+                len(self.accumulated_energy) if self.accumulated_energy is not None else 0
+            ),
         }
 
 
@@ -1153,6 +1162,11 @@ def apply_tag_boost(
         "cross_domain_resonance": float(boost_with_world.resonance),
         "cross_domain_bridges_count": len(boost_with_world.bridges),
         "_cross_domain_bridges": tuple(boost_with_world.bridges),
+        # Phase 4: spike's accumulated tag energy field, exposed verbatim to
+        # downstream V8 geodesicRerank. Read-only view (MappingProxyType) so
+        # callers cannot mutate spike state. None on any spike-skipped early
+        # return path (spike_disabled / matrix_missing / no_tag_vectors / no_seeds).
+        "accumulated_energy": MappingProxyType(dict(spike_result.accumulated_energy)),
     }
     if not candidates:
         return query_vec, TagBoostInfo(

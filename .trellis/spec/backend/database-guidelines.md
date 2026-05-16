@@ -276,6 +276,79 @@ Fallback preserves compatibility while metrics expose missing training coverage.
 
 ---
 
+## Phase 4 — V8 geodesicRerank
+
+### 1. Scope / Trigger
+
+- Trigger: Phase 4 ports VCPToolBox V8 `TagMemoEngine.geodesicRerank` so wave_search candidates are reranked by mean tag energy from Phase 1 spike.
+- Applies when changing wave_search, search_runtime, TagBoostInfo shape, spike output, or any candidate-pool plumbing.
+
+### 2. Signatures
+
+- Config: `wave_phase1.geodesic_rerank_enabled: bool = False`, `wave_phase1.geodesic_alpha: float = 0.3` (clamped to `[0, 1]`), `wave_phase1.geodesic_oversample_factor: float = 2.0` (≥ 1.0), `wave_phase1.geodesic_min_geo_samples: int = 2` (≥ 1).
+- Algorithm: `geodesic_rerank(candidates, *, energy_field, graph, kb_name, settings, top_k, alpha=None, min_geo_samples=None) -> GeodesicRerankResult`.
+- Pool plumbing: `wave_search(..., rerank_pool_size: int | None = None)`. None ⇒ existing top_k truncation; non-None ⇒ pool returned for caller-side rerank.
+- Spike transport: `TagBoostInfo.accumulated_energy: Mapping[int, float] | None`. Filled on spike-success path; None on every `skipped_reason` early return.
+
+### 3. Contracts
+
+- Hard dependency: V8 runs only when `phase1.enabled && phase1.spike_enabled && geodesic_rerank_enabled && boost_info.skipped_reason == "" && bool(boost_info.accumulated_energy)`. All other paths silent-noop.
+- L0 (`energy_field` empty) / L1 (`hits < min_geo_samples`) / L2 (`max_geo == 0`) all preserve input order verbatim with classified `skipped_reason`.
+- chunk → tag_id resolution reuses `metadata_from_node(graph.nodes[node_id])["tags"]` + `tag_store.lookup_tag_id`. No new schema or persistence table is introduced.
+- Skipped-reason whitelist (fixed cardinality): `spike_disabled / matrix_missing / no_tag_vectors / no_seeds / no_candidates / degenerate_context / zero_alpha / degenerate_fused / energy_field_empty / max_geo_zero / lexical_only_path / unknown`.
+- Default-off path is byte-equivalent to baseline (8 hashing eval suites + e2e baseline invariance must stay green).
+
+### 4. Validation & Error Matrix
+
+- Settings validation: `geodesic_alpha ∈ [0, 1]`, `geodesic_oversample_factor ≥ 1.0`, `geodesic_min_geo_samples ≥ 1` enforced via pydantic `Field`. Out-of-range values raise `ValidationError` at load time.
+- V8 internal exceptions never propagate; the algorithm catches and returns `GeodesicRerankResult(skipped_reason="unknown", applied=False)`.
+- `record_geodesic_rerank_swap` drops unrecognized `kind` labels silently; `record_geodesic_rerank_skipped` clamps unknown reasons to `"unknown"`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: flag-on + spike-success + non-empty energy field + at least one candidate has tags ⇒ `applied=True`, swap_total / hit_count_observed metrics populated.
+- Base: flag-off ⇒ `wave_search(rerank_pool_size=None)`, no metric registration, byte-equivalent to baseline.
+- Bad: introducing implicit cache for `accumulated_energy` outside of `TagBoostInfo`; mutating input candidates; bypassing `metadata_from_node` to read `chunk.tags` directly (fragile across legacy node shape variants); recording a non-whitelisted reason or kind.
+
+### 6. Tests Required
+
+- Unit: three-layer fallback (L0/L1/L2), α=0/1 extremes, swap classification, diagnostic fields on `Result.metadata`, input not mutated, unknown tags silently dropped.
+- Integration: flag-off byte equivalence (e2e baseline invariance), flag-on + spike-off skip metric, flag-on + spike-success applied path, filter-strict pool < pool_size.
+- Lexical compat: V8 reads `metadata.tags` regardless of candidate provenance; hybrid pool (lexical + ANN) classifies swap kinds correctly.
+- Diag: `scripts/diag_geodesic_rerank.py` reports `applied_pct > 0` and `max_geo_zero_pct < 50` on the product-manual fixture set.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+energy = some_module.GLOBAL_ENERGY_CACHE[kb_name]   # implicit side channel
+results = wave_search(...)                          # no oversampling
+reranked = geodesic_rerank(results, energy_field=energy, ...)
+```
+
+Implicit globals leak across requests and break determinism; reranking the
+already-truncated top_k can only swap positions inside that slice and
+cannot promote a high-energy candidate from the pool tail.
+
+#### Correct
+
+```python
+boost_info = apply_tag_boost(...)                   # populates info.accumulated_energy
+pool = max(top_k, ceil(top_k * factor)) if v8_should_run else None
+results = wave_search(..., rerank_pool_size=pool)
+if v8_should_run:
+    reranked = geodesic_rerank(
+        results, energy_field=boost_info.accumulated_energy, ..., top_k=top_k,
+    )
+    results = list(reranked.candidates[:top_k])
+```
+
+The energy field rides on `TagBoostInfo` (explicit data flow); oversampling
+gives V8 a chance to pull genuinely better candidates into top_k.
+
+---
+
 ## Common Mistakes
 
 - Do not use pickle for graph persistence. It is brittle across versions and unsafe to deserialize from untrusted sources.

@@ -1222,6 +1222,30 @@ crosses the threshold:
 Phase 3.5 will train real `tag_intrinsic_residuals` and feed them into the
 ResidualPyramid as a prior; Phase 4 covers V8 `geodesicRerank`.
 
+#### Geodesic rerank (Phase 4)
+
+Phase 4 ports V8 `TagMemoEngine.geodesicRerank`. After Phase 1 spike
+propagation publishes a tag-energy field (`accumulated_energy`), V8 reranks
+the wave_search candidates by mean tag energy per chunk:
+
+```yaml
+wave_phase1:
+  spike_enabled: true
+  geodesic_rerank_enabled: true       # Phase 4 opt-in
+  geodesic_alpha: 0.3                 # blend weight, clamped to [0, 1]
+  geodesic_oversample_factor: 2.0     # pool = top_k × factor
+  geodesic_min_geo_samples: 2         # source default 4; lowered for ~3 tags/chunk
+```
+
+Default off keeps existing baselines byte-stable. When on, V8 silently
+no-ops if any precondition fails (spike disabled, matrix missing, energy
+field empty, etc.) and records the reason via
+`tagmemorag_geodesic_rerank_skipped_total{reason}` for ops dashboards.
+Diagnostics live in `scripts/diag_geodesic_rerank.py` (sweeps α and
+min_geo_samples, prints hit-count histogram, applies a PASS gate of
+`applied_pct > 0` AND `max_geo_zero_pct < 50`). Full design notes are in
+[`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md#geodesic-rerank-phase-4).
+
 ## Roadmap
 
 | Milestone | Scope |

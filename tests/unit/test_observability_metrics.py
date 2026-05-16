@@ -163,6 +163,37 @@ def test_phase35_intrinsic_residual_metrics_register_custom_series():
     metrics.assert_label_contract()
 
 
+def test_phase4_geodesic_rerank_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_geodesic_rerank_applied(kb_name="default")
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="spike_disabled")
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="max_geo_zero")
+    # Unknown reason is clamped to the literal "unknown" bucket — no high cardinality.
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="something_new")
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="rank_changed", count=2)
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="new_entry", count=1)
+    # Unknown kind is dropped silently to keep label cardinality fixed.
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="evil_label", count=5)
+    # Zero / negative counts are no-ops.
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="lost_entry", count=0)
+    collector.record_geodesic_rerank_hit_count(kb_name="default", hit_count=3)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_geodesic_rerank_applied_total{kb_name="default"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="spike_disabled"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="max_geo_zero"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="unknown"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_swap_total{kb_name="default",kind="rank_changed"} 2.0' in body
+    assert 'tagmemorag_geodesic_rerank_swap_total{kb_name="default",kind="new_entry"} 1.0' in body
+    # Evil label and lost_entry=0 must not appear.
+    assert 'kind="evil_label"' not in body
+    assert 'kind="lost_entry"' not in body
+    assert 'tagmemorag_geodesic_rerank_hit_count_observed_bucket' in body
+    metrics.assert_label_contract()
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 
