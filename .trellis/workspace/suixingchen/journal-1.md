@@ -114,3 +114,36 @@ Phase 3 把 Phase 2b-1 dynamicBoostFactor 公式里的 `resonance = 0` stub 替�
 
 - Phase 3.5: train real `tag_intrinsic_residuals` and feed them into ResidualPyramid as a prior.
 - Production rollout decision (flip the flag) waits on real EPA basis labels in siliconflow.
+
+
+## Session 3: Phase 4: V8 geodesicRerank 接入
+
+**Date**: 2026-05-16
+**Task**: Phase 4: V8 geodesicRerank 接入
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 settings (默认 false)、TagBoostInfo.accumulated_energy 透传 spike 能量场、wave_search.rerank_pool_size 支持过采样、wave_geodesic_rerank.py 纯函数算法 + 三层退化、4 项 metric (applied/skipped{12 reasons}/swap{3 kinds}/hit_count)、execute_search 接入 + skipped 细分、diag 脚本 PASS gate (本仓 fixture applied=100% / max_geo_zero=0% / hit_p50=3 / swap=4.7/q)、run_eval_ci.py --geodesic informational 列、文档 + spec 同步。Check 期顺手补 consumer label 漏 (Phase 3.5 遗留)、reason label 入白名单。435 passed / 8 套 hashing eval flag-off 字节稳定。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e51225` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

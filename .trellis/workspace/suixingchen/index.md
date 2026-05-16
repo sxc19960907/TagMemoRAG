@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-05-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~74 | Active |
+| `journal-1.md` | ~149 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-05-16 | Phase 4: V8 geodesicRerank 接入 | `4e51225` | `feat/wave-phase1-cooccurrence-spike` |
 | 2 | 2026-05-16 | Wave Phase 2b: ResidualPyramid + V6 external modulators | `07bdf93` | `feat/wave-phase1-cooccurrence-spike` |
 | 1 | 2026-05-15 | Wave Phase 1: cooccurrence matrix + V6 spike propagation | `8ca0965`, `c862c22` | `master` |
 <!-- @@@/auto:session-history -->
