@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/05-15-wave-phase2b2-worldview-langpenalty-ghost/research/source-worldview-langpenalty-ghost.md", "reason": "V6 4 段调制器源解析；Step 3-6 实现时按本文 §2-§5 写算法"}
+{"file": ".trellis/tasks/05-15-wave-phase2b-residualpyramid/research/source-residual-pyramid.md", "reason": "Pyramid features / candidates schema 是本任务上游契约"}
+{"file": ".trellis/tasks/05-15-wave-phase2b-residualpyramid/prd.md", "reason": "Phase 2b-1 D2-D8 锁的 strategy=pyramid + features 接口约束沿用本任务"}

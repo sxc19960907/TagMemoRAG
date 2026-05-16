@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/05-15-wave-phase2b2-worldview-langpenalty-ghost/research/source-worldview-langpenalty-ghost.md", "reason": "V6 4 段调制器源解析；check 时验证 langPenalty / coreBoost / core completion / ghost injection 公式接通正确"}
+{"file": ".trellis/tasks/05-15-wave-phase2b-residualpyramid/research/source-residual-pyramid.md", "reason": "Pyramid features / candidates schema；check 时验证 candidates triple 转换正确"}
