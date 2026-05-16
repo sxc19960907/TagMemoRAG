@@ -180,3 +180,36 @@ Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: fixture-rewrite Phase A: coffee.jsonl + 阈值清理
+
+**Date**: 2026-05-17
+**Task**: fixture-rewrite Phase A: coffee.jsonl + 阈值清理
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+8 套 fixture eval suite 全部清掉 case-level min_* 阈值（132 字段），仅 coffee.jsonl 重标 relevant 列表（11→20 chunks），其余 7 套 relevant 不动。新增 scripts/relabel_eval_fixture.py（双 embedder 召回并集 + smoke + retry + atomic write）+ 12 单测。run_eval_ci 默认改为 --no-default-thresholds，新增 --with-default-thresholds 显式开关。siliconflow 在 coffee.jsonl 上 hit/MRR +0.14，验证修复方向。Phase B 接力剩 7 套（cross_kb_negatives / fault_codes / model_numbers / tag_cooccurrence / product_manuals / mixed_language / tag_rerank_edge 的 negatives + relevant）。pytest 457 passed (+12)。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `24adb2e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
