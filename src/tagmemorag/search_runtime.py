@@ -165,6 +165,14 @@ def search_debug_payload(
     }
     if execution.tag_boost_info is not None:
         payload["tag_boost"] = execution.tag_boost_info.to_dict()
+        # Phase 3: bridges list is debug-only — `to_dict` keeps the canonical
+        # shape, while `tag_boost_debug.cross_domain_bridges` exposes per-pair
+        # diagnostics for operators (only present when resonance triggered).
+        bridges = getattr(execution.tag_boost_info, "_cross_domain_bridges", ())
+        if bridges:
+            payload["tag_boost_debug"] = {
+                "cross_domain_bridges": [dict(b) for b in bridges]
+            }
     return payload
 
 

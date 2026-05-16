@@ -231,6 +231,24 @@ class Metrics:
             registry=registry,
             buckets=(0, 1, 2, 3, 5, 8, 13),
         )
+        # Phase 3: V6 detectCrossDomainResonance signal. `value` is the scalar
+        # fed to dynamicBoostFactor as log(1+resonance); `bridges_count` is the
+        # number of bridge entries (axes co-activated above 0.15). Buckets cover
+        # the log-domain reference table from the PRD (0 / 0.3 / 0.5 / 1.0 / 2.0).
+        self.tag_resonance_value = Histogram(
+            "tagmemorag_tag_resonance_value",
+            "Cross-domain resonance scalar (V6 detectCrossDomainResonance) per spike-on call.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2, 2.0, 4.0),
+        )
+        self.tag_resonance_bridges_count = Histogram(
+            "tagmemorag_tag_resonance_bridges_count",
+            "Number of resonance bridges (axes pairs above co-activation threshold) per call.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8),
+        )
 
     def record_http_request(self, *, method: str, route: str, status_code: str | int, duration: float) -> None:
         self.http_requests.labels(method=method, route=route, status_code=str(status_code)).inc()
@@ -353,6 +371,12 @@ class Metrics:
 
     def record_tag_ghosts_injected(self, *, kb_name: str, kind: str, count: int = 1) -> None:
         self.tag_ghosts_injected.labels(kb_name=kb_name, kind=kind).observe(max(int(count), 0))
+
+    def record_tag_resonance_value(self, *, kb_name: str, value: float) -> None:
+        self.tag_resonance_value.labels(kb_name=kb_name).observe(max(float(value), 0.0))
+
+    def record_tag_resonance_bridges_count(self, *, kb_name: str, count: int) -> None:
+        self.tag_resonance_bridges_count.labels(kb_name=kb_name).observe(max(int(count), 0))
 
 
 _metrics: Metrics | NoopMetrics = NoopMetrics()

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from prometheus_client import generate_latest
 
 from tagmemorag.config import Settings
 from tagmemorag.manual_registry import create_registry
@@ -348,6 +349,9 @@ def test_to_dict_serializable():
     assert d["ghost_skipped_dim_mismatch"] == 0
     assert d["lang_penalty_applied_count"] == 0
     assert d["query_world"] == ""
+    # Phase 3 fields default to 0 / 0 (resonance disabled by default).
+    assert d["cross_domain_resonance"] == 0.0
+    assert d["cross_domain_bridges_count"] == 0
 
 
 def test_apply_tag_boost_constant_strategy_ignores_core_ghost(tmp_path: Path):
@@ -465,3 +469,96 @@ def test_apply_tag_boost_pyramid_ghost_appears_in_matched_names(tmp_path: Path):
     assert info.ghosts_injected == 1
     assert info.ghost_skipped_dim_mismatch == 1
     assert "airflow" in info.matched_tag_names
+
+
+def test_apply_tag_boost_resonance_disabled_default(tmp_path: Path):
+    """Phase 3: default cross_domain_resonance_enabled=False ⇒ TagBoostInfo
+    keeps the resonance fields at 0 and the metric series stay untouched.
+
+    Pairs with `tests/unit/test_epa_logic_depth.py::
+    test_resolve_dynamic_pyramid_resonance_disabled_default_unchanged` to
+    anchor AC7 — the wired-up info_extra path defaults must match Phase 2b-2.
+    """
+    from tagmemorag.observability import metrics as metrics_module
+
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="pyramid")
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    cfg.wave_phase1.dynamic_boost_min = 0.001
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("cooling", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("kitchen", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("filter", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("cooling", 1), ("kitchen", 2), ("filter", 3)],
+            [("cooling", 1), ("kitchen", 2)],
+            [("cooling", 1), ("kitchen", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    metrics_module.reset_metrics_for_tests()  # isolate this test's metric scrape
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+
+    _boosted, info = apply_tag_boost(
+        query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5
+    )
+
+    assert info.cross_domain_resonance == 0.0
+    assert info.cross_domain_bridges_count == 0
+    body = generate_latest(metrics_module.get_registry()).decode("utf-8")
+    # Disabled path must NOT register samples on the resonance histograms — the
+    # series may exist (definitions register at startup) but the bucket counters
+    # for kb_name="kb-x" must be absent.
+    assert 'tagmemorag_tag_resonance_value_count{kb_name="kb-x"}' not in body
+    assert 'tagmemorag_tag_resonance_bridges_count_count{kb_name="kb-x"}' not in body
+
+
+def test_apply_tag_boost_resonance_enabled_records_metric(tmp_path: Path):
+    """Phase 3: enabled=True ⇒ resonance metric writes a sample on every call.
+
+    The hashing dim=4 fixture often resolves to a single dominant axis so
+    `resonance` may stay 0.0; AC9 only requires the metric to be exercised
+    (a 0.0 observation still increments the bucket count).
+    """
+    from tagmemorag.observability import metrics as metrics_module
+
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="pyramid")
+    cfg.wave_phase1.seed_min_similarity = 0.0
+    cfg.wave_phase1.dynamic_boost_min = 0.001
+    cfg.wave_phase1.cross_domain_resonance_enabled = True
+    _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("cooling", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("kitchen", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("filter", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("cooling", 1), ("kitchen", 2), ("filter", 3)],
+            [("cooling", 1), ("kitchen", 2)],
+            [("cooling", 1), ("kitchen", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    metrics_module.reset_metrics_for_tests()
+    query = np.array([1.0, 0.5, 0.3, 0.0], dtype=np.float32)
+
+    _boosted, info = apply_tag_boost(
+        query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5
+    )
+
+    body = generate_latest(metrics_module.get_registry()).decode("utf-8")
+    # Either the call hit the spike disabled / no-seeds early-return (no metric
+    # registration but also no resonance leakage) OR enabled=true recorded a
+    # sample. If a sample was recorded, both histograms must be present for the
+    # kb scope.
+    if info.skipped_reason in ("", "no_candidates", "degenerate_context", "zero_alpha"):
+        assert 'tagmemorag_tag_resonance_value_count{kb_name="kb-x"}' in body
+        assert 'tagmemorag_tag_resonance_bridges_count_count{kb_name="kb-x"}' in body
+        # Bridges count is non-negative integer, resonance is non-negative float.
+        assert info.cross_domain_resonance >= 0.0
+        assert info.cross_domain_bridges_count >= 0

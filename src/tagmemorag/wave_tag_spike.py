@@ -188,6 +188,14 @@ class TagBoostInfo:
     ghost_skipped_dim_mismatch: int = 0
     lang_penalty_applied_count: int = 0
     query_world: str = ""
+    # Phase 3: V6 detectCrossDomainResonance contribution to dynamicBoostFactor.
+    # Both default 0 ⇒ Phase 2b-2 to_dict layout extends without breaking callers.
+    cross_domain_resonance: float = 0.0
+    cross_domain_bridges_count: int = 0
+    # Phase 3 debug-only: full bridge list (from/to/strength/balance) is exposed
+    # to `search_debug_payload` but kept off `to_dict` to avoid bloating the
+    # default tag_boost shape. Use the leading underscore to mark private.
+    _cross_domain_bridges: tuple[dict, ...] = field(default=(), repr=False, compare=False)
 
     def to_dict(self) -> dict:
         return {
@@ -206,6 +214,8 @@ class TagBoostInfo:
             "ghost_skipped_dim_mismatch": int(self.ghost_skipped_dim_mismatch),
             "lang_penalty_applied_count": int(self.lang_penalty_applied_count),
             "query_world": str(self.query_world),
+            "cross_domain_resonance": float(self.cross_domain_resonance),
+            "cross_domain_bridges_count": int(self.cross_domain_bridges_count),
         }
 
 
@@ -706,10 +716,78 @@ class _DynamicBoostResult:
 
     `query_world` is the dominant EPA axis label (Phase 2b-2 langPenalty input);
     empty string when EPA basis is unavailable or strategy="constant".
+
+    Phase 3: `resonance` is the V6 detectCrossDomainResonance scalar (0 unless
+    `wave_phase1.cross_domain_resonance_enabled`), and `bridges` is the matching
+    diagnostic list (empty unless enabled and at least one co-activation crosses
+    `_RESONANCE_CO_ACTIVATION_THRESHOLD`).
     """
 
     dynamic: float
     query_world: str
+    resonance: float = 0.0
+    bridges: tuple[dict, ...] = ()
+
+
+# Phase 3: V6 EPAModule.js:186 hardcoded co-activation threshold. Source does not
+# expose this to config; we mirror that decision (PRD D6).
+_RESONANCE_CO_ACTIVATION_THRESHOLD = 0.15
+
+
+def detect_cross_domain_resonance(
+    dominant_axes: Sequence[Mapping[str, object]],
+) -> tuple[float, list[dict]]:
+    """V6 detectCrossDomainResonance port.
+
+    Source: lioensky/VCPToolBox EPAModule.js:170-201 (commit aff66193). For each
+    secondary axis paired with the top axis, compute geometric-mean co-activation
+    ``sqrt(top.energy * sec.energy)``; entries strictly above
+    `_RESONANCE_CO_ACTIVATION_THRESHOLD` form a "bridge". Total resonance is the
+    sum of bridge strengths and feeds dynamicBoostFactor as ``log(1 + resonance)``.
+
+    Args:
+        dominant_axes: items shaped like ``{"label": str, "energy": float, ...}``
+            (output of `EPAProjector.project()["dominantAxes"]`). Both Mapping
+            instances and dataclass-like objects with ``.get()`` are accepted —
+            the helper falls back to ``getattr`` to stay compatible with future
+            shapes.
+
+    Returns:
+        ``(resonance_total, bridges)`` where ``bridges`` is a list of
+        ``{"from", "to", "strength", "balance"}`` dicts (diagnostics only).
+    """
+    if len(dominant_axes) < 2:
+        return 0.0, []
+
+    def _read(axis: object, key: str, default: object) -> object:
+        getter = getattr(axis, "get", None)
+        if callable(getter):
+            return getter(key, default)
+        return getattr(axis, key, default)
+
+    top = dominant_axes[0]
+    top_energy = float(_read(top, "energy", 0.0))
+    top_label = str(_read(top, "label", "") or "")
+    bridges: list[dict] = []
+    for sec in dominant_axes[1:]:
+        sec_energy = float(_read(sec, "energy", 0.0))
+        co_act = math.sqrt(max(0.0, top_energy * sec_energy))
+        if co_act > _RESONANCE_CO_ACTIVATION_THRESHOLD:
+            sec_label = str(_read(sec, "label", "") or "")
+            top_e = max(0.0, top_energy)
+            sec_e = max(0.0, sec_energy)
+            denom = max(top_e, sec_e)
+            balance = (min(top_e, sec_e) / denom) if denom > 1e-12 else 0.0
+            bridges.append(
+                {
+                    "from": top_label,
+                    "to": sec_label,
+                    "strength": co_act,
+                    "balance": balance,
+                }
+            )
+    resonance_total = sum(float(b["strength"]) for b in bridges)
+    return resonance_total, bridges
 
 
 def _resolve_dynamic_boost(
@@ -789,7 +867,13 @@ def _resolve_dynamic_boost_with_world(
 
         # strategy == "pyramid"
         entropy = max(0.0, min(1.0, float(projection.get("entropy", 0.0))))
-        resonance = 0.0  # D3 stub — log(1+0) = 0 → term degenerates to 1.0
+        # Phase 3: replace `resonance = 0` stub with V6 detectCrossDomainResonance
+        # when explicitly enabled. Default off keeps the formula numerically
+        # equivalent to Phase 2b-1 (log(1+0) = 0 ⇒ resonance term = 1.0).
+        resonance = 0.0
+        bridges: list[dict] = []
+        if cfg.cross_domain_resonance_enabled:
+            resonance, bridges = detect_cross_domain_resonance(dominant)
         if pyramid_features is None:
             tag_memo_activation = 0.0  # pyramid empty / disabled fallback
         else:
@@ -797,7 +881,7 @@ def _resolve_dynamic_boost_with_world(
         act_min = float(cfg.activation_multiplier_min)
         act_max = float(cfg.activation_multiplier_max)
         activation_mult = act_min + tag_memo_activation * (act_max - act_min)
-        resonance_term = math.log(1.0 + resonance)
+        resonance_term = math.log(1.0 + max(0.0, resonance))
         dynamic = (
             (logic_depth * (1.0 + resonance_term) / (1.0 + entropy * 0.5)) * activation_mult
         )
@@ -806,6 +890,8 @@ def _resolve_dynamic_boost_with_world(
         return _DynamicBoostResult(
             dynamic=max(floor, dynamic * post_scale),
             query_world=query_world,
+            resonance=float(resonance),
+            bridges=tuple(bridges),
         )
     return _DynamicBoostResult(dynamic=1.0, query_world="")
 
@@ -1031,6 +1117,13 @@ def apply_tag_boost(
         "ghost_skipped_dim_mismatch": int(ghost_skipped_dim),
         "lang_penalty_applied_count": int(lang_applied_count),
         "query_world": query_world,
+        # Phase 3: resonance scalar + bridge count come from boost_with_world.
+        # Both default to 0 when `cross_domain_resonance_enabled` is False, so
+        # every early-return TagBoostInfo carries the same shape regardless of
+        # whether the resonance branch was reached.
+        "cross_domain_resonance": float(boost_with_world.resonance),
+        "cross_domain_bridges_count": len(boost_with_world.bridges),
+        "_cross_domain_bridges": tuple(boost_with_world.bridges),
     }
     if not candidates:
         return query_vec, TagBoostInfo(
@@ -1068,6 +1161,16 @@ def apply_tag_boost(
             tag_memo_activation=float(pyramid_result.features.tag_memo_activation),
             coverage=float(pyramid_result.features.coverage),
             coherence=float(pyramid_result.features.coherence),
+        )
+    # Phase 3: resonance metrics are gated by `cross_domain_resonance_enabled`
+    # so dashboards only see traffic from callers that actually opted in. When
+    # disabled the helper short-circuits at resonance=0 / bridges=() upstream.
+    if cfg.cross_domain_resonance_enabled:
+        metrics.record_tag_resonance_value(
+            kb_name=kb_name, value=float(boost_with_world.resonance)
+        )
+        metrics.record_tag_resonance_bridges_count(
+            kb_name=kb_name, count=len(boost_with_world.bridges)
         )
     effective_boost = float(base_tag_boost) * dynamic
     alpha = float(min(1.0, max(0.0, effective_boost)))

@@ -136,6 +136,7 @@ wave_phase1:
   lang_penalty_cross_domain: 0.3
   core_boost_min: 1.20
   core_boost_max: 1.40
+  cross_domain_resonance_enabled: false
   dedup_threshold: 0.88
   dedup_weight_transfer: 0.2
   legacy_chunk_tag_boost: false

@@ -4,16 +4,23 @@ Builds the product-manual fixture once with hashing embedder and forced
 real-PCA EPA (`epa_min_k=4`, 12 unique tags), then evaluates every query in
 tests/fixtures/eval/*.jsonl under three configurations:
 
-  - strategy=constant  → dynamic = 1.0 (Phase 1 baseline)
-  - strategy=epa       → max(epa_floor, logicDepth * scale) (Phase 2a)
-  - strategy=pyramid   → full source formula via ResidualPyramid features
+  - strategy=constant         → dynamic = 1.0 (Phase 1 baseline)
+  - strategy=epa              → max(epa_floor, logicDepth * scale) (Phase 2a)
+  - strategy=pyramid          → full source formula via ResidualPyramid features
+                                (Phase 2b-1; resonance stub = 0)
+  - strategy=pyramid+resonance → Phase 3: same as `pyramid` but with
+                                `cross_domain_resonance_enabled=True`, i.e.
+                                resonance = sum(bridge.strength) feeds the
+                                dynamicBoostFactor formula's log term.
 
 Reports alpha-series std / range/mean per strategy, plus pyramid features
 (tag_memo_activation / coverage / coherence) statistics. PASS/FAIL gate uses
 the Phase 2a D2 thresholds for the pyramid run (std > 0.005, range/mean > 0.1).
+For Phase 3 we apply the same gate to the `pyramid+resonance` column; if it
+fails, sweep `pyramid_post_scale` ∈ {1.0..6.0} to find the smallest PASS value.
 
-Decision point (D8 candidate): if pyramid FAILs, tune `epa_logic_depth_scale`
-(post-multiplier) to find the smallest value that PASSes; record back into PRD.
+Decision point (Phase 2b-1 D8 / Phase 3 D4): if the resonance column FAILs,
+record the post-scale that recovers PASS; default stays at 4.0 otherwise.
 """
 from __future__ import annotations
 
@@ -62,6 +69,8 @@ class SeriesStats:
 class StrategyRun:
     strategy: str
     alpha: SeriesStats
+    resonance: SeriesStats = SeriesStats(0.0, 0.0, 0.0, 0.0)
+    bridges: SeriesStats = SeriesStats(0.0, 0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -114,9 +123,17 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("EPA basis was not written")
         print(f"\nEPA basis: train_kind={basis.train_kind} K={basis.K} tag_count={basis.tag_count_at_train}")
 
-        for strategy in ("constant", "epa", "pyramid"):
-            cfg.wave_phase1.dynamic_boost_factor_strategy = strategy  # type: ignore[assignment]
+        for strategy_label, strategy_value, resonance_enabled in (
+            ("constant", "constant", False),
+            ("epa", "epa", False),
+            ("pyramid", "pyramid", False),
+            ("pyramid+resonance", "pyramid", True),
+        ):
+            cfg.wave_phase1.dynamic_boost_factor_strategy = strategy_value  # type: ignore[assignment]
+            cfg.wave_phase1.cross_domain_resonance_enabled = resonance_enabled  # type: ignore[assignment]
             alpha_values: list[float] = []
+            resonance_values: list[float] = []
+            bridges_counts: list[float] = []
             for query in queries:
                 query_vec = embedder.encode_query(query)
                 _reset_matrix_cache_for_tests()
@@ -127,7 +144,14 @@ def main(argv: list[str] | None = None) -> int:
                     base_tag_boost=args.base_tag_boost,
                 )
                 alpha_values.append(float(info.boost_factor_applied))
-            runs[strategy] = StrategyRun(strategy=strategy, alpha=_stats(alpha_values))
+                resonance_values.append(float(info.cross_domain_resonance))
+                bridges_counts.append(float(info.cross_domain_bridges_count))
+            runs[strategy_label] = StrategyRun(
+                strategy=strategy_label,
+                alpha=_stats(alpha_values),
+                resonance=_stats(resonance_values),
+                bridges=_stats(bridges_counts),
+            )
 
         # Pyramid features stats: instantiate ResidualPyramid directly per query
         tag_rows = _load_kb_tag_vectors(cfg, "default", expected_dim=cfg.model.dim)
@@ -157,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
             tag_memo_activation=_stats(activation_values),
         )
 
-    for strategy in ("constant", "epa", "pyramid"):
+    for strategy in ("constant", "epa", "pyramid", "pyramid+resonance"):
         run = runs[strategy]
         print(f"\nstrategy={strategy}")
         print(
@@ -166,6 +190,17 @@ def main(argv: list[str] | None = None) -> int:
             f"range=[{run.alpha.minimum:.6f}, {run.alpha.maximum:.6f}] "
             f"range/mean={run.alpha.range_over_mean:.6f}"
         )
+        if strategy == "pyramid+resonance":
+            print(
+                "  resonance: "
+                f"mean={run.resonance.mean:.6f} std={run.resonance.std:.6f} "
+                f"range=[{run.resonance.minimum:.6f}, {run.resonance.maximum:.6f}]"
+            )
+            print(
+                "  bridges:   "
+                f"mean={run.bridges.mean:.4f} std={run.bridges.std:.4f} "
+                f"range=[{run.bridges.minimum:.0f}, {run.bridges.maximum:.0f}]"
+            )
 
     if pyramid_stats is not None:
         print("\nResidualPyramid features (over query set):")
@@ -187,7 +222,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  pyramid std(alpha) > 0.005:               {_status(std_pass)}")
     print(f"  pyramid range(alpha)/mean(alpha) > 0.1:   {_status(range_pass)}")
 
-    overall = std_pass and range_pass
+    res = runs["pyramid+resonance"]
+    res_std_pass = res.alpha.std > 0.005
+    res_range_pass = res.alpha.range_over_mean > 0.1
+    print(f"  resonance std(alpha) > 0.005:             {_status(res_std_pass)}")
+    print(f"  resonance range(alpha)/mean(alpha) > 0.1: {_status(res_range_pass)}")
+
+    overall = std_pass and range_pass and res_std_pass and res_range_pass
     print(f"\n=> overall: {_status(overall)}")
     return 0 if overall else 1
 

@@ -257,3 +257,53 @@ def test_debug_payload_without_spike_omits_tag_boost(tmp_path: Path):
     )
     assert "tag_boost" not in payload
     assert payload["legacy_tag_boost_disabled"] is False
+
+
+def test_debug_payload_emits_cross_domain_bridges_only_when_present():
+    """Phase 3: search_debug_payload exposes the bridges list under
+    `tag_boost_debug.cross_domain_bridges` only when at least one bridge
+    survived the V6 detectCrossDomainResonance threshold.
+
+    Anchors AC10. Test bypasses execute_search and calls the payload helper
+    directly so the bridges contract is locked independent of EPA fixture
+    randomness.
+    """
+    from tagmemorag.search_runtime import SearchExecution
+    from tagmemorag.wave_tag_spike import TagBoostInfo
+
+    # No bridges ⇒ no `tag_boost_debug` key.
+    info_off = TagBoostInfo(matrix_loaded=True)
+    execution_off = SearchExecution(
+        results=[], eligible_node_ids=set(), strategy="exact_local",
+        tag_boost_info=info_off,
+    )
+    payload_off = search_debug_payload(
+        execution_off,
+        {"source_k": 3, "steps": 1, "aggregate": "max"},
+        ann_enabled=False,
+    )
+    assert "tag_boost" in payload_off
+    assert "tag_boost_debug" not in payload_off
+
+    # With bridges ⇒ payload exposes the diagnostic list.
+    bridge = {"from": "Tech", "to": "Logic", "strength": 0.5, "balance": 1.0}
+    info_on = TagBoostInfo(
+        matrix_loaded=True,
+        cross_domain_resonance=0.5,
+        cross_domain_bridges_count=1,
+        _cross_domain_bridges=(bridge,),
+    )
+    execution_on = SearchExecution(
+        results=[], eligible_node_ids=set(), strategy="exact_local",
+        tag_boost_info=info_on,
+    )
+    payload_on = search_debug_payload(
+        execution_on,
+        {"source_k": 3, "steps": 1, "aggregate": "max"},
+        ann_enabled=False,
+    )
+    assert payload_on["tag_boost_debug"] == {"cross_domain_bridges": [bridge]}
+    # to_dict shape unchanged: bridges list does NOT leak into `tag_boost`.
+    assert "cross_domain_bridges" not in payload_on["tag_boost"]
+    assert payload_on["tag_boost"]["cross_domain_bridges_count"] == 1
+    assert payload_on["tag_boost"]["cross_domain_resonance"] == 0.5

@@ -261,3 +261,137 @@ def test_apply_tag_boost_strategy_pyramid_smoke(tmp_path: Path):
     if info.skipped_reason == "":
         assert info.boost_factor_applied > 0.0
         assert boosted.shape == query.shape
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: detectCrossDomainResonance wiring (default off keeps behavior; enabled
+# scales the dynamic factor by `(1 + log(1+resonance))`).
+# ---------------------------------------------------------------------------
+
+
+def _settings_pyramid_resonance(
+    tmp_path: Path,
+    *,
+    enabled: bool,
+    scale: float = 1.0,
+    floor: float = 0.0,
+    act_min: float = 0.5,
+    act_max: float = 1.5,
+    post_scale: float = 1.0,
+) -> Settings:
+    return Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library={"registry_path": str(tmp_path / "manual_registry.sqlite3")},  # type: ignore[arg-type]
+        model={"provider": "hashing", "dim": 8, "batch_size": 16},  # type: ignore[arg-type]
+        wave_phase1={  # type: ignore[arg-type]
+            "dynamic_boost_factor_strategy": "pyramid",
+            "epa_logic_depth_scale": scale,
+            "epa_floor": floor,
+            "activation_multiplier_min": act_min,
+            "activation_multiplier_max": act_max,
+            "pyramid_post_scale": post_scale,
+            "cross_domain_resonance_enabled": enabled,
+        },
+    )
+
+
+def test_resolve_dynamic_pyramid_resonance_disabled_default_unchanged(tmp_path: Path):
+    """enabled=False (default) ⇒ pyramid output identical to Phase 2b-1.
+
+    Anchors AC5: turning the helper on must be opt-in. We compute the dynamic
+    factor twice — once with the default config (resonance disabled) and once
+    using the documented Phase 2b-1 closed form — and assert they match.
+    """
+    from tagmemorag.residual_pyramid import PyramidFeatures
+    from tagmemorag.wave_tag_spike import _resolve_dynamic_boost_with_world
+
+    cfg = _settings_pyramid_resonance(tmp_path, enabled=False)
+    _write_real_pca_basis(cfg)
+    query = np.array([1.0, 0.2, 0.0, 0.0, 0.4, 0.0, 0.0, 0.0], dtype=np.float32)
+    features = PyramidFeatures(
+        depth=2,
+        coverage=0.7,
+        novelty=0.0,
+        coherence=0.6,
+        tag_memo_activation=0.4,
+        expansion_signal=0.0,
+    )
+
+    result = _resolve_dynamic_boost_with_world(query, cfg, pyramid_features=features)
+
+    projector = EPAProjector.from_path(basis_path(cfg))
+    proj = projector.project(query)
+    logic_depth = max(0.0, float(proj["logicDepth"]))
+    entropy = max(0.0, min(1.0, float(proj["entropy"])))
+    activation_mult = 0.5 + 0.4 * (1.5 - 0.5)
+    expected = (logic_depth * 1.0 / (1.0 + entropy * 0.5)) * activation_mult
+
+    assert result.dynamic == pytest.approx(expected, rel=1e-5)
+    assert result.resonance == 0.0
+    assert result.bridges == ()
+
+
+def test_resolve_dynamic_pyramid_resonance_enabled_extends_factor(tmp_path: Path):
+    """enabled=True + multi-axis activation ⇒ dynamic ∝ (1 + log(1+resonance)).
+
+    Anchors AC6. Compares enabled-vs-disabled side-by-side on the same query/
+    features to isolate the resonance contribution. The hashing dim=8 fixture
+    paired with the synthetic eye() basis above produces a non-zero resonance
+    only when the projection energizes multiple axes; the test asserts the
+    output ratio matches the closed form regardless of the exact resonance.
+    """
+    from tagmemorag.residual_pyramid import PyramidFeatures
+    from tagmemorag.wave_tag_spike import _resolve_dynamic_boost_with_world
+
+    cfg_off = _settings_pyramid_resonance(tmp_path, enabled=False)
+    cfg_on = _settings_pyramid_resonance(tmp_path, enabled=True)
+    _write_real_pca_basis(cfg_off)  # shared basis path; cfg_on uses same data_dir
+    query = np.array([1.0, 0.5, 0.3, 0.0, 0.4, 0.0, 0.0, 0.0], dtype=np.float32)
+    features = PyramidFeatures(
+        depth=2,
+        coverage=0.8,
+        novelty=0.0,
+        coherence=0.7,
+        tag_memo_activation=0.5,
+        expansion_signal=0.0,
+    )
+
+    off = _resolve_dynamic_boost_with_world(query, cfg_off, pyramid_features=features)
+    on = _resolve_dynamic_boost_with_world(query, cfg_on, pyramid_features=features)
+
+    if on.resonance == 0.0:
+        # Cold-start / single-dominant-axis case: enabled=True must be a no-op.
+        assert on.dynamic == pytest.approx(off.dynamic, rel=1e-9)
+        assert on.bridges == ()
+    else:
+        # log-domain amplification: dynamic_on / dynamic_off == (1 + log(1+r))
+        ratio = on.dynamic / off.dynamic
+        expected_ratio = 1.0 + np.log(1.0 + on.resonance)
+        assert ratio == pytest.approx(expected_ratio, rel=1e-5)
+        assert len(on.bridges) >= 1
+
+
+def test_resolve_dynamic_pyramid_resonance_enabled_synthetic_axes(tmp_path: Path):
+    """Closed-form anchor without depending on the EPA real-PCA path.
+
+    Bypass `_resolve_dynamic_boost_with_world` and call the Phase 3 helper
+    directly with hand-crafted dominantAxes; this guarantees the closed-form
+    relation between resonance and the log-domain factor on AC6 independent
+    of fixture stochasticity.
+    """
+    from tagmemorag.wave_tag_spike import detect_cross_domain_resonance
+
+    axes = [
+        {"label": "A", "energy": 0.6},
+        {"label": "B", "energy": 0.4},
+        {"label": "C", "energy": 0.3},
+    ]
+    resonance, bridges = detect_cross_domain_resonance(axes)
+
+    expected = np.sqrt(0.6 * 0.4) + np.sqrt(0.6 * 0.3)
+    assert resonance == pytest.approx(expected, rel=1e-9)
+    assert len(bridges) == 2
+    # log domain amplification reference (PRD log-domain table):
+    factor_amplification = 1.0 + np.log(1.0 + resonance)
+    assert factor_amplification > 1.0
+

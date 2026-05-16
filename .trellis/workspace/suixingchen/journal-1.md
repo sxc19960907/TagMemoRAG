@@ -72,3 +72,45 @@ Phase 2b-1: multi-level Gram-Schmidt residual pyramid as strategy=pyramid seed s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Wave Phase 3: detectCrossDomainResonance (V6 真共振接通)
+
+**Date**: 2026-05-16
+**Task**: 浪潮回归 Phase 3：detectCrossDomainResonance（V6 接通真共振）
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Phase 3 把 Phase 2b-1 dynamicBoostFactor 公式里的 `resonance = 0` stub 替换为 V6 真实算法 `detectCrossDomainResonance`（端口自 lioensky/VCPToolBox EPAModule.js:170-201, commit aff66193）。新 helper 落在 `wave_tag_spike` 内：对 EPA `dominantAxes` 的每个非主轴对 sqrt 几何平均，> 0.15 阈值（hardcode，与源一致）的进 bridges；resonance = sum(strength) 喂给 `log(1+resonance)` 项。默认 `cross_domain_resonance_enabled=False` 保持 Phase 2b-2 行为字节稳定；显式开启时 hashing fixture 上 resonance mean=0.76 / std=0.12，pyramid_post_scale=4.0 不需要 recalibrate（diag overall PASS）。新增 `TagBoostInfo.cross_domain_resonance / cross_domain_bridges_count`（入 to_dict）+ 私有 `_cross_domain_bridges`（不入 to_dict，仅 search_debug_payload 在 trigger 时暴露 `cross_domain_bridges` 列表）。新增 2 个 Histogram metric (`tag_resonance_value` / `tag_resonance_bridges_count`)，仅 enabled=true 时 record。新增 `tests/unit/test_cross_domain_resonance.py` 14 段 + 现有单测扩 ~7 段；总 pytest 402 passed (+21), 8/8 hashing eval suites pass, e2e baseline invariance 2/2, diag overall PASS（含 pyramid+resonance 列）。
+
+### Main Changes
+
+- `src/tagmemorag/wave_tag_spike.py`: `_RESONANCE_CO_ACTIVATION_THRESHOLD` + `detect_cross_domain_resonance` helper；`_DynamicBoostResult` 扩 `resonance` / `bridges`；pyramid 分支按 `cross_domain_resonance_enabled` 接通；`TagBoostInfo` 加 3 个字段（含 1 个私有 bridges tuple）。
+- `src/tagmemorag/config.py` + `config.yaml`: `WavePhase1Config.cross_domain_resonance_enabled = False`。
+- `src/tagmemorag/observability/metrics.py`: 2 个 Histogram + 2 个 record 方法。
+- `src/tagmemorag/search_runtime.py`: `search_debug_payload` 扩 `tag_boost_debug.cross_domain_bridges`，仅 bridges 非空时填。
+- `scripts/diag_pyramid_dynamic_boost.py`: 新增 `pyramid+resonance` 第 4 列对照；resonance/bridges 序列统计；PASS gate 同时应用到该列。
+- README + docs/wave-phase1-architecture.md: 新增 "Cross-domain resonance (Phase 3)" 段（log 域增益参考表、阈值 0.15 来源、debug payload schema、Phase 3.5 / 4 路线提示）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| (pending) | feat(wave-phase3): detectCrossDomainResonance + log-domain dynamicBoostFactor |
+
+### Testing
+
+- [OK] pytest -q: 402 passed, 2 skipped (was 381 / 2 before)
+- [OK] run_eval_ci.py: 8/8 hashing eval suites pass
+- [OK] tests/e2e/test_search_baseline_invariance.py: 2/2
+- [OK] scripts/diag_pyramid_dynamic_boost.py: overall PASS (pyramid + pyramid+resonance both PASS at default post_scale=4.0)
+
+### Status
+
+[OK] **Completed** — AC1-AC11 all green; default off (`cross_domain_resonance_enabled: false`).
+
+### Next Steps
+
+- Phase 3.5: train real `tag_intrinsic_residuals` and feed them into ResidualPyramid as a prior.
+- Production rollout decision (flip the flag) waits on real EPA basis labels in siliconflow.

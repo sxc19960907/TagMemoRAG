@@ -212,6 +212,12 @@ class WavePhase1Config(BaseModel):
     core_boost_min: float = Field(default=1.20, ge=1.0)
     core_boost_max: float = Field(default=1.40, ge=1.0)
 
+    # Phase 3: V6 detectCrossDomainResonance. Default off — when enabled, the
+    # pyramid dynamicBoostFactor formula's `resonance` term stops being stubbed
+    # at 0 and instead reads cross-axis co-activation from the EPA dominantAxes.
+    # Source: lioensky/VCPToolBox EPAModule.js:170-201 (commit aff66193).
+    cross_domain_resonance_enabled: bool = False
+
     # Semantic dedup
     dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
     dedup_weight_transfer: float = Field(default=0.2, ge=0.0, le=1.0)

@@ -134,6 +134,22 @@ def test_phase2b2_modulator_metrics_register_custom_series():
     metrics.assert_label_contract()
 
 
+def test_phase3_resonance_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_resonance_value(kb_name="default", value=0.5)
+    collector.record_tag_resonance_value(kb_name="default", value=1.2)
+    collector.record_tag_resonance_bridges_count(kb_name="default", count=2)
+    collector.record_tag_resonance_bridges_count(kb_name="default", count=0)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert "tagmemorag_tag_resonance_value_bucket" in body
+    assert "tagmemorag_tag_resonance_bridges_count_bucket" in body
+    assert 'kb_name="default"' in body
+    metrics.assert_label_contract()
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 

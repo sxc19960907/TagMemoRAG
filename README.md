@@ -1170,8 +1170,57 @@ curl -s -X POST http://localhost:8000/search \
 `info.tag_boost` in the debug payload now includes
 `core_tags_input / core_tags_resolved / core_completion_count / ghosts_injected
 / ghost_skipped_dim_mismatch / lang_penalty_applied_count / query_world` for
-post-mortem diagnostics. Phase 3 will replace the stubbed `resonance` term and
-add real `detectCrossDomainResonance` worldview gating.
+post-mortem diagnostics.
+
+#### Cross-domain resonance (Phase 3)
+
+Phase 3 replaces the Phase 2b-1 `resonance = 0` stub with a port of V6
+`EPAModule.detectCrossDomainResonance` (source: `lioensky/VCPToolBox`
+`EPAModule.js:170-201`). When `wave_phase1.cross_domain_resonance_enabled`
+is `true`, the dynamicBoostFactor formula's resonance term becomes
+`log(1 + Σ sqrt(top.energy * sec.energy))` over each EPA dominant axis pair
+that crosses the hardcoded threshold `0.15`.
+
+Defaults are off so 8 hashing eval suites stay byte-stable. Toggle per-deploy:
+
+```yaml
+wave_phase1:
+  spike_enabled: true
+  dynamic_boost_factor_strategy: pyramid
+  cross_domain_resonance_enabled: true   # Phase 3 opt-in
+```
+
+**Log-domain amplification reference:**
+
+| `resonance` | `log(1 + r)` | dynamic factor multiplier |
+|------------:|------------:|--------------------------:|
+| 0 (cold-start / single dominant axis) | 0.000 | × 1.00 |
+| 0.3 (one moderate co-activation)      | 0.262 | × 1.26 |
+| 0.5 (one strong co-activation)        | 0.405 | × 1.40 |
+| 1.0 (one strong + several moderate)   | 0.693 | × 1.69 |
+| 2.0 (multi-axis dense activation)     | 1.099 | × 2.10 |
+
+The 12-tag hashing fixture diagnostic (`scripts/diag_pyramid_dynamic_boost.py`)
+records `pyramid+resonance` `resonance: mean=0.76, std=0.12, range=[0.47, 1.05]`
+on the eval set with the default `pyramid_post_scale=4.0` (no recalibration
+needed); the alpha series clears the D2 PASS thresholds with margin.
+
+The debug payload exposes the per-bridge breakdown only when at least one pair
+crosses the threshold:
+
+```json
+{
+  "tag_boost": {"cross_domain_resonance": 0.5, "cross_domain_bridges_count": 1, ...},
+  "tag_boost_debug": {
+    "cross_domain_bridges": [
+      {"from": "Tech", "to": "Logic", "strength": 0.5, "balance": 1.0}
+    ]
+  }
+}
+```
+
+Phase 3.5 will train real `tag_intrinsic_residuals` and feed them into the
+ResidualPyramid as a prior; Phase 4 covers V8 `geodesicRerank`.
 
 ## Roadmap
 

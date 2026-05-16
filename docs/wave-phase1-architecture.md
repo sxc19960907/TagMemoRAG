@@ -420,9 +420,72 @@ collapses to its midpoint and only hits ghost / completion paths under
 ### Phase 3 follow-ups
 
 - Replace `resonance = 0` stub with real `detectCrossDomainResonance` (uses
-  EPA basis cross-axis mass).
+  EPA basis cross-axis mass). **Implemented** — see "Cross-domain resonance"
+  below; default off pending production rollout.
 - Add explicit `worldview gating` if real-deployment data shows a single
   langPenalty multiplier is too coarse (currently V6 only uses `queryWorld`
   to gate langPenalty, not as an independent projection filter).
 - Re-baseline `siliconflow.json` once production EPA labels stabilize and
   langPenalty starts firing in real fixtures.
+
+## Cross-domain resonance (Phase 3)
+
+Phase 3 ports V6 `EPAModule.detectCrossDomainResonance` (source:
+`lioensky/VCPToolBox` `EPAModule.js:170-201`, commit `aff66193`) into
+`wave_tag_spike.detect_cross_domain_resonance`. The helper consumes the
+EPA `dominantAxes` already produced by `EPAProjector.project()` and returns
+`(resonance, bridges)`:
+
+```
+for sec in dominantAxes[1:]:
+    co_act = sqrt(top.energy * sec.energy)
+    if co_act > 0.15:
+        bridges.append({from: top.label, to: sec.label,
+                        strength: co_act,
+                        balance: min/max(top.energy, sec.energy)})
+resonance = sum(bridge.strength)
+```
+
+The threshold `0.15` is hardcoded — V6 does not expose it via config and we
+mirror that decision (PRD D6). The wiring point is the existing pyramid
+branch of `_resolve_dynamic_boost_with_world`:
+
+```
+resonance = 0.0
+if cfg.cross_domain_resonance_enabled:
+    resonance, bridges = detect_cross_domain_resonance(dominant)
+resonance_term = log(1 + max(0, resonance))
+dynamic = (logic_depth * (1 + resonance_term) / (1 + entropy * 0.5))
+        * activation_mult
+```
+
+**Data contract additions:**
+
+- `WavePhase1Config.cross_domain_resonance_enabled: bool = False`.
+- `TagBoostInfo.cross_domain_resonance: float`,
+  `cross_domain_bridges_count: int` (in `to_dict`).
+- Private `TagBoostInfo._cross_domain_bridges: tuple[dict, ...]` (excluded
+  from `to_dict`; surfaced under
+  `search_debug_payload.tag_boost_debug.cross_domain_bridges` only when at
+  least one bridge survived the threshold).
+
+**Observability:** two histograms gated by the config flag —
+
+- `tagmemorag_tag_resonance_value{kb_name}`: scalar fed to the log term, with
+  buckets `(0, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2, 2.0, 4.0)` covering the PRD
+  log-domain table.
+- `tagmemorag_tag_resonance_bridges_count{kb_name}`: number of bridges per
+  call, buckets `(0, 1, 2, 3, 5, 8)`. Bridge labels are deliberately *not*
+  exposed as Prometheus labels (high cardinality).
+
+**Default off rationale:** 8 hashing eval suites are anchored to the
+Phase 2b-2 baseline; `cross_domain_resonance_enabled=false` keeps the
+formula numerically equivalent to Phase 2b-1, so flipping the toggle is a
+pure runtime choice. The `pyramid+resonance` column in
+`scripts/diag_pyramid_dynamic_boost.py` PASSes the D2 thresholds at the
+default `pyramid_post_scale=4.0`, so no recalibration was applied at
+implementation time.
+
+**Future work:** Phase 3.5 trains real `tag_intrinsic_residuals` and feeds
+them into the ResidualPyramid as a prior; Phase 4 covers V8
+`geodesicRerank`.
