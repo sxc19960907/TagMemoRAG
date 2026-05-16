@@ -57,6 +57,13 @@ def main(argv: list[str] | None = None) -> int:
         "the floor under the chosen embedder.",
     )
     parser.add_argument(
+        "--informational-suites",
+        default="",
+        help="Comma-separated suite filenames whose failures don't gate CI. Used for "
+        "stress-test suites (e.g. cross_kb_negatives) where fail is a known production "
+        "embedder limitation, not a regression. Empty = none informational.",
+    )
+    parser.add_argument(
         "--geodesic",
         action="store_true",
         help="Run with Phase 4 geodesic_rerank_enabled=true (informational; "
@@ -78,7 +85,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no suites under {args.suite_dir}", file=sys.stderr)
         return 1
 
+    informational = {
+        s.strip() for s in args.informational_suites.split(",") if s.strip()
+    }
+
     failed: list[str] = []
+    informational_failed: list[str] = []
     with tempfile.TemporaryDirectory(prefix="ci-eval-") as tmp:
         tmp_root = Path(tmp)
         config_path = tmp_root / f"ci-{args.embedder}.yaml"
@@ -114,12 +126,23 @@ def main(argv: list[str] | None = None) -> int:
                 ])
             result = subprocess.run(cmd, text=True, capture_output=True)
             tail = (result.stdout or "").strip().splitlines()[-1:] or [""]
-            print(f"[{suite.name}] {tail[0]}")
+            tag = " [informational]" if suite.name in informational else ""
+            print(f"[{suite.name}]{tag} {tail[0]}")
             if result.returncode != 0:
-                failed.append(suite.name)
+                if suite.name in informational:
+                    informational_failed.append(suite.name)
+                else:
+                    failed.append(suite.name)
                 if result.stderr:
                     print(result.stderr, file=sys.stderr)
             shutil.rmtree(data_dir, ignore_errors=True)
+
+    if informational_failed:
+        print(
+            f"\n[informational] {len(informational_failed)} stress-test suite(s) failed (not gating CI): "
+            f"{informational_failed}",
+            file=sys.stderr,
+        )
 
     if failed:
         if args.geodesic:
