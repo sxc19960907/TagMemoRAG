@@ -147,3 +147,36 @@ Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: siliconflow baseline 工具链 + informational baseline
+
+**Date**: 2026-05-17
+**Task**: siliconflow baseline 工具链 + informational baseline
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+为 wave readiness 准备生产 embedder 对照基线。build_eval_baseline 改 model 到 Qwen/Qwen3-VL-Embedding-8B (4096维) + smoke test (key/401/403/404/dim 各分类提示) + 指数退避重试 (1/2/4/8/16s, 4xx 短路) + --compare-with delta 表 + atomic write。run_eval_ci 加 --embedder hashing|siliconflow + --no-default-thresholds (跳过项目级 0.8 floor，case-level fixture 阈值仍生效)。siliconflow.json 落盘但定位为 informational reference (7/8 套比 hashing 差 14-80%，根因在 fixture ground truth 是 hashing-self-circular 标注；wave_phase1 参数也按 dim=64 调过)。10 个新单测覆盖 retry 5 个分支 + atomic write + delta 表。445 passed (+10) / hashing CI 默认 path 全 8 套字节稳定。Phase 4 archive 残影顺手清理。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d840c1e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
