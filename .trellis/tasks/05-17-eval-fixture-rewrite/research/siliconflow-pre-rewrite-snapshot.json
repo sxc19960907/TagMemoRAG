@@ -1,13 +1,13 @@
 {
-  "captured_at": "2026-05-16T23:18:33+00:00",
-  "config_hash": "sha256:bb7aca2084ee2d533cce98546f986ba9a77c035ae62a302d5d57e81f0fb53a8f",
+  "captured_at": "2026-05-16T15:59:46+00:00",
+  "config_hash": "sha256:e07092a0e42dd32d45a91520783e33f44ac8a0bd0c347237d4b8fd0070c5ef26",
   "embedder": "siliconflow",
   "suites": {
     "coffee.jsonl": {
-      "hit_at_k": 1.0,
-      "mrr": 0.707143,
-      "precision_at_k": 0.2,
-      "recall_at_k": 0.5
+      "hit_at_k": 0.857143,
+      "mrr": 0.564286,
+      "precision_at_k": 0.157143,
+      "recall_at_k": 0.666667
     },
     "cross_kb_negatives.jsonl": {
       "hit_at_k": 0.2,
@@ -35,7 +35,7 @@
     },
     "product_manuals.jsonl": {
       "hit_at_k": 0.714286,
-      "mrr": 0.358333,
+      "mrr": 0.353571,
       "precision_at_k": 0.14881,
       "recall_at_k": 0.714286
     },
@@ -47,7 +47,7 @@
     },
     "tag_rerank_edge.jsonl": {
       "hit_at_k": 1.0,
-      "mrr": 0.9,
+      "mrr": 1.0,
       "precision_at_k": 0.9,
       "recall_at_k": 1.0
     }

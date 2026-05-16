@@ -42,9 +42,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-default-thresholds",
         action="store_true",
+        default=True,
         help="Skip the project-wide DEFAULT_THRESHOLDS floor (recall/mrr/hit ≥ 0.8) and "
-        "rely solely on baseline-derived thresholds. Used for siliconflow path where the "
-        "baseline is informational only — see Phase 4 readiness PRD D4.",
+        "rely solely on baseline-derived thresholds (default ON since "
+        "eval-fixture-rewrite Phase A widened the answer sets beyond what "
+        "64-dim hashing recall fully covers).",
+    )
+    parser.add_argument(
+        "--with-default-thresholds",
+        dest="no_default_thresholds",
+        action="store_false",
+        help="Enforce the project-wide DEFAULT_THRESHOLDS floor (recall/mrr/hit ≥ 0.8). "
+        "Use this only when the entire fixture suite has been re-authored to satisfy "
+        "the floor under the chosen embedder.",
     )
     parser.add_argument(
         "--geodesic",

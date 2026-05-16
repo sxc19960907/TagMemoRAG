@@ -1,13 +1,13 @@
 {
-  "captured_at": "2026-05-16T23:17:19+00:00",
-  "config_hash": "sha256:2c643b4c0cefd2898f4076b8eecbbd599a7e3bf98180420479d47d92a60cf509",
+  "captured_at": "2026-05-15T00:52:47+00:00",
+  "config_hash": "sha256:f54b09e69e6a2ddee9812b26ab165481e7b5090a3298ce49e88988f744e7559e",
   "embedder": "hashing",
   "suites": {
     "coffee.jsonl": {
       "hit_at_k": 1.0,
       "mrr": 0.928571,
-      "precision_at_k": 0.314286,
-      "recall_at_k": 0.738095
+      "precision_at_k": 0.214286,
+      "recall_at_k": 0.928571
     },
     "cross_kb_negatives.jsonl": {
       "hit_at_k": 1.0,

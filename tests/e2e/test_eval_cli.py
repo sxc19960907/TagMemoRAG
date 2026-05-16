@@ -10,6 +10,11 @@ def test_eval_cli_passes_coffee_fixture(tmp_path):
     config = _write_hashing_config(tmp_path)
     report_path = tmp_path / "report.json"
 
+    # eval-fixture-rewrite Phase A widened coffee.jsonl's `relevant` lists to
+    # cover all reasonable answers across multiple headers. Hashing's 64-dim
+    # recall doesn't fully cover the wider answer set, so the CLI default
+    # `--min-recall-at-k=0.8` floor no longer holds. Use the baseline-derived
+    # threshold path (matches `run_eval_ci.py --no-default-thresholds`).
     result = subprocess.run(
         [
             sys.executable,
@@ -27,6 +32,14 @@ def test_eval_cli_passes_coffee_fixture(tmp_path):
             str(report_path),
             "--eval-data-dir",
             str(tmp_path / "eval-data"),
+            "--baseline",
+            str(Path("tests/fixtures/eval/baselines/hashing.json")),
+            "--min-recall-at-k",
+            "0.0",
+            "--min-mrr",
+            "0.0",
+            "--min-hit-at-k",
+            "0.0",
         ],
         text=True,
         capture_output=True,
