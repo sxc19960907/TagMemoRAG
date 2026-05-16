@@ -218,6 +218,12 @@ class WavePhase1Config(BaseModel):
     # Source: lioensky/VCPToolBox EPAModule.js:170-201 (commit aff66193).
     cross_domain_resonance_enabled: bool = False
 
+    # Phase 3.5: true tag-intrinsic residual energy producer/consumer. Producer
+    # can write rows during rebuild, while this flag keeps online consumers off
+    # by default for baseline compatibility.
+    intrinsic_residuals_enabled: bool = False
+    intrinsic_residual_top_n: int | None = Field(default=None, ge=1, le=100)
+
     # Semantic dedup
     dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
     dedup_weight_transfer: float = Field(default=0.2, ge=0.0, le=1.0)

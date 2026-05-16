@@ -215,6 +215,65 @@ registry.upsert(kb_name, metadata, blob_ref, operation="upsert")
 
 Keep object storage behind `ManualBlobStore`, store only the safe object key in the registry, and commit registry state only after the object write succeeds.
 
+## Scenario: Tag Intrinsic Residuals
+
+### 1. Scope / Trigger
+
+- Trigger: Phase 3.5 activates `tag_intrinsic_residuals` as a rebuild-produced registry table consumed by tag spike and ResidualPyramid.
+- Applies when changing tag rebuild, cooccurrence, pyramid candidate ranking, or online tag boost residual handling.
+
+### 2. Signatures
+
+- Config: `wave_phase1.intrinsic_residuals_enabled: bool = False`, `wave_phase1.intrinsic_residual_top_n: int | None = None`.
+- Trainer: `train_intrinsic_residuals_for_kb(kb_name, conn, matrix, expected_dim, top_n) -> IntrinsicResidualTrainReport`.
+- CLI: `python -m tagmemorag retrain-residuals --kb=<name> --config=<path>`.
+- DB: `tag_intrinsic_residuals(tag_id PRIMARY KEY, residual_energy REAL, neighbor_count INTEGER, computed_at TEXT)`.
+
+### 3. Contracts
+
+- Producer runs after cooccurrence rebuild when `wave_phase1.enabled` and `cooccurrence_enabled` are true, regardless of `intrinsic_residuals_enabled`.
+- Consumer is gated only by `intrinsic_residuals_enabled`; default false must preserve baseline search behavior.
+- Neighbor basis for tag T is cooccurrence outgoing plus incoming neighbors, ordered by max bidirectional weight desc then tag id asc, limited by `intrinsic_residual_top_n` or `pyramid_top_k`.
+- Stored formula is `||T - projection(T, neighbor_basis)||^2 / ||T||^2`, clamped to `[0, 1]`; no usable basis or zero vector stores `1.0`.
+- Missing online residual rows fall back to `1.0`.
+
+### 4. Validation & Error Matrix
+
+- Missing cooccurrence matrix in CLI -> exit code 2 with a concise stderr error.
+- Trainer exception during rebuild -> fail-soft: graph rebuild continues and `tag_intrinsic_residual_error` records the exception type.
+- Trainer exception during CLI -> exit code 2; do not hide the failure as success.
+
+### 5. Good/Base/Bad Cases
+
+- Good: rebuild writes cooccurrence, trains residual rows, and meta includes `tag_intrinsic_residual_rows`.
+- Base: `intrinsic_residuals_enabled=false` still writes rows but online spike and pyramid behavior remain unchanged.
+- Bad: making residual training block graph rebuild, or enabling consumers by default.
+
+### 6. Tests Required
+
+- Unit: residual formula, incoming+outgoing Top-N selection, no-basis fallback.
+- Rebuild: rows written on success; trainer failure does not fail rebuild and records error type.
+- CLI: `retrain-residuals` reports row counts and returns non-zero for missing inputs.
+- Online: enabled-on passes residuals to spike and pyramid; default-off baseline invariance remains green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+residual = residuals[tag_id]
+```
+
+This turns partially trained or newly created tags into search-time failures.
+
+#### Correct
+
+```python
+residual = residuals.get(tag_id, 1.0)
+```
+
+Fallback preserves compatibility while metrics expose missing training coverage.
+
 ---
 
 ## Common Mistakes

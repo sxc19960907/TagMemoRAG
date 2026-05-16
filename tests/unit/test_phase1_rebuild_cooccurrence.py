@@ -51,6 +51,26 @@ def test_full_build_writes_cooccurrence_npz(tmp_path: Path, fake_embedder):
     assert matrix.edge_count > 0
     assert state.meta["tag_cooccurrence_edges"] == matrix.edge_count
     assert state.meta["tag_cooccurrence_error"] == ""
+    assert state.meta["tag_intrinsic_residual_rows"] > 0
+    assert state.meta["tag_intrinsic_residual_error"] == ""
+
+
+def test_intrinsic_residual_failure_does_not_break_rebuild(tmp_path: Path, fake_embedder, monkeypatch):
+    cfg = _cfg(tmp_path)
+    upsert_manual("default", _metadata("c/m1.md", "m1", ["Steam", "Wand"]), b"# m1\n", cfg)
+    upsert_manual("default", _metadata("c/m2.md", "m2", ["Steam", "Wand"]), b"# m2\n", cfg)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("synthetic residual failure")
+
+    monkeypatch.setattr(tag_rebuild_mod, "train_intrinsic_residuals_for_kb", boom)
+
+    state = build_kb(library_root("default", cfg), "default", cfg, embedder=fake_embedder)
+
+    assert state.graph.number_of_nodes() > 0
+    assert state.meta["tag_cooccurrence_edges"] > 0
+    assert state.meta["tag_intrinsic_residual_rows"] == 0
+    assert state.meta["tag_intrinsic_residual_error"] == "RuntimeError"
 
 
 def test_two_consecutive_builds_yield_identical_matrix(tmp_path: Path, fake_embedder):

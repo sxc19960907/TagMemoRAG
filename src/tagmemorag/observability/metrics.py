@@ -21,6 +21,7 @@ ALLOWED_LABEL_NAMES = {
     "feature",
     "query_world_kind",
     "kind",
+    "consumer",
 }
 FORBIDDEN_LABEL_NAMES = {"question", "query", "trace_id", "task_id", "api_key", "api_key_id", "build_id", "path"}
 
@@ -249,6 +250,18 @@ class Metrics:
             registry=registry,
             buckets=(0, 1, 2, 3, 5, 8),
         )
+        self.tag_intrinsic_residual_missing = Counter(
+            "tagmemorag_tag_intrinsic_residual_missing_total",
+            "Intrinsic residual lookups that fell back to 1.0 by consumer.",
+            ["kb_name", "consumer"],
+            registry=registry,
+        )
+        self.tag_pyramid_residual_prior_applied = Counter(
+            "tagmemorag_tag_pyramid_residual_prior_applied_total",
+            "ResidualPyramid analyze calls using intrinsic residual prior weighting.",
+            ["kb_name"],
+            registry=registry,
+        )
 
     def record_http_request(self, *, method: str, route: str, status_code: str | int, duration: float) -> None:
         self.http_requests.labels(method=method, route=route, status_code=str(status_code)).inc()
@@ -377,6 +390,14 @@ class Metrics:
 
     def record_tag_resonance_bridges_count(self, *, kb_name: str, count: int) -> None:
         self.tag_resonance_bridges_count.labels(kb_name=kb_name).observe(max(int(count), 0))
+
+    def record_tag_intrinsic_residual_missing(self, *, kb_name: str, consumer: str, count: int = 1) -> None:
+        if count <= 0:
+            return
+        self.tag_intrinsic_residual_missing.labels(kb_name=kb_name, consumer=consumer).inc(int(count))
+
+    def record_tag_pyramid_residual_prior_applied(self, *, kb_name: str) -> None:
+        self.tag_pyramid_residual_prior_applied.labels(kb_name=kb_name).inc()
 
 
 _metrics: Metrics | NoopMetrics = NoopMetrics()

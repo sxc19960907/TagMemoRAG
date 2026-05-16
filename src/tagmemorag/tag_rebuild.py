@@ -11,9 +11,11 @@ from .observability.metrics import get_metrics
 from .tag_cooccurrence import (
     build_cooccurrence_for_kb,
     cooccurrence_path,
+    load_cooccurrence,
     save_cooccurrence,
 )
 from .tag_embedder import embed_dirty_tags
+from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 from .tag_store import delete_manual_tags, delete_tags, find_orphan_tags, upsert_manual_tags
 
 
@@ -26,6 +28,8 @@ class TagRebuildReport:
     tag_embedding_error: str = ""
     tag_cooccurrence_edges: int = 0
     tag_cooccurrence_error: str = ""
+    tag_intrinsic_residual_rows: int = 0
+    tag_intrinsic_residual_error: str = ""
 
     def to_dict(self) -> dict[str, int | str]:
         return {
@@ -36,6 +40,8 @@ class TagRebuildReport:
             "tag_embedding_error": self.tag_embedding_error,
             "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
             "tag_cooccurrence_error": self.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": self.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": self.tag_intrinsic_residual_error,
         }
 
 
@@ -80,6 +86,7 @@ def sync_rebuild_tags(
         metrics.set_tags_total(kb_name=kb_name, count=_total_tag_count(conn, kb_name))
 
     cooc_edges, cooc_error = _rebuild_cooccurrence(kb_name, cfg)
+    residual_rows, residual_error = _rebuild_intrinsic_residuals(kb_name, cfg)
 
     return TagRebuildReport(
         tag_embeddings_added=int(embed_report.get("added", 0)),
@@ -88,6 +95,8 @@ def sync_rebuild_tags(
         orphan_tags_removed=orphan_tags_removed,
         tag_cooccurrence_edges=cooc_edges,
         tag_cooccurrence_error=cooc_error,
+        tag_intrinsic_residual_rows=residual_rows,
+        tag_intrinsic_residual_error=residual_error,
     )
 
 
@@ -136,6 +145,33 @@ def _rebuild_cooccurrence(kb_name: str, cfg: Settings) -> tuple[int, str]:
     except Exception as exc:
         duration = time.perf_counter() - started
         metrics.record_tag_cooccurrence_rebuild(kb_name=kb_name, outcome="failed", duration=duration)
+        return 0, type(exc).__name__
+
+
+def _rebuild_intrinsic_residuals(kb_name: str, cfg: Settings) -> tuple[int, str]:
+    """Train tag intrinsic residuals after cooccurrence rebuild.
+
+    Failure is fail-soft for the rebuild path; the CLI entrypoint calls the
+    underlying trainer directly when it needs a non-zero exit code.
+    """
+    if not cfg.wave_phase1.enabled or not cfg.wave_phase1.cooccurrence_enabled:
+        return 0, ""
+    try:
+        matrix = load_cooccurrence(cooccurrence_path(cfg, kb_name))
+        if matrix is None or matrix.edge_count == 0:
+            return 0, ""
+        registry = create_registry(_phase0_registry_path(cfg))
+        top_n = cfg.wave_phase1.intrinsic_residual_top_n or cfg.wave_phase1.pyramid_top_k
+        with registry.connection() as conn:
+            report = train_intrinsic_residuals_for_kb(
+                kb_name,
+                conn,
+                matrix,
+                expected_dim=cfg.model.dim,
+                top_n=int(top_n),
+            )
+        return report.rows_written, ""
+    except Exception as exc:
         return 0, type(exc).__name__
 
 

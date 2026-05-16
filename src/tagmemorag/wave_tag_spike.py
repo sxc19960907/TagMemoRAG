@@ -22,6 +22,7 @@ from .tag_cooccurrence import (
     cooccurrence_path,
     load_cooccurrence,
 )
+from .tag_intrinsic_residuals import load_intrinsic_residuals_for_kb
 from .tag_store import iter_canonical_tags_with_vectors
 
 
@@ -48,6 +49,7 @@ class SpikeResult:
     hops_executed: int
     truncated_by_cap: bool
     seed_ids: frozenset[int] = field(default_factory=frozenset)
+    missing_residual_count: int = 0
 
 
 def propagate(
@@ -88,6 +90,7 @@ def propagate(
             hops_executed=0,
             truncated_by_cap=False,
             seed_ids=seed_ids,
+            missing_residual_count=0,
         )
 
     # Initial injection
@@ -96,6 +99,7 @@ def propagate(
 
     productive_hops = 0
     neighbor_cap_hit = False
+    missing_residual_count = 0
 
     for _ in range(max_hops):
         next_spikes: dict[int, tuple[float, float]] = {}
@@ -113,6 +117,8 @@ def propagate(
 
             for neighbor_id, cooc_weight in sorted_synapses:
                 cooc_weight_f = float(cooc_weight)
+                if residuals is not None and int(neighbor_id) not in residuals_map:
+                    missing_residual_count += 1
                 neighbor_residual = float(residuals_map.get(int(neighbor_id), 1.0))
                 tension = cooc_weight_f * neighbor_residual
                 is_wormhole = tension >= tension_threshold
@@ -161,6 +167,7 @@ def propagate(
         hops_executed=productive_hops,
         truncated_by_cap=truncated_by_cap,
         seed_ids=seed_ids,
+        missing_residual_count=missing_residual_count,
     )
 
 
@@ -479,6 +486,15 @@ def _load_kb_tag_vectors(cfg: Settings, kb_name: str, expected_dim: int) -> list
                 continue
             rows.append(_TagVecRow(tag_id=tag.id, name=tag.name, vector=np.asarray(vector, dtype=np.float32)))
     return rows
+
+
+def _load_kb_intrinsic_residuals(cfg: Settings, kb_name: str) -> dict[int, float]:
+    try:
+        registry = create_registry(_phase0_registry_path(cfg))
+        with registry.connection() as conn:
+            return load_intrinsic_residuals_for_kb(conn, kb_name)
+    except Exception:
+        return {}
 
 
 def _load_kb_tag_vectors_by_names(
@@ -939,6 +955,7 @@ def apply_tag_boost(
         return query_vec, TagBoostInfo(
             skipped_reason="no_tag_vectors", matrix_loaded=True, **base_info_kwargs
         )
+    residuals_map = _load_kb_intrinsic_residuals(settings, kb_name) if cfg.intrinsic_residuals_enabled else None
 
     # Phase 2b-1: strategy="pyramid" replaces top-K cosine seed selection with
     # multi-level Gram-Schmidt energy decomposition. ResidualPyramid is a pure
@@ -954,8 +971,11 @@ def apply_tag_boost(
                 top_k=cfg.pyramid_top_k,
                 min_energy_ratio=cfg.pyramid_min_energy_ratio,
                 use_handshake_features=cfg.pyramid_use_handshake_features,
+                residuals=residuals_map,
             )
             pyramid_result = pyramid.analyze(query_vec)
+            if residuals_map is not None:
+                get_metrics().record_tag_pyramid_residual_prior_applied(kb_name=kb_name)
         except Exception:
             pyramid_result = None
 
@@ -990,6 +1010,10 @@ def apply_tag_boost(
                 row = rows_by_id_seed.get(ptag.tag_id)
                 if row is None:
                     continue
+                if residuals_map is not None and ptag.tag_id not in residuals_map:
+                    get_metrics().record_tag_intrinsic_residual_missing(
+                        kb_name=kb_name, consumer="pyramid_prior"
+                    )
                 is_core = row.name.strip().lower() in core_canonical_set
                 core_boost = _per_tag_core_boost(
                     is_core, float(ptag.similarity), dynamic_core_factor
@@ -1034,7 +1058,12 @@ def apply_tag_boost(
         tension_threshold=cfg.spike_tension_threshold,
         max_neighbors=cfg.spike_max_neighbors_per_node,
         max_emergent=cfg.spike_max_emergent_nodes,
+        residuals=residuals_map,
     )
+    if residuals_map is not None:
+        get_metrics().record_tag_intrinsic_residual_missing(
+            kb_name=kb_name, consumer="wormhole", count=spike_result.missing_residual_count
+        )
 
     # Merge seeds + emergent. Seeds keep max(seed_weight, propagated); emergent
     # keep accumulated_energy. Cap emergent at max_emergent (sorted by weight).

@@ -64,6 +64,8 @@ class RebuildTask:
     epa_train_error: str = ""
     tag_cooccurrence_edges: int = 0
     tag_cooccurrence_error: str = ""
+    tag_intrinsic_residual_rows: int = 0
+    tag_intrinsic_residual_error: str = ""
     cancel_requested: bool = False
 
     def to_dict(self) -> dict:
@@ -97,6 +99,8 @@ class RebuildTask:
             "epa_train_error": self.epa_train_error,
             "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
             "tag_cooccurrence_error": self.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": self.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": self.tag_intrinsic_residual_error,
             "cancel_requested": self.cancel_requested,
         }
         summary = getattr(self, "operations_summary", None)
@@ -401,6 +405,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             "epa_train_error": str(epa_report.get("epa_train_error", "") or ""),
             "tag_cooccurrence_edges": tag_report.tag_cooccurrence_edges,
             "tag_cooccurrence_error": tag_report.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": tag_report.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
         }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
@@ -483,6 +489,8 @@ def _build_for_rebuild(
             epa_train_error=result.detail.epa_train_error,
             tag_cooccurrence_edges=result.detail.tag_cooccurrence_edges,
             tag_cooccurrence_error=result.detail.tag_cooccurrence_error,
+            tag_intrinsic_residual_rows=result.detail.tag_intrinsic_residual_rows,
+            tag_intrinsic_residual_error=result.detail.tag_intrinsic_residual_error,
         )
         _apply_rebuild_detail(task, detail)
         if result.state is not None:
@@ -510,6 +518,8 @@ def _build_for_rebuild(
             "epa_train_error": str(new_state.meta.get("epa_train_error", "") or ""),
             "tag_cooccurrence_edges": int(new_state.meta.get("tag_cooccurrence_edges", 0) or 0),
             "tag_cooccurrence_error": str(new_state.meta.get("tag_cooccurrence_error", "") or ""),
+            "tag_intrinsic_residual_rows": int(new_state.meta.get("tag_intrinsic_residual_rows", 0) or 0),
+            "tag_intrinsic_residual_error": str(new_state.meta.get("tag_intrinsic_residual_error", "") or ""),
         }
     )
     detail = RebuildDetail(
@@ -531,6 +541,8 @@ def _build_for_rebuild(
         epa_train_error=str(new_state.meta.get("epa_train_error", "") or ""),
         tag_cooccurrence_edges=int(new_state.meta.get("tag_cooccurrence_edges", 0) or 0),
         tag_cooccurrence_error=str(new_state.meta.get("tag_cooccurrence_error", "") or ""),
+        tag_intrinsic_residual_rows=int(new_state.meta.get("tag_intrinsic_residual_rows", 0) or 0),
+        tag_intrinsic_residual_error=str(new_state.meta.get("tag_intrinsic_residual_error", "") or ""),
     )
     new_state.meta.update(
         {
@@ -553,6 +565,8 @@ def _build_for_rebuild(
             "epa_train_error": detail.epa_train_error,
             "tag_cooccurrence_edges": detail.tag_cooccurrence_edges,
             "tag_cooccurrence_error": detail.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": detail.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": detail.tag_intrinsic_residual_error,
             "impact_summary": impact_report.get("summary") if isinstance(impact_report, dict) else None,
         }
     )
@@ -581,6 +595,8 @@ def _apply_rebuild_detail(task: RebuildTask, detail: RebuildDetail) -> None:
     task.epa_train_error = detail.epa_train_error
     task.tag_cooccurrence_edges = detail.tag_cooccurrence_edges
     task.tag_cooccurrence_error = detail.tag_cooccurrence_error
+    task.tag_intrinsic_residual_rows = detail.tag_intrinsic_residual_rows
+    task.tag_intrinsic_residual_error = detail.tag_intrinsic_residual_error
 
 
 def _auto_incremental_decision(docs_dir: str | Path, kb_name: str, cfg: Settings, manifest) -> tuple[bool, str]:

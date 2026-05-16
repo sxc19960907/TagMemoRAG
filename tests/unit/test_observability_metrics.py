@@ -150,6 +150,19 @@ def test_phase3_resonance_metrics_register_custom_series():
     metrics.assert_label_contract()
 
 
+def test_phase35_intrinsic_residual_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_intrinsic_residual_missing(kb_name="default", consumer="wormhole", count=2)
+    collector.record_tag_pyramid_residual_prior_applied(kb_name="default")
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_tag_intrinsic_residual_missing_total{consumer="wormhole",kb_name="default"} 2.0' in body
+    assert 'tagmemorag_tag_pyramid_residual_prior_applied_total{kb_name="default"} 1.0' in body
+    metrics.assert_label_contract()
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 

@@ -39,6 +39,9 @@ from .tag_governance import (
     tag_usage_report,
     preview_tag_rewrite,
 )
+from .manual_registry import create_registry
+from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
+from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 
 
 def _create_embedder_from_config(cfg):
@@ -82,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--config", default="config.yaml")
+
+    residuals = sub.add_parser("retrain-residuals")
+    residuals.add_argument("--kb", default="default")
+    residuals.add_argument("--config", default="config.yaml")
 
     eval_parser = sub.add_parser("eval")
     eval_sub = eval_parser.add_subparsers(dest="eval_command", required=True)
@@ -293,6 +300,32 @@ def main(argv: list[str] | None = None) -> int:
 
         api.settings = cfg
         uvicorn.run(api.app, host=args.host or cfg.server.host, port=args.port or cfg.server.port)
+        return 0
+    if args.command == "retrain-residuals":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        matrix = load_cooccurrence(cooccurrence_path(cfg, args.kb))
+        if matrix is None or matrix.edge_count == 0:
+            print(f"retrain-residuals error: cooccurrence matrix missing for kb={args.kb!r}", file=sys.stderr)
+            return 2
+        registry_path = Path(cfg.storage.data_dir) / "manual_registry.sqlite3"
+        if cfg.manual_library.registry_path != "data/manual_registry.sqlite3":
+            registry_path = Path(cfg.manual_library.registry_path)
+        top_n = cfg.wave_phase1.intrinsic_residual_top_n or cfg.wave_phase1.pyramid_top_k
+        try:
+            registry = create_registry(registry_path)
+            with registry.connection() as conn:
+                report = train_intrinsic_residuals_for_kb(
+                    args.kb,
+                    conn,
+                    matrix,
+                    expected_dim=cfg.model.dim,
+                    top_n=int(top_n),
+                )
+        except Exception as exc:
+            print(f"retrain-residuals error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"kb_name": args.kb, **report.to_dict()}, ensure_ascii=False))
         return 0
     if args.command == "eval" and args.eval_command == "run":
         cfg = load_config(args.config)

@@ -12,7 +12,7 @@ Pure algorithm: holds no DB / config / settings reference. Caller passes in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol, Sequence
+from typing import Mapping, Protocol, Sequence
 
 import numpy as np
 
@@ -101,6 +101,7 @@ class ResidualPyramid:
         top_k: int = 10,
         min_energy_ratio: float = 0.1,
         use_handshake_features: bool = True,
+        residuals: Mapping[int, float] | None = None,
     ) -> None:
         if dim <= 0:
             raise ValueError(f"dim must be positive; got {dim}")
@@ -117,6 +118,7 @@ class ResidualPyramid:
         self._top_k = int(top_k)
         self._min_energy_ratio = float(min_energy_ratio)
         self._use_handshake_features = bool(use_handshake_features)
+        self._residuals = {int(k): float(v) for k, v in (residuals or {}).items()}
 
         # Pre-stack vectors for vectorized cosine
         if self._tag_rows:
@@ -238,14 +240,21 @@ class ResidualPyramid:
             mask = self._tag_valid.copy()
         if not mask.any():
             return []
-        sims_masked = np.where(mask, sims, -np.inf)
+        scores = sims.copy()
+        if self._residuals:
+            priors = np.asarray(
+                [self._residuals.get(int(row.tag_id), 1.0) for row in self._tag_rows],
+                dtype=np.float32,
+            )
+            scores = scores * priors
+        scores_masked = np.where(mask, scores, -np.inf)
         # top-k by similarity, then by index for stability
         k = min(self._top_k, int(mask.sum()))
         if k <= 0:
             return []
-        idx_sorted = np.argpartition(-sims_masked, k - 1)[:k]
-        idx_sorted = idx_sorted[np.argsort(-sims_masked[idx_sorted], kind="stable")]
-        return [(int(i), float(sims_masked[i])) for i in idx_sorted if np.isfinite(sims_masked[i])]
+        idx_sorted = np.argpartition(-scores_masked, k - 1)[:k]
+        idx_sorted = idx_sorted[np.argsort(-scores_masked[idx_sorted], kind="stable")]
+        return [(int(i), float(sims[i])) for i in idx_sorted if np.isfinite(scores_masked[i])]
 
 
 def _gram_schmidt_project(

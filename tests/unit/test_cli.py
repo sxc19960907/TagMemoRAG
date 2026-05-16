@@ -46,6 +46,46 @@ storage:
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
 
 
+def test_cli_retrain_residuals_reports_rows(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs / "manual.metadata.json").write_text(
+        '{"manual_id":"m1","title":"m1","source_file":"manual.md","product_category":"coffee","tags":["Steam","Wand"]}',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+manual_library:
+  registry_path: {tmp_path / "manual_registry.sqlite3"}
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "build", "--docs", str(docs), "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "retrain-residuals", "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    body = json.loads(result.stdout)
+    assert body["tag_intrinsic_residual_rows"] == 2
+
+
 def test_cli_search_filters_manual_metadata(tmp_path):
     docs = tmp_path / "docs"
     (docs / "fridge").mkdir(parents=True)

@@ -42,6 +42,21 @@ def test_analyze_empty_query_returns_empty_result():
     assert np.allclose(result.final_residual, 0.0)
 
 
+def test_residual_prior_changes_candidate_order_but_keeps_raw_similarity():
+    dim = 3
+    rows = [
+        _TagRow(1, "high-cosine-low-prior", np.array([1.0, 0.0, 0.0], dtype=np.float32)),
+        _TagRow(2, "lower-cosine-high-prior", np.array([0.8, 0.6, 0.0], dtype=np.float32)),
+    ]
+    query = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+
+    pyramid = ResidualPyramid(rows, dim=dim, max_levels=1, top_k=1, residuals={1: 0.5, 2: 1.0})
+    result = pyramid.analyze(query)
+
+    assert result.levels[0].tags[0].tag_id == 2
+    assert result.levels[0].tags[0].similarity == pytest.approx(0.8)
+
+
 def test_analyze_two_level_decomposition_with_synthetic_orthogonal_tags():
     """Query = 0.6*e1 + 0.6*e2 + 0.6*e3 + 0.1*e4 (orthonormal basis).
 

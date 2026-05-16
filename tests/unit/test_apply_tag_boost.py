@@ -471,6 +471,45 @@ def test_apply_tag_boost_pyramid_ghost_appears_in_matched_names(tmp_path: Path):
     assert "airflow" in info.matched_tag_names
 
 
+def test_apply_tag_boost_intrinsic_residuals_enabled_records_consumers(tmp_path: Path):
+    from tagmemorag.observability import metrics as metrics_module
+
+    cfg = _settings(tmp_path, spike=True, base_tag_boost=0.5, strategy="pyramid")
+    cfg.wave_phase1.intrinsic_residuals_enabled = True
+    cfg.wave_phase1.dynamic_boost_min = 0.001
+    ids = _seed_kb_with_tags(
+        cfg,
+        "kb-x",
+        [
+            ("cooling", np.array([1, 0, 0, 0], dtype=np.float32)),
+            ("kitchen", np.array([0, 1, 0, 0], dtype=np.float32)),
+            ("filter", np.array([0, 0, 1, 0], dtype=np.float32)),
+        ],
+        manuals=[
+            [("cooling", 1), ("kitchen", 2), ("filter", 3)],
+            [("cooling", 1), ("kitchen", 2)],
+        ],
+    )
+    _build_and_save_matrix(cfg, "kb-x")
+    registry = create_registry(Path(cfg.manual_library.registry_path))
+    with registry.connection() as conn:
+        conn.execute(
+            "INSERT INTO tag_intrinsic_residuals(tag_id, residual_energy, neighbor_count) VALUES (?, ?, ?)",
+            (ids["cooling"], 0.5, 1),
+        )
+        conn.commit()
+
+    metrics_module.reset_metrics_for_tests()
+    query = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    _boosted, info = apply_tag_boost(query, kb_name="kb-x", settings=cfg, base_tag_boost=0.5)
+
+    assert info.matrix_loaded is True
+    body = generate_latest(metrics_module.get_registry()).decode("utf-8")
+    assert 'tagmemorag_tag_pyramid_residual_prior_applied_total{kb_name="kb-x"} 1.0' in body
+    assert 'consumer="pyramid_prior",kb_name="kb-x"' in body
+    assert 'consumer="wormhole",kb_name="kb-x"' in body
+
+
 def test_apply_tag_boost_resonance_disabled_default(tmp_path: Path):
     """Phase 3: default cross_domain_resonance_enabled=False ⇒ TagBoostInfo
     keeps the resonance fields at 0 and the metric series stay untouched.

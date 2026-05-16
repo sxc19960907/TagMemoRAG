@@ -44,6 +44,8 @@ class RebuildDetail:
     epa_train_error: str = ""
     tag_cooccurrence_edges: int = 0
     tag_cooccurrence_error: str = ""
+    tag_intrinsic_residual_rows: int = 0
+    tag_intrinsic_residual_error: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,6 +69,8 @@ class RebuildDetail:
             "epa_train_error": self.epa_train_error,
             "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
             "tag_cooccurrence_error": self.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": self.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": self.tag_intrinsic_residual_error,
         }
 
 
@@ -172,6 +176,8 @@ def build_kb_incremental(
             epa_train_error=str(epa_report.get("epa_train_error", "") or ""),
             tag_cooccurrence_edges=tag_report.tag_cooccurrence_edges,
             tag_cooccurrence_error=tag_report.tag_cooccurrence_error,
+            tag_intrinsic_residual_rows=tag_report.tag_intrinsic_residual_rows,
+            tag_intrinsic_residual_error=tag_report.tag_intrinsic_residual_error,
         )
         meta = {
             "schema_version": cfg.storage.schema_version,
@@ -199,6 +205,8 @@ def build_kb_incremental(
             "epa_train_error": detail.epa_train_error,
             "tag_cooccurrence_edges": tag_report.tag_cooccurrence_edges,
             "tag_cooccurrence_error": tag_report.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": tag_report.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
             "impact_summary": impact_report.summary,
         }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)

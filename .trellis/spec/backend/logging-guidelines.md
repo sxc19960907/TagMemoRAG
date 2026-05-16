@@ -88,9 +88,10 @@ M4 introduces Prometheus metrics and OTel hook points. M0 should keep function b
 ### 3. Metrics Contract
 
 - Custom metric names start with `tagmemorag_`.
-- Allowed labels are only `method`, `route`, `status_code`, `kb_name`, `cache_status`, `error_code`, `operation`, and `outcome`.
+- Allowed labels are low-cardinality only. Current custom labels include `method`, `route`, `status_code`, `kb_name`, `cache_status`, `error_code`, `operation`, `outcome`, `strategy`, `feature`, `query_world_kind`, `kind`, and `consumer`.
 - Never use raw query text, trace IDs, task IDs, API key identifiers or hashes, build IDs, source paths, document text, exception messages, or vectors as metric labels.
 - Metrics recording helpers must not raise into the request or rebuild path.
+- Intrinsic residual metrics use `consumer="wormhole"|"pyramid_prior"` only; do not label by tag id, tag name, manual id, or source file.
 
 ### 4. Trace Contract
 

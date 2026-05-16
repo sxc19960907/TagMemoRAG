@@ -93,6 +93,12 @@ def test_residual_can_promote_to_wormhole():
     assert result.accumulated_energy[2] == pytest.approx(1.0 * 0.7 * SPIKE_WORMHOLE_DECAY)
 
 
+def test_missing_residual_count_tracks_fallback_lookups():
+    result = propagate({1: 1.0}, _matrix({1: {2: 1.2, 3: 0.8}}), residuals={2: 0.5})
+
+    assert result.missing_residual_count == 1
+
+
 def test_firing_threshold_blocks_low_energy_seed():
     """A seed below firing_threshold does not propagate (stays as accumulated only)."""
     matrix = _matrix({1: {2: 0.5}})
