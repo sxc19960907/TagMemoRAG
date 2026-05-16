@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test fixture safety + HTTP Embedding Provider (env-only API key) constraints."}
-{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "API key 不进 log / commit; ev key 命名约定。"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改 fixture + 重 capture baseline 跨 fixture / scripts / docs / spec 多层。"}
-{"file": ".trellis/tasks/archive/2026-05/05-16-wave-readiness-baseline/prd.md", "reason": "前置任务 PRD，包含 D4 informational baseline 决策含义。"}
-{"file": ".trellis/tasks/archive/2026-05/05-16-wave-readiness-baseline/research-delta-report.txt", "reason": "完整 hashing vs siliconflow delta 表，作为 fixture 重标必要性的实证。"}
