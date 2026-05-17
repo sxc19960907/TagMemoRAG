@@ -71,11 +71,16 @@ class SearchFeedback:
     kb_name: str
     trace_id: str
     search_id: str
+    retrieve_id: str
     build_id: str
     query: str
     outcome: FeedbackOutcome
     created_at: str
     selected_results: tuple[FeedbackResultRef, ...] = ()
+    selected_evidence_ids: tuple[str, ...] = ()
+    selected_context_item_ids: tuple[str, ...] = ()
+    answerable: bool | None = None
+    failure_reason: str = ""
     expected: tuple[FeedbackExpectedRef, ...] = ()
     note: str = ""
     status: FeedbackStatus = "new"
@@ -87,11 +92,16 @@ class SearchFeedback:
             "kb_name": self.kb_name,
             "trace_id": self.trace_id,
             "search_id": self.search_id,
+            "retrieve_id": self.retrieve_id,
             "build_id": self.build_id,
             "query": self.query,
             "outcome": self.outcome,
             "created_at": self.created_at,
             "selected_results": [ref.to_dict() for ref in self.selected_results],
+            "selected_evidence_ids": list(self.selected_evidence_ids),
+            "selected_context_item_ids": list(self.selected_context_item_ids),
+            "answerable": self.answerable,
+            "failure_reason": self.failure_reason,
             "expected": [ref.to_dict() for ref in self.expected],
             "note": self.note,
             "status": self.status,
@@ -263,11 +273,16 @@ def feedback_from_payload(kb_name: str, payload: Mapping[str, Any]) -> SearchFee
         kb_name=kb_name,
         trace_id=_bounded_text(str(payload.get("trace_id") or ""), "trace_id", 120),
         search_id=_bounded_text(str(payload.get("search_id") or ""), "search_id", 120),
+        retrieve_id=_bounded_text(str(payload.get("retrieve_id") or ""), "retrieve_id", 120),
         build_id=_bounded_text(str(payload.get("build_id") or ""), "build_id", 120),
         query=_bounded_text(str(payload.get("query") or ""), "query", MAX_QUERY_CHARS, required=True),
         outcome=outcome,  # type: ignore[arg-type]
         created_at=str(payload.get("created_at") or _now_iso()),
         selected_results=_parse_result_refs(payload.get("selected_results", [])),
+        selected_evidence_ids=_parse_id_list(payload.get("selected_evidence_ids", []), "selected_evidence_ids"),
+        selected_context_item_ids=_parse_id_list(payload.get("selected_context_item_ids", []), "selected_context_item_ids"),
+        answerable=_parse_optional_bool(payload.get("answerable")),
+        failure_reason=_bounded_text(str(payload.get("failure_reason") or ""), "failure_reason", 120),
         expected=_parse_expected_refs(payload.get("expected", [])),
         note=_bounded_text(str(payload.get("note") or ""), "note", MAX_NOTE_CHARS),
         status=status,  # type: ignore[arg-type]
@@ -414,11 +429,16 @@ def _apply_overlay(feedback: SearchFeedback, overlay: Mapping[str, Any]) -> Sear
         kb_name=feedback.kb_name,
         trace_id=feedback.trace_id,
         search_id=feedback.search_id,
+        retrieve_id=feedback.retrieve_id,
         build_id=feedback.build_id,
         query=feedback.query,
         outcome=feedback.outcome,
         created_at=feedback.created_at,
         selected_results=feedback.selected_results,
+        selected_evidence_ids=feedback.selected_evidence_ids,
+        selected_context_item_ids=feedback.selected_context_item_ids,
+        answerable=feedback.answerable,
+        failure_reason=feedback.failure_reason,
         expected=feedback.expected,
         note=feedback.note,
         status=status,  # type: ignore[arg-type]
@@ -448,6 +468,24 @@ def _parse_result_refs(raw: Any) -> tuple[FeedbackResultRef, ...]:
             )
         )
     return tuple(refs)
+
+
+def _parse_id_list(raw: Any, field_name: str) -> tuple[str, ...]:
+    if raw in (None, ""):
+        return ()
+    if not isinstance(raw, list):
+        raise ServiceError(ErrorCode.INVALID_INPUT, f"{field_name} must be a list.")
+    if len(raw) > MAX_REFS:
+        raise ServiceError(ErrorCode.INVALID_INPUT, f"{field_name} exceeds maximum length.", {"max": MAX_REFS})
+    return tuple(_bounded_text(str(item), field_name, 120, required=True) for item in raw)
+
+
+def _parse_optional_bool(raw: Any) -> bool | None:
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool):
+        return raw
+    raise ServiceError(ErrorCode.INVALID_INPUT, "answerable must be a boolean when provided.")
 
 
 def _parse_expected_refs(raw: Any) -> tuple[FeedbackExpectedRef, ...]:

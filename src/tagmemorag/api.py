@@ -54,7 +54,7 @@ from .observability.metrics import configure_metrics, get_metrics, metrics_respo
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
-from .retrieval import DEFAULT_TOKEN_BUDGET, build_retrieve_response
+from .retrieval import DEFAULT_TOKEN_BUDGET, build_retrieve_response, retrieve_inspect_payload
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -290,10 +290,15 @@ class FeedbackSubmitRequest(BaseModel):
     kb_name: str = "default"
     trace_id: str = ""
     search_id: str = ""
+    retrieve_id: str = ""
     build_id: str = ""
     query: str = Field(..., max_length=1000)
     outcome: str
     selected_results: list[dict[str, object]] = Field(default_factory=list, max_length=20)
+    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    selected_context_item_ids: list[str] = Field(default_factory=list, max_length=20)
+    answerable: bool | None = None
+    failure_reason: str = Field(default="", max_length=120)
     expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
     note: str = Field(default="", max_length=2000)
 
@@ -889,6 +894,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
         payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
             enabled=settings.search.metadata_narrowing_enabled
         )
+        payload["debug"]["retrieve_inspect"] = retrieve_inspect_payload(payload)
     get_metrics().record_search(
         kb_name=state.kb_name,
         cache_status="disabled",
@@ -936,6 +942,24 @@ def submit_search_feedback(
     feedback = create_feedback(request.kb_name, request.model_dump(), settings)
     structlog.get_logger().info(
         "search_feedback_created",
+        kb_name=feedback.kb_name,
+        outcome=feedback.outcome,
+        status=feedback.status,
+        trace_id=feedback.trace_id,
+    )
+    return {"feedback": feedback.to_dict()}
+
+
+@app.post("/retrieve/feedback")
+def submit_retrieve_feedback(
+    request: FeedbackSubmitRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    feedback = create_feedback(request.kb_name, request.model_dump(), settings)
+    structlog.get_logger().info(
+        "retrieve_feedback_created",
         kb_name=feedback.kb_name,
         outcome=feedback.outcome,
         status=feedback.status,

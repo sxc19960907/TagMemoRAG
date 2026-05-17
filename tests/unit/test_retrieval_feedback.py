@@ -24,10 +24,15 @@ def _payload(**overrides):
     data = {
         "trace_id": "trace-1",
         "search_id": "search-1",
+        "retrieve_id": "retrieve-1",
         "build_id": "build-1",
         "query": "E05 蒸汽异常怎么处理",
         "outcome": "missing_result",
         "selected_results": [{"rank": 1, "node_id": 2, "source_file": "coffee.md", "header": "蒸汽", "manual_id": "cm1"}],
+        "selected_evidence_ids": ["ev_001"],
+        "selected_context_item_ids": ["ctx_001"],
+        "answerable": False,
+        "failure_reason": "missing_expected_fault_code",
         "expected": [{"source_file": "coffee.md", "header": "E05", "text_contains": ["清洗喷嘴"], "metadata": {"manual_id": "cm1"}}],
         "note": "Expected the E05 troubleshooting section.",
     }
@@ -45,6 +50,11 @@ def test_feedback_append_list_and_review_overlay(tmp_path):
     rows = list_feedback("default", cfg, status="new", outcome="missing_result")
     assert [row.feedback_id for row in rows] == ["fb-1"]
     assert rows[0].expected[0].metadata == {"manual_id": "cm1"}
+    assert rows[0].retrieve_id == "retrieve-1"
+    assert rows[0].selected_evidence_ids == ("ev_001",)
+    assert rows[0].selected_context_item_ids == ("ctx_001",)
+    assert rows[0].answerable is False
+    assert rows[0].failure_reason == "missing_expected_fault_code"
 
     reviewed = review_feedback("default", "fb-1", cfg, status="triaged", operator_note="Good eval candidate.")
     assert reviewed.status == "triaged"

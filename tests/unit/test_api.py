@@ -71,6 +71,31 @@ def test_api_retrieve_returns_text_evidence_context_and_citations(tmp_path, test
     assert "debug" not in body
 
 
+def test_api_retrieve_debug_includes_safe_inspect_payload(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽很小", "top_k": 2, "debug": True})
+
+    assert response.status_code == 200
+    inspect = response.json()["debug"]["retrieve_inspect"]
+    assert inspect["schema_version"] == "retrieve_inspect.v1"
+    assert inspect["retrieve_id"] == response.json()["retrieve_id"]
+    assert inspect["evidence_count"] == len(response.json()["evidence"])
+    assert inspect["context_item_count"] == len(response.json()["context_pack"]["items"])
+    assert inspect["selected"][0]["evidence_id"] == "ev_001"
+    assert inspect["selected"][0]["chunk_id"].startswith("chunk:sha256:")
+    serialized = str(inspect)
+    assert "蒸汽功能可以打奶泡" not in serialized
+    assert "question" not in inspect
+
+
 def test_api_retrieve_context_budget_exhausted_is_explicit(tmp_path, test_config, fake_embedder):
     docs = tmp_path / "docs"
     docs.mkdir()

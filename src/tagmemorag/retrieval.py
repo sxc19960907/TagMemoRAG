@@ -41,6 +41,44 @@ def build_retrieve_response(
     }
 
 
+def retrieve_inspect_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    evidence = list(payload.get("evidence") or [])
+    context_items = list((payload.get("context_pack") or {}).get("items") or [])
+    context_by_evidence = {
+        str(ref): str(item.get("context_item_id") or "")
+        for item in context_items
+        for ref in item.get("evidence_refs", [])
+    }
+    selected: list[dict[str, Any]] = []
+    for index, item in enumerate(evidence, 1):
+        selected.append(
+            {
+                "rank": index,
+                "evidence_id": str(item.get("evidence_id") or ""),
+                "citation_id": str(item.get("citation_id") or ""),
+                "context_item_id": context_by_evidence.get(str(item.get("evidence_id") or ""), ""),
+                "doc_id": str(item.get("doc_id") or ""),
+                "chunk_id": str(item.get("chunk_id") or ""),
+                "score": float(item.get("score") or 0.0),
+            }
+        )
+    context_pack = dict(payload.get("context_pack") or {})
+    answerability = dict(payload.get("answerability") or {})
+    return {
+        "schema_version": "retrieve_inspect.v1",
+        "retrieve_id": str(payload.get("retrieve_id") or ""),
+        "result_count": len(payload.get("results") or []),
+        "evidence_count": len(evidence),
+        "citation_count": len(payload.get("citations") or []),
+        "context_item_count": len(context_items),
+        "token_budget": int(context_pack.get("token_budget") or 0),
+        "token_count_estimate": int(context_pack.get("token_count_estimate") or 0),
+        "answerable": bool(answerability.get("answerable")),
+        "fallback_reason": str(answerability.get("fallback_reason") or ""),
+        "selected": selected,
+    }
+
+
 def _evidence_from_result(result: Result, index: int) -> dict[str, Any]:
     metadata = dict(result.metadata or {})
     citation_id = f"cit_{index:03d}"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tagmemorag.retrieval import build_retrieve_response
+from tagmemorag.retrieval import build_retrieve_response, retrieve_inspect_payload
 from tagmemorag.types import Result
 
 
@@ -98,3 +98,43 @@ def test_build_retrieve_response_context_budget_exhausted():
         "warnings": ["context_budget_exhausted"],
         "fallback_reason": "context_budget_exhausted",
     }
+
+
+def test_retrieve_inspect_payload_is_safe_and_bounded():
+    payload = build_retrieve_response(
+        results=[_result()],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=100,
+    )
+
+    inspect = retrieve_inspect_payload(payload)
+
+    assert inspect == {
+        "schema_version": "retrieve_inspect.v1",
+        "retrieve_id": "retrieve-1",
+        "result_count": 1,
+        "evidence_count": 1,
+        "citation_count": 1,
+        "context_item_count": 1,
+        "token_budget": 100,
+        "token_count_estimate": payload["context_pack"]["token_count_estimate"],
+        "answerable": True,
+        "fallback_reason": "",
+        "selected": [
+            {
+                "rank": 1,
+                "evidence_id": "ev_001",
+                "citation_id": "cit_001",
+                "context_item_id": "ctx_001",
+                "doc_id": "doc-1",
+                "chunk_id": "chunk-1",
+                "score": 0.82,
+            }
+        ],
+    }
+    assert "content" not in str(inspect)
+    assert "Open the service panel" not in str(inspect)
