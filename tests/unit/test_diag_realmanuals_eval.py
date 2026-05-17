@@ -86,9 +86,23 @@ def test_format_report_includes_core_delta_sections():
         ],
     }
 
-    report = dre._format_report(results, meta={"chunk_count": 2, "model_name": "m", "model_dim": 4}, top_k=5)
+    report = dre._format_report(
+        results,
+        meta={"chunk_count": 2, "model_name": "m", "model_dim": 4},
+        top_k=5,
+        parser_stats=[
+            {
+                "source_file": "dryer/manual.pdf",
+                "chunks": 4,
+                "detected": 3,
+                "fallback": 1,
+                "sample_headers": ["Safety", "Operation"],
+            }
+        ],
+    )
 
     assert "Real Manuals PDF Routing Diagnostic" in report
+    assert "PDF parser structure stats" in report
     assert "Delta: wave-baseline - vec-only" in report
     assert "top1_category_hit: +1.000" in report
     assert "a:" in report

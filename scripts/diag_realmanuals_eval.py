@@ -36,6 +36,8 @@ from tagmemorag.config import Settings, StorageConfig, load_config  # noqa: E402
 from tagmemorag.embedder import create_embedder  # noqa: E402
 from tagmemorag.errors import ServiceError  # noqa: E402
 from tagmemorag.eval.dataset import EvalCase, load_eval_suite  # noqa: E402
+from tagmemorag.metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters  # noqa: E402
+from tagmemorag.parser import parse_document  # noqa: E402
 from tagmemorag.search_runtime import execute_search  # noqa: E402
 from tagmemorag.state import build_kb, load_kb, save_kb  # noqa: E402
 from tagmemorag.types import GraphState, Result  # noqa: E402
@@ -119,6 +121,15 @@ def _create_embedder_from_config(cfg: Settings):
 
 def _run_case(case: EvalCase, intended_category: str, state: GraphState, cfg: Settings, embedder: Any, top_k: int) -> CaseDiag:
     query_vec = embedder.encode_query(case.query)
+    narrowing = infer_metadata_narrowing(
+        query_text=case.query,
+        graph=state.graph,
+        explicit_filters=None,
+        enabled=cfg.search.metadata_narrowing_enabled,
+        category_policy=cfg.search.metadata_narrowing_category_policy,
+        brand_policy=cfg.search.metadata_narrowing_brand_policy,
+        min_candidates=cfg.search.metadata_narrowing_min_candidates,
+    )
     execution = execute_search(
         state=state,
         query_vec=query_vec,
@@ -130,7 +141,8 @@ def _run_case(case: EvalCase, intended_category: str, state: GraphState, cfg: Se
         decay=cfg.search.decay,
         amplitude_cutoff=cfg.search.amplitude_cutoff,
         aggregate=cfg.search.aggregate,
-        filters=None,
+        filters=merge_inferred_filters(None, narrowing),
+        boost_filters=narrowing.boost_filters,
     )
     results = list(execution.results)
     categories = tuple(_category(result) for result in results[:top_k])
@@ -177,7 +189,13 @@ def _hit_at(item: CaseDiag, k: int) -> bool:
     return item.intended_category in item.top_categories[:k]
 
 
-def _format_report(results: dict[str, list[CaseDiag]], *, meta: dict[str, Any], top_k: int) -> str:
+def _format_report(
+    results: dict[str, list[CaseDiag]],
+    *,
+    meta: dict[str, Any],
+    top_k: int,
+    parser_stats: list[dict[str, Any]] | None = None,
+) -> str:
     lines: list[str] = []
     lines.append("=== Real Manuals PDF Routing Diagnostic ===")
     lines.append(f"KB chunk_count: {meta.get('chunk_count', 'unknown')}")
@@ -185,6 +203,18 @@ def _format_report(results: dict[str, list[CaseDiag]], *, meta: dict[str, Any], 
     lines.append(f"Top-K: {top_k}")
     lines.append("Metrics: top1_category_hit / top3_category_hit / top5_category_hit / mean_reciprocal_category_rank")
     lines.append("")
+    if parser_stats:
+        lines.append("--- PDF parser structure stats ---")
+        lines.append(f"{'source_file':<42}{'chunks':>8}{'detected':>10}{'fallback':>10}  sample_headers")
+        for row in parser_stats:
+            lines.append(
+                f"{str(row['source_file'])[:41]:<42}"
+                f"{int(row['chunks']):>8}"
+                f"{int(row['detected']):>10}"
+                f"{int(row['fallback']):>10} "
+                f"{', '.join(str(item) for item in row['sample_headers'])}"
+            )
+        lines.append("")
 
     lines.append("--- Absolute metrics ---")
     lines.append(f"{'config':<18}{'top1':>10}{'top3':>10}{'top5':>10}{'mrr_cat':>12}")
@@ -246,6 +276,32 @@ def _format_report(results: dict[str, list[CaseDiag]], *, meta: dict[str, Any], 
         lines.append(f"  categories: {top_categories}")
         lines.append(f"  sources: {top_sources}")
     return "\n".join(lines)
+
+
+def _parser_stats(docs: Path, cfg: Settings) -> list[dict[str, Any]]:
+    if not docs.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for pdf in sorted(docs.glob("**/*.pdf")):
+        chunks = parse_document(
+            pdf,
+            max_chars=cfg.parser.max_chars,
+            min_chars=cfg.parser.min_chars,
+            root_dir=docs,
+            metadata={},
+        )
+        detected = [chunk for chunk in chunks if chunk.metadata.get("pdf_header_source") == "detected"]
+        fallback = [chunk for chunk in chunks if chunk.metadata.get("pdf_header_source") == "page_fallback"]
+        rows.append(
+            {
+                "source_file": pdf.relative_to(docs).as_posix(),
+                "chunks": len(chunks),
+                "detected": len(detected),
+                "fallback": len(fallback),
+                "sample_headers": [chunk.header for chunk in chunks[:6]],
+            }
+        )
+    return rows
 
 
 def _build_or_load_state(cfg: Settings, *, docs: Path, kb_name: str, reuse_built_kb: bool, embedder: Any) -> GraphState:
@@ -321,7 +377,12 @@ def main(argv: list[str] | None = None) -> int:
         if temp_dir is not None:
             temp_dir.cleanup()
 
-    report = _format_report(all_results, meta=meta, top_k=args.top_k)
+    report = _format_report(
+        all_results,
+        meta=meta,
+        top_k=args.top_k,
+        parser_stats=_parser_stats(args.docs, base_cfg),
+    )
     print(report)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

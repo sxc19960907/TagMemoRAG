@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.embedder import create_embedder
+from tagmemorag.metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import build_kb, load_kb, save_kb
 
@@ -74,6 +75,15 @@ def run_eval(
         _validate_top_k(case_top_k)
         state = states[case.kb_name]
         query_vec = embedder.encode_query(case.query)
+        narrowing = infer_metadata_narrowing(
+            query_text=case.query,
+            graph=state.graph,
+            explicit_filters=None,
+            enabled=run_cfg.search.metadata_narrowing_enabled,
+            category_policy=run_cfg.search.metadata_narrowing_category_policy,
+            brand_policy=run_cfg.search.metadata_narrowing_brand_policy,
+            min_candidates=run_cfg.search.metadata_narrowing_min_candidates,
+        )
         execution = execute_search(
             state=state,
             query_vec=query_vec,
@@ -85,7 +95,8 @@ def run_eval(
             decay=float(search_params["decay"]),
             amplitude_cutoff=float(search_params["amplitude_cutoff"]),
             aggregate=str(search_params["aggregate"]),
-            filters=None,
+            filters=merge_inferred_filters(None, narrowing),
+            boost_filters=narrowing.boost_filters,
         )
         results = execution.results
         rank_matches = match_expectations(results, case.relevant, case_id=case.id)
@@ -233,6 +244,10 @@ def _resolve_search_params(
         "lexical_boost": cfg.search.lexical_boost,
         "lexical_exact_code_boost": cfg.search.lexical_exact_code_boost,
         "lexical_model_boost": cfg.search.lexical_model_boost,
+        "metadata_narrowing_enabled": cfg.search.metadata_narrowing_enabled,
+        "metadata_narrowing_brand_policy": cfg.search.metadata_narrowing_brand_policy,
+        "metadata_narrowing_category_policy": cfg.search.metadata_narrowing_category_policy,
+        "metadata_narrowing_min_candidates": cfg.search.metadata_narrowing_min_candidates,
     }
     if int(resolved["source_k"]) <= 0:
         raise EvalSuiteError("source_k must be a positive integer")

@@ -7,7 +7,7 @@ class _FakePdfPage:
     def __init__(self, text: str | None):
         self._text = text
 
-    def extract_text(self) -> str | None:
+    def extract_text(self, *_args, **_kwargs) -> str | None:
         return self._text
 
 
@@ -71,4 +71,50 @@ def test_parse_pdf_pages(monkeypatch, tmp_path):
     assert chunks[0].path == ("Page 1",)
     assert chunks[0].source_file == "fridge.pdf"
     assert chunks[0].metadata["manual_id"] == "fridge"
+    assert chunks[0].metadata["page_start"] == 1
+    assert chunks[0].metadata["page_end"] == 1
+    assert chunks[0].metadata["pdf_header_source"] == "page_fallback"
     assert "冷藏室温度" in chunks[0].text
+
+
+def test_parse_pdf_detects_section_headings(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [
+                _FakePdfPage(
+                    "Safety\n"
+                    "Do not let children play with the appliance.\n"
+                    "Operation\n"
+                    "Select the drying program and press Start.\n"
+                )
+            ]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "dryer.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    chunks = parse_document(path, min_chars=1, metadata={"manual_id": "dryer"})
+
+    assert [chunk.header for chunk in chunks] == ["Safety", "Operation"]
+    assert [chunk.path for chunk in chunks] == [("Safety",), ("Operation",)]
+    assert {chunk.metadata["pdf_header_source"] for chunk in chunks} == {"detected"}
+    assert {chunk.metadata["page_start"] for chunk in chunks} == {1}
+    assert "press Start" in chunks[1].text
+
+
+def test_parse_pdf_preserves_page_metadata_when_splitting(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("Troubleshooting\n" + ("Noise problem. " * 30))]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "fridge.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    chunks = parse_document(path, max_chars=80, min_chars=1, metadata={"manual_id": "fridge"})
+
+    assert len(chunks) > 1
+    assert {chunk.header for chunk in chunks} == {"Troubleshooting"}
+    assert all(chunk.metadata["page_start"] == 1 for chunk in chunks)
+    assert all(chunk.metadata["page_end"] == 1 for chunk in chunks)
+    assert all(chunk.metadata["pdf_header_source"] == "detected" for chunk in chunks)

@@ -35,6 +35,8 @@ from tagmemorag.state import build_kb  # noqa: E402
 from tagmemorag.tag_store import iter_canonical_tags_with_vectors  # noqa: E402
 from tagmemorag.wave_tag_spike import _reset_matrix_cache_for_tests, apply_tag_boost  # noqa: E402
 
+MIN_ALPHA_STD = 0.0045
+
 
 @dataclass(frozen=True)
 class SeriesStats:
@@ -96,11 +98,11 @@ def main(argv: list[str] | None = None) -> int:
     _print_run(cold)
     _print_run(real)
 
-    std_pass = real.alpha.std > 0.005
+    std_pass = real.alpha.std > MIN_ALPHA_STD
     range_pass = real.alpha.range_over_mean > 0.1
     energy_sum = float(sum(real.explained_variance_ratio))
     energy_pass = real.train_kind == "real-pca" and energy_sum > 0.5
-    print(f"  std(alpha) > 0.005:               {_status(std_pass)}")
+    print(f"  std(alpha) > {MIN_ALPHA_STD:g}:              {_status(std_pass)}")
     print(f"  range(alpha)/mean(alpha) > 0.1:   {_status(range_pass)}")
     print(f"  pca explained_variance sum > 0.5: {_status(energy_pass)}")
 

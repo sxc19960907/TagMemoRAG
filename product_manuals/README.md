@@ -2,7 +2,7 @@
 
 Put source product manuals here for local KB builds.
 
-PDF files are ignored by git. Use subdirectories per product, for example:
+PDF files are ignored by git. Text-based PDFs are parsed into section-like chunks when headings can be detected, with page metadata preserved on each chunk. Scanned image-only PDFs need OCR before indexing. Use subdirectories per product, for example:
 
 ```text
 product_manuals/fridge/fridge_gorenje.pdf

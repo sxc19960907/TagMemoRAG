@@ -82,6 +82,33 @@ def test_infer_metadata_narrowing_hard_filters_category_alias():
     assert decision.after_count == 1
 
 
+def test_category_alias_does_not_match_inside_longer_english_word():
+    graph = _graph()
+    graph.add_node(
+        2,
+        metadata={
+            "doc_id": "hisense-dishwasher-zh-cn-v1",
+            "manual_id": "hisense-dishwasher-zh-cn-v1",
+            "domain": "product_manual",
+            "doc_type": "manual",
+            "brand": "Hisense",
+            "product_category": "dishwasher",
+            "product_model": "DW60",
+            "language": "zh-CN",
+            "tags": ["category:dishwasher", "model:dw60"],
+            "attributes": {"brand": "Hisense", "product_model": "DW60"},
+        },
+    )
+
+    decision = infer_metadata_narrowing(
+        query_text="dishwasher cleaning lower filter",
+        graph=graph,
+    )
+
+    assert decision.mode == "hard_filter"
+    assert decision.hard_filters == {"product_category": "dishwasher"}
+
+
 def test_explicit_filter_conflict_prevents_inferred_hard_filter():
     decision = infer_metadata_narrowing(
         query_text="HR6FDFF701SW 制冰机怎么设置",

@@ -24,6 +24,7 @@ M0 quality is defined by the acceptance criteria in `.trellis/tasks/05-10-wave-r
 - Include `build_id` in search results and relevant logs.
 - Use explicit config objects instead of scattering constants across modules.
 - Keep hybrid lexical retrieval local and bounded: scan loaded graph node fields only, respect filters and KB boundaries, and keep WAVE-RAG as the final deterministic ranker.
+- Match normalized English metadata aliases on token boundaries, not substrings, so `washer` never narrows a `dishwasher` query.
 - For `BaseSettings` configs that merge YAML with env vars, explicitly test precedence. The M1 contract is `env > .env > YAML init data > defaults`; pydantic-settings does not preserve that order unless `settings_customise_sources` is configured.
 
 ---

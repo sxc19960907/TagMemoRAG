@@ -516,6 +516,8 @@ def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fak
     assert node["manual_id"] == "fridge"
     assert node["product_category"] == "unknown"
     assert node["header"] == "Page 1"
+    assert node["metadata"]["page_start"] == 1
+    assert node["metadata"]["pdf_header_source"] == "page_fallback"
     assert "冷藏室温度" in node["text"]
 
 

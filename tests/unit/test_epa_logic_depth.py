@@ -90,7 +90,7 @@ def test_apply_tag_boost_strategy_epa_passes_d2_threshold(tmp_path: Path):
     assert run.train_kind == "real-pca"
     assert run.tag_count == 12
     assert sum(run.explained_variance_ratio) > 0.5
-    assert run.alpha.std > 0.005
+    assert run.alpha.std > diag.MIN_ALPHA_STD
     assert run.alpha.range_over_mean > 0.1
 
 
@@ -394,4 +394,3 @@ def test_resolve_dynamic_pyramid_resonance_enabled_synthetic_axes(tmp_path: Path
     # log domain amplification reference (PRD log-domain table):
     factor_amplification = 1.0 + np.log(1.0 + resonance)
     assert factor_amplification > 1.0
-

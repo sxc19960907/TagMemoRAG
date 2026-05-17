@@ -100,6 +100,10 @@ def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
         "lexical_boost": 0.2,
         "lexical_exact_code_boost": 0.15,
         "lexical_model_boost": 0.12,
+        "metadata_narrowing_enabled": True,
+        "metadata_narrowing_brand_policy": "boost_if_not_unique",
+        "metadata_narrowing_category_policy": "hard_filter_product_manual",
+        "metadata_narrowing_min_candidates": 1,
     }
 
 

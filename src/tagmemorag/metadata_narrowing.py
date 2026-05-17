@@ -378,7 +378,7 @@ def _contains_normalized_term(normalized_query: str, normalized_term: str) -> bo
         return False
     if re.search(r"[\u4e00-\u9fff]", normalized_term):
         return normalized_term.replace("-", "") in normalized_query.replace("-", "")
-    return normalized_term in normalized_query
+    return re.search(rf"(^|-){re.escape(normalized_term)}($|-)", normalized_query) is not None
 
 
 def _has_value(value: object) -> bool:
