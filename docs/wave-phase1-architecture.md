@@ -645,3 +645,26 @@ python scripts/run_eval_ci.py \
 
 to get a clean exit code while the four stress-test suites print
 `[informational]` lines for ops dashboards.
+
+### Wave readiness — flag flips (2026-05-17)
+
+Empirical evaluation of the three default-false flags
+(`cross_domain_resonance_enabled`, `intrinsic_residuals_enabled`,
+`geodesic_rerank_enabled`) against the 4 strict siliconflow suites
+under Qwen3-VL-Embedding-8B (see
+`scripts/diag_wave_readiness_flags.py` and the archived
+`05-17-wave-readiness-flags` task):
+
+| Flag | Verdict | Evidence |
+|------|---------|----------|
+| `cross_domain_resonance_enabled` | KEEP_OFF | Zero delta across 4 suites × 4 metrics — algorithm wired correctly but no triggering query in this fixture set |
+| `intrinsic_residuals_enabled` | KEEP_OFF | Zero delta — wormhole gate / pyramid prior never see enough emergent tags in small fixture |
+| `geodesic_rerank_enabled` | KEEP_OFF | Mixed: +0.14 hit on product_manuals but -0.20 hit on tag_rerank_edge and -0.50 MRR on coffee.jsonl. Triggers D3 regression blocker |
+
+All three remain default false. The algorithms are kept wired up
+because: (1) implementation cost is sunk, (2) instrumentation +
+metrics + diag scripts remain useful for production data
+experiments, (3) the flags can be flipped per-deploy whenever a
+larger / more diverse KB makes the algorithm's intended pattern
+emerge. Flipping any flag is a one-line config override at deploy
+time, not a code change.
