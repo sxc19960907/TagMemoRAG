@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SUITE_DIR = REPO_ROOT / "tests" / "fixtures" / "eval"
 BASELINE_PATH = SUITE_DIR / "baselines" / "hashing.json"
 DEFAULT_DOCS_DIR = REPO_ROOT / "tests" / "fixtures" / "product_manuals"
+DEFAULT_EXCLUDED_SUITES = {"realmanuals.jsonl"}
 
 EMBEDDER_HASHING = "hashing"
 EMBEDDER_SILICONFLOW = "siliconflow"
@@ -80,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    suites = sorted(p for p in args.suite_dir.iterdir() if p.is_file() and p.suffix == ".jsonl")
+    suites = _iter_gated_suites(args.suite_dir)
     if not suites:
         print(f"no suites under {args.suite_dir}", file=sys.stderr)
         return 1
@@ -208,6 +209,22 @@ def _config_yaml(data_dir: Path, *, embedder: str = EMBEDDER_HASHING, geodesic: 
             "  geodesic_oversample_factor: 2.0\n"
         )
     return base
+
+
+def _iter_gated_suites(suite_dir: Path) -> list[Path]:
+    """Return suites covered by the baseline gate.
+
+    `realmanuals.jsonl` is an informational production-PDF diagnostic fixture:
+    it intentionally keeps placeholder ground truth and is evaluated by
+    `scripts/diag_realmanuals_eval.py`, not by the strict hashing baseline CI.
+    """
+    return sorted(
+        p
+        for p in suite_dir.iterdir()
+        if p.is_file()
+        and p.suffix == ".jsonl"
+        and p.name not in DEFAULT_EXCLUDED_SUITES
+    )
 
 
 if __name__ == "__main__":

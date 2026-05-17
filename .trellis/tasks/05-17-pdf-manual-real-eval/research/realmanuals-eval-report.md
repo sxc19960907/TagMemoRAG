@@ -50,6 +50,28 @@ incorrectly route to the **refrigerator** PDF (the largest in the set
 at 53k chars and most pages with English text — which Qwen-VL evidently
 favors).
 
+## Follow-up diagnostic — 4 config routing eval
+
+`scripts/diag_realmanuals_eval.py` now makes this failure mode reproducible
+without relying on the placeholder `realmanuals.jsonl` ground truth. It reads
+the query product tag (`washer` / `dryer` / `oven` / `refrigerator`) and
+measures whether retrieved chunks route to the intended category.
+
+Archived output: `research/realmanuals-diag.txt`.
+
+| Config | top1_category_hit | top3_category_hit | top5_category_hit | mrr_cat |
+|---|---:|---:|---:|---:|
+| vec-only | 0.667 | 0.917 | 0.917 | 0.778 |
+| wave-baseline | 0.667 | 0.917 | 0.917 | 0.778 |
+| wave-residuals | 0.667 | 0.917 | 0.917 | 0.778 |
+| wave-resonance | 0.667 | 0.917 | 0.917 | 0.778 |
+
+Delta `wave-baseline - vec-only` is `+0.000` on all four routing metrics.
+Residuals and resonance also add `+0.000` over wave-baseline. This confirms
+the initial report's claim in a repeatable script: on current PDF page chunks,
+the algorithm flags are effectively inert for the production-manual failure
+mode.
+
 ## What this means for "wave vs plain KNN" (the original reflection)
 
 The original PRD命题 was: "在客服 RAG 场景，浪潮算法（图传播）vs plain

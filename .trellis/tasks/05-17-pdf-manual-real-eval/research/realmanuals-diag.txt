@@ -1,0 +1,83 @@
+=== Real Manuals PDF Routing Diagnostic ===
+KB chunk_count: 527
+KB model: Qwen/Qwen3-VL-Embedding-8B (4096 dim)
+Top-K: 5
+Metrics: top1_category_hit / top3_category_hit / top5_category_hit / mean_reciprocal_category_rank
+
+--- Absolute metrics ---
+config                  top1      top3      top5     mrr_cat
+vec-only               0.667     0.917     0.917       0.778
+wave-baseline          0.667     0.917     0.917       0.778
+wave-residuals         0.667     0.917     0.917       0.778
+wave-resonance         0.667     0.917     0.917       0.778
+
+--- Delta: wave-baseline - vec-only ---
+top1_category_hit: +0.000
+top3_category_hit: +0.000
+top5_category_hit: +0.000
+mean_reciprocal_category_rank: +0.000
+
+--- Flag deltas vs wave-baseline ---
+wave-residuals
+  top1_category_hit: +0.000
+  top3_category_hit: +0.000
+  top5_category_hit: +0.000
+  mean_reciprocal_category_rank: +0.000
+wave-resonance
+  top1_category_hit: +0.000
+  top3_category_hit: +0.000
+  top5_category_hit: +0.000
+  mean_reciprocal_category_rank: +0.000
+
+--- Case top-1 routing ---
+case                          want                      vec-only       wave-baseline      wave-residuals      wave-resonance
+asko-washer-drain             washer           refrigerator/miss   refrigerator/miss   refrigerator/miss   refrigerator/miss
+asko-washer-detergent         washer                   washer/ok           washer/ok           washer/ok           washer/ok
+asko-washer-program           washer                   washer/ok           washer/ok           washer/ok           washer/ok
+asko-washer-child-safe        washer           refrigerator/miss   refrigerator/miss   refrigerator/miss   refrigerator/miss
+hisense-dryer-program-step    dryer            refrigerator/miss   refrigerator/miss   refrigerator/miss   refrigerator/miss
+hisense-dryer-not-dried       dryer                     dryer/ok            dryer/ok            dryer/ok            dryer/ok
+hisense-dryer-ionizer         dryer            refrigerator/miss   refrigerator/miss   refrigerator/miss   refrigerator/miss
+hisense-oven-cooking-system   oven                       oven/ok             oven/ok             oven/ok             oven/ok
+hisense-oven-steam-clean      oven                       oven/ok             oven/ok             oven/ok             oven/ok
+hisense-fridge-ice            refrigerator       refrigerator/ok     refrigerator/ok     refrigerator/ok     refrigerator/ok
+hisense-fridge-temp-display   refrigerator       refrigerator/ok     refrigerator/ok     refrigerator/ok     refrigerator/ok
+hisense-fridge-troubleshoot   refrigerator       refrigerator/ok     refrigerator/ok     refrigerator/ok     refrigerator/ok
+
+--- Case detail (wave-baseline) ---
+asko-washer-drain: want=washer rr=0.500
+  categories: refrigerator, washer, washer, washer, refrigerator
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf
+asko-washer-detergent: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+asko-washer-program: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+asko-washer-child-safe: want=washer rr=0.000
+  categories: refrigerator, refrigerator, refrigerator, refrigerator, oven
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, oven/HISENSE BSA5221.pdf
+hisense-dryer-program-step: want=dryer rr=0.500
+  categories: refrigerator, dryer, oven, dryer, dryer
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, dryer/HISENSE DHQE800BW2.pdf, oven/HISENSE BSA5221.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-dryer-not-dried: want=dryer rr=1.000
+  categories: dryer, refrigerator, refrigerator, dryer, dryer
+  sources: dryer/HISENSE DHGA901NL.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHQE800BW2.pdf
+hisense-dryer-ionizer: want=dryer rr=0.333
+  categories: refrigerator, refrigerator, dryer, dryer, dryer
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, dryer/HISENSE DHQE800BW2.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-oven-cooking-system: want=oven rr=1.000
+  categories: oven, oven, refrigerator, dryer, dryer
+  sources: oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-oven-steam-clean: want=oven rr=1.000
+  categories: oven, refrigerator, oven, dryer, dryer
+  sources: oven/HISENSE BSA5221.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, oven/HISENSE BSA5221.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-fridge-ice: want=refrigerator rr=1.000
+  categories: refrigerator, refrigerator, refrigerator, oven, refrigerator
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, oven/HISENSE BSA5221.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf
+hisense-fridge-temp-display: want=refrigerator rr=1.000
+  categories: refrigerator, refrigerator, refrigerator, oven, unknown
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, oven/HISENSE BSA5221.pdf, README.md
+hisense-fridge-troubleshoot: want=refrigerator rr=1.000
+  categories: refrigerator, refrigerator, refrigerator, refrigerator, unknown
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, README.md
