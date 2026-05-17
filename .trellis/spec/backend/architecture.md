@@ -480,6 +480,26 @@ A grep test enforces this rule: the validator script described in this task's `i
 
 **Why this matters.** A document that overstates its system blocks honest follow-up work. New contributors and AI agents read documents literally; "production-grade" gets quoted back at the team. By writing the document the way the system actually behaves today, we keep the next decision (what to build next, what to fix first) anchored in reality.
 
+## Known Architectural Gaps
+
+Following the C10 rule that gaps are named explicitly, the following are intentional, currently-accepted gaps. They are not bugs to be filed; they are decisions to defer. Each entry states what is missing, why deferral is acceptable today, and what would force the gap to be closed.
+
+### G1. Document-level ACL  📋
+
+**What is missing.** Authorization is enforced at the KB level: a caller either can read a KB or cannot. There is no per-document permission model. A `doc_acl` shape — `{tenant_id, owner, group_ids[], visibility}` — is not present in the domain model, not in Qdrant payload filters, not in graph node filters, and not in the asset serving authorization path.
+
+**Why deferral is acceptable today.** Current deployment is single-tenant. Every reader of a KB is authorized to read all documents in that KB. KB-level isolation is a sufficient permission boundary for this scope.
+
+**What would force closing the gap.** Any of:
+
+1. Multi-tenancy within a single KB (different teams sharing one KB but with restricted views).
+2. A connector (B8) whose remote system carries per-document ACLs that must be honored locally — the connector ACL adapter referenced in B8 then needs a local target shape to map onto, and that target is `doc_acl`.
+3. Compliance requirements that mandate per-document audit and access control (e.g. legal hold, regulated content).
+
+**Where it would land.** Domain model `Document` gains an `acl` field. Qdrant payload schema (governed by `index_schema_version` per A4) gains ACL fields, triggering a new generation. Graph node iteration in retrieval gains an ACL filter step. Asset serving (`/assets/{id}`) consults the same ACL.
+
+This entry exists so that the next reader knows the gap is known, the trigger conditions are defined, and the integration shape is sketched — even though no follow-up task is created today.
+
 ## Storage Backends
 
 The storage layer is split by data shape, each backed by a small adapter under `src/tagmemorag/storage/`. Adding a backend means adding a new adapter, not modifying retrieval/indexing code.
@@ -593,6 +613,7 @@ Comparison against the archived `production-rag-architecture/design.md`. This is
 | Vendor specifics (model ids, prices, rate limits) | Mixed into design body where mentioned | Appendix A only |
 | `/answer` streaming | Implied as a future detail | B6: explicit open question, deferred to task kickoff |
 | Connector ACL | Treated as one abstract surface | B8: connector-specific adapters; no single abstraction |
+| Document-level ACL | Implicit / mixed with KB-level isolation | G1: named explicit gap with defined trigger conditions for closing |
 | `production-grade` self-label | Used in body | C10: forbidden in body; replaced by explicit gap naming |
 | Eval | Listed as a Phase 3.5 capability | C9: cross-cutting principle backed by persisted QueryPlans + replay tool (T5) |
 | Storage backends | Mentioned per-component | Storage Backends section consolidates all adapters; SQLite added for QueryPlan |
