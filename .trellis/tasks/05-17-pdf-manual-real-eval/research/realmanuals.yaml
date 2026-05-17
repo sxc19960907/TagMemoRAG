@@ -1,0 +1,17 @@
+model:
+  provider: http
+  name: Qwen/Qwen3-VL-Embedding-8B
+  dim: 4096
+  base_url: https://api.siliconflow.cn/v1
+  api_key_env: SILICONFLOW_API_KEY
+  normalize: true
+  batch_size: 16
+
+storage:
+  data_dir: data
+
+manual_library:
+  registry_path: data/realmanuals/manual_registry.sqlite3
+
+wave_phase1:
+  spike_enabled: true

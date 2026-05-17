@@ -1,0 +1,12 @@
+{"id":"asko-washer-drain","kb_name":"realmanuals","query":"洗衣機排水馬達在哪裡","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["washer","fault"]}
+{"id":"asko-washer-detergent","kb_name":"realmanuals","query":"洗衣機洗劑粉盒怎麼用","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["washer","operation"]}
+{"id":"asko-washer-program","kb_name":"realmanuals","query":"洗衣機怎麼選擇洗程","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["washer","operation"]}
+{"id":"asko-washer-child-safe","kb_name":"realmanuals","query":"洗衣機兒童安全保護","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["washer","safety"]}
+{"id":"hisense-dryer-program-step","kb_name":"realmanuals","query":"How to choose drying program step by step","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["dryer","operation"]}
+{"id":"hisense-dryer-not-dried","kb_name":"realmanuals","query":"laundry not dried takes too long","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["dryer","fault"]}
+{"id":"hisense-dryer-ionizer","kb_name":"realmanuals","query":"dryer ionizer system","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["dryer","operation"]}
+{"id":"hisense-oven-cooking-system","kb_name":"realmanuals","query":"oven cooking system hot air bottom heater","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["oven","operation"]}
+{"id":"hisense-oven-steam-clean","kb_name":"realmanuals","query":"oven steam clean function","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["oven","maintenance"]}
+{"id":"hisense-fridge-ice","kb_name":"realmanuals","query":"refrigerator ice maker cubed crushed","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["refrigerator","operation"]}
+{"id":"hisense-fridge-temp-display","kb_name":"realmanuals","query":"refrigerator display controls temperature","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["refrigerator","operation"]}
+{"id":"hisense-fridge-troubleshoot","kb_name":"realmanuals","query":"refrigerator troubleshooting noise","relevant":[{"source_file":"placeholder","header":"","text_contains":["__PLACEHOLDER__"]}],"tags":["refrigerator","fault"]}
