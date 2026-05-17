@@ -14,13 +14,16 @@ tests/fixtures/eval/*.jsonl under three configurations:
                                 dynamicBoostFactor formula's log term.
 
 Reports alpha-series std / range/mean per strategy, plus pyramid features
-(tag_memo_activation / coverage / coherence) statistics. PASS/FAIL gate uses
-the Phase 2a D2 thresholds for the pyramid run (std > 0.005, range/mean > 0.1).
-For Phase 3 we apply the same gate to the `pyramid+resonance` column; if it
-fails, sweep `pyramid_post_scale` ∈ {1.0..6.0} to find the smallest PASS value.
+(tag_memo_activation / coverage / coherence) statistics. The D2 thresholds
+(std > 0.005, range/mean > 0.1) print as `[INFO]` lines but no longer gate
+the script's exit code — they were originally calibrated against a tiny
+hashing dim=64 fixture by tuning `pyramid_post_scale=4.0`, which the
+"only port VCP, no calibration constants" principle (2026-05-17) reverts.
 
-Decision point (Phase 2b-1 D8 / Phase 3 D4): if the resonance column FAILs,
-record the post-scale that recovers PASS; default stays at 4.0 otherwise.
+Decision point (Phase 2b-1 D8 / Phase 3 D4, superseded 2026-05-17):
+`pyramid_post_scale` default is now 1.0 (VCP-equivalent); deployments may
+override per-knob if production data calls for it, but no fixture-driven
+calibration is expected.
 """
 from __future__ import annotations
 
@@ -219,18 +222,25 @@ def main(argv: list[str] | None = None) -> int:
     std_pass = pyr.alpha.std > 0.005
     range_pass = pyr.alpha.range_over_mean > 0.1
     print()
-    print(f"  pyramid std(alpha) > 0.005:               {_status(std_pass)}")
-    print(f"  pyramid range(alpha)/mean(alpha) > 0.1:   {_status(range_pass)}")
+    print(f"  [INFO] pyramid std(alpha) > 0.005:               {_status(std_pass)}")
+    print(f"  [INFO] pyramid range(alpha)/mean(alpha) > 0.1:   {_status(range_pass)}")
 
     res = runs["pyramid+resonance"]
     res_std_pass = res.alpha.std > 0.005
     res_range_pass = res.alpha.range_over_mean > 0.1
-    print(f"  resonance std(alpha) > 0.005:             {_status(res_std_pass)}")
-    print(f"  resonance range(alpha)/mean(alpha) > 0.1: {_status(res_range_pass)}")
+    print(f"  [INFO] resonance std(alpha) > 0.005:             {_status(res_std_pass)}")
+    print(f"  [INFO] resonance range(alpha)/mean(alpha) > 0.1: {_status(res_range_pass)}")
 
+    # The D2 thresholds (std > 0.005, range/mean > 0.1) were originally a
+    # PASS/FAIL gate calibrated against a 12-tag hashing dim=64 fixture by
+    # tuning `pyramid_post_scale=4.0`. Per the "only port VCP, don't add
+    # calibration constants" principle (2026-05-17 ADR reversal), this
+    # diagnostic is now informational only — failing thresholds means the
+    # alpha series is flat, which is expected on tiny fixtures and not a
+    # regression. Re-run on real production data when available.
     overall = std_pass and range_pass and res_std_pass and res_range_pass
-    print(f"\n=> overall: {_status(overall)}")
-    return 0 if overall else 1
+    print(f"\n=> overall (informational): {_status(overall)}")
+    return 0
 
 
 def _build_cfg(

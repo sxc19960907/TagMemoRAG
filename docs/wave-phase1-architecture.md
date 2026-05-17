@@ -290,14 +290,13 @@ tag_memo_activation  = coverage * coherence * (1 - noise_signal)
 `resonance` is stubbed at 0 (Phase 0/1/2a/2b-1 do not implement
 `detectCrossDomainResonance`); `log(1 + 0) = 0` ⇒ that term degenerates to 1.0.
 
-`pyramid_post_scale = 4.0` is calibrated against the hashing dim=64 / 12-tag
-fixture so the alpha series passes D2 thresholds (`std > 0.005` and
-`range/mean > 0.1`). It is **decoupled** from `epa_logic_depth_scale = 2.0`
-because the two formulas have very different magnitudes:
-- `epa`: `max(floor, logicDepth * 2.0)` — directly amplifies logicDepth
-- `pyramid`: full formula × `tag_memo_activation`-driven activation (mean ~0.17
-  on the fixture) × post-scale; the activation factor compresses output, so a
-  larger post-scale is needed to hit the same alpha magnitude as `epa`.
+`pyramid_post_scale` defaults to `1.0` — VCP source `TagMemoEngine.js:88`
+has no post-scale, and the "only port VCP, no calibration constants"
+principle (2026-05-17) keeps the formula numerically equivalent to the
+source. The knob remains a `Field` so a deployment may override it if
+production data calls for it, but no fixture-driven tuning is built in.
+`epa_logic_depth_scale` similarly defaults to `1.0` (VCP-equivalent for
+the `epa` strategy path).
 
 ### Failure / degradation paths
 
@@ -482,9 +481,9 @@ dynamic = (logic_depth * (1 + resonance_term) / (1 + entropy * 0.5))
 Phase 2b-2 baseline; `cross_domain_resonance_enabled=false` keeps the
 formula numerically equivalent to Phase 2b-1, so flipping the toggle is a
 pure runtime choice. The `pyramid+resonance` column in
-`scripts/diag_pyramid_dynamic_boost.py` PASSes the D2 thresholds at the
-default `pyramid_post_scale=4.0`, so no recalibration was applied at
-implementation time.
+`scripts/diag_pyramid_dynamic_boost.py` is now `[INFO]`-only — its old
+PASS gate was a fixture-calibration crutch removed under the
+"only port VCP, no calibration constants" reversal (2026-05-17).
 
 **Future work:** Phase 3.5 trains real `tag_intrinsic_residuals` and feeds
 them into the ResidualPyramid as a prior; Phase 4 covers V8

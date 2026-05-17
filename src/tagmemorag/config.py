@@ -195,12 +195,12 @@ class WavePhase1Config(BaseModel):
     pyramid_use_handshake_features: bool = Field(default=True)
     activation_multiplier_min: float = Field(default=0.5, ge=0.0)
     activation_multiplier_max: float = Field(default=1.5, ge=0.0)
-    # D8: post-scale applied AFTER the full pyramid dynamicBoostFactor formula,
-    # decoupled from `epa_logic_depth_scale` (which is strategy="epa" only).
-    # Calibrated to 4.0 on hashing dim=64 / 12-tag fixture so the alpha series
-    # passes D2 thresholds (std > 0.005, range/mean > 0.1) — see
-    # scripts/diag_pyramid_dynamic_boost.py and PRD D8.
-    pyramid_post_scale: float = Field(default=4.0, ge=0.0)
+    # Post-scale applied AFTER the full pyramid dynamicBoostFactor formula.
+    # Default 1.0 keeps the formula numerically equivalent to VCP source
+    # (TagMemoEngine.js:88 has no post-scale; this knob exists only as an
+    # ops escape hatch for deployment-specific tuning, never as a fixture
+    # calibration handle).
+    pyramid_post_scale: float = Field(default=1.0, ge=0.0)
 
     # Phase 2b-2: external modulators (langPenalty + coreBoost). Defaults preserve
     # Phase 2b-1 behavior (lang_penalty_enabled=False ⇒ all helpers return 1.0).
