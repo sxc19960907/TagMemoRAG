@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from tagmemorag.retrieval import build_retrieve_response, retrieve_inspect_payload
+from tagmemorag.document_assets import AssetManifest, DocumentAsset
+from tagmemorag.retrieval import VisualEvidenceResolver, build_retrieve_response, detect_visual_intent, retrieve_inspect_payload
 from tagmemorag.types import Result
 
 
@@ -23,6 +24,25 @@ def _result(**metadata):
             **metadata,
         },
         manual_id="manual-1",
+    )
+
+
+def _asset(asset_id="asset:sha256:p12", *, kb_name="default", doc_id="doc-1", page_number=12, status="ready"):
+    return DocumentAsset(
+        asset_id=asset_id,
+        kb_name=kb_name,
+        doc_id=doc_id,
+        source_file="washer.pdf",
+        source_version="v1",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key="hidden/storage/key.png",
+        checksum="secret-checksum",
+        page_number=page_number,
+        width=100,
+        height=200,
+        status=status,
     )
 
 
@@ -52,11 +72,14 @@ def test_build_retrieve_response_shapes_text_evidence_and_context():
     assert evidence["chunk_id"] == "chunk-1"
     assert evidence["page_range"] == [12, 13]
     assert evidence["section_path"] == ["Maintenance", "Filter cleaning"]
+    assert evidence["assets"] == []
+    assert evidence["asset_warnings"] == []
     assert payload["citations"][0]["evidence_id"] == "ev_001"
     item = payload["context_pack"]["items"][0]
     assert item["context_item_id"] == "ctx_001"
     assert item["citation_id"] == "cit_001"
     assert item["evidence_refs"] == ["ev_001"]
+    assert item["asset_refs"] == []
 
 
 def test_build_retrieve_response_no_results_is_insufficient_evidence():
@@ -135,6 +158,100 @@ def test_retrieve_inspect_payload_is_safe_and_bounded():
                 "score": 0.82,
             }
         ],
+        "visual_evidence": {
+            "intent": "text_answer",
+            "attached_count": 0,
+            "evidence_with_assets": 0,
+            "omitted": {},
+        },
     }
     assert "content" not in str(inspect)
     assert "Open the service panel" not in str(inspect)
+
+
+def test_build_retrieve_response_attaches_page_snapshot_by_lineage():
+    manifest = AssetManifest(kb_name="default", assets={"asset:sha256:p12": _asset()})
+
+    payload = build_retrieve_response(
+        results=[_result()],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=100,
+        visual_resolver=VisualEvidenceResolver(kb_name="default", manifest=manifest),
+        query_text="show diagram",
+    )
+
+    asset = payload["evidence"][0]["assets"][0]
+    assert asset == {
+        "asset_id": "asset:sha256:p12",
+        "type": "page_snapshot",
+        "url": "/assets/asset%3Asha256%3Ap12?kb_name=default",
+        "mime_type": "image/png",
+        "page_number": 12,
+        "bbox": None,
+        "width": 100,
+        "height": 200,
+        "caption": "",
+        "alt_text": "Page 12 page snapshot for citation cit_001",
+        "source": {
+            "doc_id": "doc-1",
+            "source_file": "washer.pdf",
+            "page_range": [12, 12],
+        },
+    }
+    assert payload["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:p12"]
+    assert payload["visual_evidence"] == {
+        "intent": "visual_reference",
+        "manifest_present": True,
+        "attached_count": 1,
+        "evidence_with_assets": 1,
+        "omitted": {},
+    }
+    assert "storage_key" not in str(payload)
+    assert "secret-checksum" not in str(payload)
+
+
+def test_build_retrieve_response_attaches_explicit_asset_ref_and_filters_wrong_kb():
+    good = _asset("asset:sha256:good", page_number=99)
+    wrong_kb = _asset("asset:sha256:wrong", kb_name="other", page_number=12)
+    failed = _asset("asset:sha256:failed", status="failed", page_number=12)
+    manifest = AssetManifest(kb_name="default", assets={asset.asset_id: asset for asset in (good, wrong_kb, failed)})
+
+    payload = build_retrieve_response(
+        results=[_result(asset_refs=["asset:sha256:good", "asset:sha256:wrong", "asset:sha256:failed", "asset:sha256:missing"])],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_resolver=VisualEvidenceResolver(kb_name="default", manifest=manifest),
+    )
+
+    evidence = payload["evidence"][0]
+    assert [asset["asset_id"] for asset in evidence["assets"]] == ["asset:sha256:good"]
+    assert evidence["asset_warnings"] == ["asset_wrong_kb", "asset_status_failed", "asset_ref_missing"]
+
+
+def test_build_retrieve_response_missing_manifest_degrades_to_text_only():
+    payload = build_retrieve_response(
+        results=[_result()],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_resolver=VisualEvidenceResolver(kb_name="default", manifest=None),
+    )
+
+    assert payload["evidence"][0]["assets"] == []
+    assert payload["evidence"][0]["asset_warnings"] == ["asset_manifest_missing"]
+    assert payload["visual_evidence"]["omitted"] == {"asset_manifest_missing": 1}
+
+
+def test_detect_visual_intent_rules_are_non_ranking_metadata():
+    assert detect_visual_intent("给我看按钮在哪") == "visual_reference"
+    assert detect_visual_intent("Where is the reset button?") == "visual_reference"
+    assert detect_visual_intent("蒸汽很小怎么办") == "text_answer"

@@ -55,7 +55,7 @@ from .observability.metrics import configure_metrics, get_metrics, metrics_respo
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
-from .retrieval import DEFAULT_TOKEN_BUDGET, build_retrieve_response, retrieve_inspect_payload
+from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -876,6 +876,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
     search_time_ms = (time.perf_counter() - t0) * 1000.0
     trace_id = str(getattr(http_request.state, "trace_id", ""))
     search_id = _compute_search_id(request, state, trace_id)
+    asset_manifest = load_asset_manifest(state.kb_name, settings) if settings.assets.enabled else None
     payload = build_retrieve_response(
         results=execution.results,
         build_id=state.build_id,
@@ -885,6 +886,8 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
         retrieve_id=_compute_retrieve_id(request, state, trace_id),
         token_budget=request.token_budget,
         search_time_ms=search_time_ms,
+        visual_resolver=VisualEvidenceResolver(kb_name=state.kb_name, manifest=asset_manifest) if settings.assets.enabled else None,
+        query_text=request.question,
     )
     if search_debug_enabled(request.debug, settings):
         payload["debug"] = search_debug_payload(

@@ -69,8 +69,58 @@ def test_api_retrieve_returns_text_evidence_context_and_citations(tmp_path, test
     assert item["context_item_id"] == "ctx_001"
     assert item["citation_id"] == "cit_001"
     assert item["evidence_refs"] == ["ev_001"]
+    assert item["asset_refs"] == []
     assert body["answerability"]["answerable"] is True
     assert "debug" not in body
+
+
+def test_api_retrieve_attaches_visual_assets_from_manifest(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    chunk_metadata = dict(state.graph.nodes[0]["metadata"])
+    asset = DocumentAsset(
+        asset_id="asset:sha256:retrieve",
+        kb_name="default",
+        doc_id=str(chunk_metadata["doc_id"]),
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key="default/manual/page_snapshot/asset-sha256-retrieve.png",
+        checksum="hidden-checksum",
+        page_number=None,
+        width=640,
+        height=480,
+        status="ready",
+    )
+    chunk_metadata["asset_refs"] = [asset.asset_id]
+    state.graph.nodes[0]["metadata"] = chunk_metadata
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "给我看蒸汽按钮在哪", "top_k": 1, "debug": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    evidence = body["evidence"][0]
+    assert [item["asset_id"] for item in evidence["assets"]] == ["asset:sha256:retrieve"]
+    assert evidence["assets"][0]["url"] == "/assets/asset%3Asha256%3Aretrieve?kb_name=default"
+    assert body["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:retrieve"]
+    assert body["visual_evidence"]["intent"] == "visual_reference"
+    assert body["debug"]["retrieve_inspect"]["visual_evidence"]["attached_count"] == 1
+    serialized = str(body)
+    assert "storage_key" not in serialized
+    assert "hidden-checksum" not in serialized
 
 
 def test_api_retrieve_debug_includes_safe_inspect_payload(tmp_path, test_config, fake_embedder):
@@ -96,6 +146,7 @@ def test_api_retrieve_debug_includes_safe_inspect_payload(tmp_path, test_config,
     serialized = str(inspect)
     assert "蒸汽功能可以打奶泡" not in serialized
     assert "question" not in inspect
+    assert "storage_key" not in serialized
 
 
 def test_api_retrieve_context_budget_exhausted_is_explicit(tmp_path, test_config, fake_embedder):
@@ -185,6 +236,29 @@ def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_conf
         },
     }
     assert not {"trace_id", "search_id", "question", "candidate_ids"} & set(body["debug"])
+
+
+def test_api_search_shape_does_not_include_visual_evidence(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "evidence" not in body
+    assert "visual_evidence" not in body
 
 
 def test_api_search_config_debug_and_cache_shapes_do_not_cross(tmp_path, fake_embedder):
