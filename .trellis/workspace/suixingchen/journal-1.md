@@ -246,3 +246,36 @@ Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: wave-readiness-flags: 3 flag 全 KEEP_OFF 实证
+
+**Date**: 2026-05-17
+**Task**: wave-readiness-flags: 3 flag 全 KEEP_OFF 实证
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+实证评估 cross_domain_resonance / intrinsic_residuals / geodesic_rerank 三个 default-false flag 在 Qwen-VL × 4 strict siliconflow suite 下的翻开效果：resonance/residuals 全 0 delta（算法接通但小 fixture 不触发），geodesic 在 product_manuals +0.14 hit/recall 但 coffee/edge 严重退化（触发 D3 regression blocker -0.20）。3/3 KEEP_OFF。新增 scripts/diag_wave_readiness_flags.py 作为 future readiness 重测工具。算法接通价值：扩展点保留+metric instrumentation+小数据未触发但生产数据可重测。pytest 457 不漂。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab4c0f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
