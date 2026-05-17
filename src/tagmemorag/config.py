@@ -69,6 +69,15 @@ class StorageConfig(BaseModel):
     schema_version: str = "1"
 
 
+class AssetConfig(BaseModel):
+    enabled: bool = False
+    store_backend: Literal["local", "s3"] = "local"
+    root_dir: str = "data/document_assets"
+    pdf_page_snapshots_enabled: bool = False
+    extractor_version: str = "pdf_snapshot.v1"
+    strict_extraction: bool = False
+
+
 class VectorStoreConfig(BaseModel):
     provider: Literal["npz", "qdrant"] = "npz"
     qdrant_url: str = "http://localhost:6333"
@@ -291,6 +300,7 @@ class Settings(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    assets: AssetConfig = Field(default_factory=AssetConfig)
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

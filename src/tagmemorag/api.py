@@ -28,6 +28,7 @@ from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .cache.lru_ttl import LRUTTLCache
 from .config import Settings, load_config
+from .document_assets import create_asset_store, load_asset_manifest
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
@@ -1112,6 +1113,60 @@ def graph_info(
         "anchors_version": state.anchors_version,
         "meta": state.meta,
         "unresolved_anchors": [anchor.to_dict() for anchor in state.unresolved_anchors],
+    }
+
+
+@app.get("/assets/{asset_id}")
+def get_document_asset(
+    asset_id: str,
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    manifest = load_asset_manifest(kb_name, settings)
+    asset = manifest.assets.get(asset_id)
+    if asset is None or asset.status != "ready":
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Document asset not found.", {"asset_id": asset_id, "kb_name": kb_name})
+    if asset.kb_name != kb_name:
+        raise ServiceError(ErrorCode.FORBIDDEN, "Document asset belongs to a different KB.", {"asset_id": asset_id, "kb_name": kb_name})
+    store = create_asset_store(settings)
+    if asset.storage_backend != store.backend:
+        raise ServiceError(
+            ErrorCode.INVALID_CONFIG,
+            "Document asset backend does not match the configured asset store.",
+            {"asset_backend": asset.storage_backend, "configured_backend": store.backend},
+        )
+    content = store.get(asset.storage_key)
+    return Response(content=content, media_type=asset.mime_type, headers={"X-Document-Asset-Id": asset.asset_id})
+
+
+@app.get("/assets")
+def list_document_assets(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    manifest = load_asset_manifest(kb_name, settings)
+    return {
+        "kb_name": kb_name,
+        "schema_version": manifest.schema_version,
+        "assets": [
+            {
+                "asset_id": asset.asset_id,
+                "doc_id": asset.doc_id,
+                "source_file": asset.source_file,
+                "type": asset.type,
+                "status": asset.status,
+                "mime_type": asset.mime_type,
+                "page_number": asset.page_number,
+                "storage_backend": asset.storage_backend,
+                "failure_reason": asset.failure_reason,
+            }
+            for asset in sorted(manifest.assets.values(), key=lambda row: row.asset_id)
+        ],
+        "stats": manifest.to_dict()["stats"],
     }
 
 

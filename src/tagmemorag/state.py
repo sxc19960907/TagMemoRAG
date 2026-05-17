@@ -14,6 +14,16 @@ import structlog
 
 from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
+from .document_assets import (
+    AssetExtractionSummary,
+    AssetManifest,
+    asset_inventory_summary,
+    extract_document_assets,
+    load_asset_manifest,
+    remove_document_assets,
+    replace_document_assets,
+    save_asset_manifest,
+)
 from .document_metadata import manual_node_attrs
 from .embedder import create_embedder
 from .epa_basis import retrain_report
@@ -343,6 +353,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         )
         chunks = []
         manual_tags_by_id: dict[str, tuple[str, ...]] = {}
+        asset_manifest = load_asset_manifest(kb_name, cfg) if cfg.assets.enabled else AssetManifest(kb_name=kb_name)
+        asset_summary = AssetExtractionSummary()
         document_paths = (
             p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
         )
@@ -350,6 +362,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         for path in sorted(document_paths):
             metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
             if not is_active_status(metadata.status):
+                if cfg.assets.enabled:
+                    asset_manifest = remove_document_assets(asset_manifest, metadata.manual_id, mark_deleted=True)
                 continue
             manual_tags_by_id[metadata.manual_id] = metadata.tags
             chunks.extend(
@@ -364,6 +378,10 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                     pdf_heading_hints=cfg.parser.pdf_heading_hints,
                 )
             )
+            if cfg.assets.enabled:
+                document_assets, document_asset_summary = extract_document_assets(path, metadata, kb_name, cfg)
+                asset_manifest = replace_document_assets(asset_manifest, metadata.manual_id, document_assets)
+                asset_summary = _merge_asset_extraction_summary(asset_summary, document_asset_summary)
         texts = [chunk.text for chunk in chunks]
         emb_t0 = time.perf_counter()
         try:
@@ -412,6 +430,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             "tag_intrinsic_residual_rows": tag_report.tag_intrinsic_residual_rows,
             "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
         }
+        if cfg.assets.enabled:
+            meta["assets"] = asset_inventory_summary(asset_manifest, asset_summary)
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
         return GraphState(
@@ -421,6 +441,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             build_id=build_id,
             kb_name=kb_name,
             meta=meta,
+            asset_manifest=asset_manifest if cfg.assets.enabled else None,
             unresolved_anchors=unresolved,
             anchors_version=anchors_version,
         )
@@ -684,6 +705,8 @@ def save_kb(state: GraphState, cfg: Settings) -> None:
     else:
         vector_store.add(ids, state.vectors)
     JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
+    if cfg.assets.enabled and state.asset_manifest is not None:
+        save_asset_manifest(state.asset_manifest, cfg)
     _save_meta(root, state.meta)
 
 
@@ -731,6 +754,19 @@ def _kb_dir(kb_name: str, cfg: Settings) -> Path:
 
 def _anchor_store(kb_name: str, cfg: Settings) -> JsonAnchorStore:
     return JsonAnchorStore(_kb_dir(kb_name, cfg) / "anchors.json")
+
+
+def _merge_asset_extraction_summary(left: AssetExtractionSummary, right: AssetExtractionSummary) -> AssetExtractionSummary:
+    reasons = dict(left.failure_reasons)
+    for reason, count in right.failure_reasons.items():
+        reasons[reason] = reasons.get(reason, 0) + int(count)
+    return AssetExtractionSummary(
+        attempted=left.attempted + right.attempted,
+        created=left.created + right.created,
+        skipped=left.skipped + right.skipped,
+        failed=left.failed + right.failed,
+        failure_reasons=reasons,
+    )
 
 
 def _vector_store(kb_name: str, cfg: Settings, *, dim: int):

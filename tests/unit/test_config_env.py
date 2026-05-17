@@ -87,6 +87,20 @@ def test_m4_observability_env_overrides(tmp_path, monkeypatch):
     assert cfg.observability.tracing.sample_ratio == 0.25
 
 
+def test_assets_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__ASSETS__ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__ASSETS__PDF_PAGE_SNAPSHOTS_ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__ASSETS__ROOT_DIR", str(tmp_path / "asset-store"))
+    monkeypatch.setenv("TAGMEMORAG__ASSETS__EXTRACTOR_VERSION", "pdf_snapshot.test")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.assets.enabled is True
+    assert cfg.assets.pdf_page_snapshots_enabled is True
+    assert cfg.assets.root_dir == str(tmp_path / "asset-store")
+    assert cfg.assets.extractor_version == "pdf_snapshot.test"
+
+
 def test_vector_store_env_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv("TAGMEMORAG__VECTOR_STORE__PROVIDER", "qdrant")
     monkeypatch.setenv("TAGMEMORAG__VECTOR_STORE__QDRANT_URL", "http://qdrant:6333")

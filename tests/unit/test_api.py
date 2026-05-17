@@ -3,8 +3,10 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
+from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.cache.lru_ttl import LRUTTLCache
-from tagmemorag.config import CacheConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.document_assets import AssetManifest, DocumentAsset, LocalDocumentAssetStore, save_asset_manifest
 from tagmemorag.state import AppState, build_kb, save_kb
 from tagmemorag.types import Anchor
 from tests.unit.test_storage_state import FakeQdrantClient
@@ -343,6 +345,92 @@ def test_api_manuals_lists_metadata_facets(tmp_path, test_config, fake_embedder)
     assert body["facets"]["brand"] == ["Gorenje"]
     assert body["facets"]["product_category"] == ["fridge"]
     assert body["facets"]["tags"] == ["maintenance", "temperature-setting"]
+
+
+def test_api_asset_endpoint_serves_ready_asset_with_kb_auth(tmp_path, fake_embedder):
+    secret = "tmr_live_asset"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(
+                    id="searcher",
+                    hash=ConfigAuthStore.hash_plaintext(secret),
+                    kb_allowlist=["default"],
+                    scopes=["search"],
+                )
+            ],
+        ),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    store = LocalDocumentAssetStore(cfg.assets.root_dir)
+    ref = store.put("default", "manual", "page_snapshot", "asset:sha256:test", b"png", "image/png")
+    asset = DocumentAsset(
+        asset_id="asset:sha256:test",
+        kb_name="default",
+        doc_id="manual",
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key=ref.storage_key,
+        checksum=ref.checksum,
+        size_bytes=ref.size_bytes,
+        status="ready",
+    )
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    app_state = AppState(state)
+    app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    api.app_state = app_state
+    client = TestClient(api.app)
+
+    response = client.get("/assets/asset:sha256:test?kb_name=default", headers={"Authorization": f"Bearer {secret}"})
+
+    assert response.status_code == 200
+    assert response.content == b"png"
+    assert response.headers["x-document-asset-id"] == "asset:sha256:test"
+
+
+def test_api_asset_endpoint_rejects_wrong_kb_allowlist(tmp_path, fake_embedder):
+    secret = "tmr_live_asset"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(
+                    id="searcher",
+                    hash=ConfigAuthStore.hash_plaintext(secret),
+                    kb_allowlist=["other"],
+                    scopes=["search"],
+                )
+            ],
+        ),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    app_state = AppState(state)
+    app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    api.app_state = app_state
+    client = TestClient(api.app)
+
+    response = client.get("/assets/asset:sha256:test?kb_name=default", headers={"Authorization": f"Bearer {secret}"})
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
 
 
 def test_api_anchor_add_invalid_node_returns_400(tmp_path, test_config, fake_embedder):
