@@ -279,3 +279,36 @@ Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 回归 VCP 原则：移除 pyramid_post_scale=4.0 等过拟合常数
+
+**Date**: 2026-05-17
+**Task**: 回归 VCP 原则：移除 pyramid_post_scale=4.0 等过拟合常数
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+按用户提醒'只移植 VCP 不引入其他东西'的原则，把 Phase 2b-1 D8 加的 pyramid_post_scale 默认 4.0→1.0 回归 VCP 源端等价（VCP TagMemoEngine.js:88 公式无 post_scale）。diag_pyramid_dynamic_boost.py 的 D2 PASS gate 改为 informational only。Ironic 发现：post_scale=1.0 仍然通过 4 个 INFO 阈值，说明 4.0 当年是过度 calibration 而非必要。default strategy='constant' 不走 pyramid path，所以双 baseline 重 capture 全 0 delta（fixture-side stable）。pytest 457/2 不漂；hashing CI 8/8 strict 绿；siliconflow CI 8/8 整体绿。Reverses Phase 2b-1 D8 + Phase 2a/3 的 D2 PASS gating。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7ca24fc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

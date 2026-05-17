@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-05-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~281 | Active |
+| `journal-1.md` | ~314 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-05-17 | 回归 VCP 原则：移除 pyramid_post_scale=4.0 等过拟合常数 | `7ca24fc` | `feat/wave-phase1-cooccurrence-spike` |
 | 7 | 2026-05-17 | wave-readiness-flags: 3 flag 全 KEEP_OFF 实证 | `ab4c0f8` | `feat/wave-phase1-cooccurrence-spike` |
 | 6 | 2026-05-17 | fixture-rewrite Phase B: stress-test 分类 + informational gating | `58bceb5` | `feat/wave-phase1-cooccurrence-spike` |
 | 5 | 2026-05-17 | fixture-rewrite Phase A: coffee.jsonl + 阈值清理 | `24adb2e` | `feat/wave-phase1-cooccurrence-spike` |
