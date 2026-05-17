@@ -1,6 +1,6 @@
 model:
   provider: http
-  name: Qwen/Qwen3-VL-Embedding-8B
+  name: Qwen/Qwen3-Embedding-8B
   dim: 4096
   base_url: https://api.siliconflow.cn/v1
   api_key_env: SILICONFLOW_API_KEY

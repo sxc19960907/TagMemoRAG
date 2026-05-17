@@ -64,6 +64,16 @@ def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_conf
         "aggregate": test_config.search.aggregate,
         "eligible_node_count": state.graph.number_of_nodes(),
         "legacy_tag_boost_disabled": False,
+        "metadata_narrowing": {
+            "enabled": True,
+            "mode": "none",
+            "detected": [],
+            "hard_filters": {},
+            "boost_filters": {},
+            "before_count": state.graph.number_of_nodes(),
+            "after_count": None,
+            "fallback_reason": "",
+        },
     }
     assert not {"trace_id", "search_id", "question", "candidate_ids"} & set(body["debug"])
 
@@ -156,6 +166,37 @@ def test_api_search_filters_by_manual_metadata(tmp_path, test_config, fake_embed
     no_match = client.post("/search", json={"question": "温度", "filters": {"product_model": "missing"}})
     assert no_match.status_code == 200
     assert no_match.json()["results"] == []
+
+
+def test_api_search_auto_narrows_by_model_metadata(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    (docs / "fridge").mkdir(parents=True)
+    (docs / "coffee").mkdir()
+    (docs / "fridge" / "manual.md").write_text("# 温度\n冷藏室温度可以调节。\n", encoding="utf-8")
+    (docs / "fridge" / "manual.metadata.json").write_text(
+        '{"manual_id":"fridge-manual","title":"Fridge Manual","source_file":"fridge/manual.md","brand":"Gorenje","product_category":"fridge","product_model":"NRK6192","language":"zh-CN","tags":["temperature-setting"]}',
+        encoding="utf-8",
+    )
+    (docs / "coffee" / "manual.md").write_text("# 温度\n咖啡温度和蒸汽设置。\n", encoding="utf-8")
+    (docs / "coffee" / "manual.metadata.json").write_text(
+        '{"manual_id":"coffee-manual","title":"Coffee Manual","source_file":"coffee/manual.md","brand":"Acme","product_category":"coffee","product_model":"CM1","language":"zh-CN","tags":["maintenance"]}',
+        encoding="utf-8",
+    )
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "NRK6192 温度怎么调", "top_k": 5, "debug": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"]
+    assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+    assert body["debug"]["metadata_narrowing"]["mode"] == "hard_filter"
+    assert body["debug"]["metadata_narrowing"]["hard_filters"] == {"product_model": "NRK6192"}
+    assert body["debug"]["metadata_narrowing"]["after_count"] == 1
 
 
 def test_api_manuals_lists_metadata_facets(tmp_path, test_config, fake_embedder):

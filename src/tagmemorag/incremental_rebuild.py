@@ -9,6 +9,7 @@ import numpy as np
 
 from .chunk_identity import ChunkIdentityMap, entry_from_chunk, entry_from_node, load_chunk_identity
 from .config import Settings
+from .document_metadata import manual_node_attrs
 from .errors import RebuildFailedError
 from .epa_basis import retrain_report
 from .graph_builder import build_graph
@@ -308,7 +309,7 @@ def _build_plan(
             cfg.parser.max_chars,
             cfg.parser.min_chars,
             root_dir=docs_root,
-            metadata=metadata.to_node_attrs(),
+            metadata=manual_node_attrs(metadata),
         ):
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)

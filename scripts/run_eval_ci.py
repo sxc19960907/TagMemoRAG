@@ -188,7 +188,7 @@ def _config_yaml(data_dir: Path, *, embedder: str = EMBEDDER_HASHING, geodesic: 
         base = (
             "model:\n"
             "  provider: http\n"
-            "  name: Qwen/Qwen3-VL-Embedding-8B\n"
+            "  name: Qwen/Qwen3-Embedding-8B\n"
             "  dim: 4096\n"
             "  base_url: https://api.siliconflow.cn/v1\n"
             "  api_key_env: SILICONFLOW_API_KEY\n"

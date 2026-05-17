@@ -14,6 +14,7 @@ import structlog
 
 from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
+from .document_metadata import manual_node_attrs
 from .embedder import create_embedder
 from .epa_basis import retrain_report
 from .errors import ErrorCode, KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ServiceError, ShuttingDownError, StorageSchemaMismatchError
@@ -357,7 +358,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                     cfg.parser.max_chars,
                     cfg.parser.min_chars,
                     root_dir=docs_root,
-                    metadata=metadata.to_node_attrs(),
+                    metadata=manual_node_attrs(metadata),
                 )
             )
         texts = [chunk.text for chunk in chunks]
@@ -626,7 +627,7 @@ def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, ma
         metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
         if not is_active_status(metadata.status):
             continue
-        total += len(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root, metadata=metadata.to_node_attrs()))
+        total += len(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root, metadata=manual_node_attrs(metadata)))
     return total
 
 

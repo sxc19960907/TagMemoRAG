@@ -31,7 +31,7 @@ from .config import Settings, load_config
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
-from .manuals import metadata_from_node
+from .manuals import metadata_from_node, public_tags_from_metadata
 from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import (
     build_dirty_state_report,
@@ -49,6 +49,7 @@ from .manual_library import (
     verify_registry_blobs,
 )
 from .manual_registry import create_registry
+from .metadata_narrowing import NarrowingDecision, infer_metadata_narrowing, merge_inferred_filters
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
@@ -430,7 +431,7 @@ def _spotlight_cache_suffix(request: SearchRequest) -> str:
 
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
-    filter_dict = _governed_filter_dict(request.kb_name, request.filters)
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
@@ -456,7 +457,8 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
 
 def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
     params = _search_param_values(request)
-    canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
     spotlight_suffix = _spotlight_cache_suffix(request)
@@ -693,7 +695,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict = _governed_filter_dict(request.kb_name, request.filters)
+        filter_dict, narrowing = _resolved_filter_dict(request, state)
         ghost_tag_args = tuple(
             GhostTag(
                 name=str(g.name),
@@ -714,6 +716,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=aggregate,
             filters=filter_dict,
+            boost_filters=narrowing.boost_filters,
             core_tags=tuple(request.core_tags),
             ghost_tags=ghost_tag_args,
         )
@@ -763,6 +766,9 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             execution,
             params,
             ann_enabled=search_ann_enabled(state, settings),
+        )
+        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+            enabled=settings.search.metadata_narrowing_enabled
         )
     if cache is not None:
         cache.set(
@@ -984,7 +990,7 @@ def list_manuals(
                 "product_model": str(metadata.get("product_model", "")),
                 "language": str(metadata.get("language", "")),
                 "version": str(metadata.get("version", "")),
-                "tags": list(metadata.get("tags", [])) if isinstance(metadata.get("tags", []), list) else [],
+                "tags": public_tags_from_metadata(metadata),
                 "chunk_count": 0,
             },
         )
@@ -993,9 +999,7 @@ def list_manuals(
             value = str(metadata.get(field, "")).strip()
             if value:
                 facets[field].add(value)
-        tags = metadata.get("tags", [])
-        if isinstance(tags, list):
-            facets["tags"].update(str(tag) for tag in tags if str(tag).strip())
+        facets["tags"].update(tag for tag in public_tags_from_metadata(metadata) if tag.strip())
     return {
         "kb_name": state.kb_name,
         "build_id": state.build_id,
@@ -1515,6 +1519,20 @@ def _governed_filter_dict(kb_name: str, filters: SearchFilters | None) -> dict[s
         policy = load_tag_policy(kb_name, settings)
         filter_dict["tags"] = resolve_tags_for_search([str(tag) for tag in tags], policy)
     return filter_dict
+
+
+def _resolved_filter_dict(request: SearchRequest, state: GraphState) -> tuple[dict[str, object], NarrowingDecision]:
+    explicit_filters = _governed_filter_dict(request.kb_name, request.filters)
+    narrowing = infer_metadata_narrowing(
+        query_text=request.question,
+        graph=state.graph,
+        explicit_filters=explicit_filters,
+        enabled=settings.search.metadata_narrowing_enabled,
+        category_policy=settings.search.metadata_narrowing_category_policy,
+        brand_policy=settings.search.metadata_narrowing_brand_policy,
+        min_candidates=settings.search.metadata_narrowing_min_candidates,
+    )
+    return merge_inferred_filters(explicit_filters, narrowing), narrowing
 
 
 async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:

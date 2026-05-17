@@ -159,7 +159,7 @@ def ensure_unique_manual_id(manual_id: str, seen_manual_ids: set[str], source_fi
 
 def normalize_tag(value: str) -> str:
     normalized = re.sub(r"[\s_]+", "-", value.strip().lower())
-    normalized = re.sub(r"[^a-z0-9-]+", "-", normalized)
+    normalized = re.sub(r"[^a-z0-9:-]+", "-", normalized)
     return re.sub(r"-+", "-", normalized).strip("-")
 
 
@@ -178,9 +178,6 @@ def metadata_from_node(node: dict[str, Any]) -> dict[str, Any]:
 
 
 def manual_result_fields(metadata: dict[str, Any]) -> dict[str, Any]:
-    tags = metadata.get("tags", [])
-    if not isinstance(tags, list):
-        tags = []
     return {
         "manual_id": str(metadata.get("manual_id", "")),
         "manual_title": str(metadata.get("title", "")),
@@ -189,8 +186,15 @@ def manual_result_fields(metadata: dict[str, Any]) -> dict[str, Any]:
         "product_model": str(metadata.get("product_model", "")),
         "language": str(metadata.get("language", "")),
         "version": str(metadata.get("version", "")),
-        "tags": [str(tag) for tag in tags],
+        "tags": public_tags_from_metadata(metadata),
     }
+
+
+def public_tags_from_metadata(metadata: dict[str, Any]) -> list[str]:
+    tags = metadata.get("public_tags", metadata.get("tags", []))
+    if not isinstance(tags, list):
+        return []
+    return [str(tag) for tag in tags]
 
 
 def _relative_source_file(source_path: Path, docs_root: Path) -> str:

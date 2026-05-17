@@ -23,6 +23,7 @@ def wave_search(
     aggregate: Literal["max", "sum"] = "max",
     eligible_node_ids: set[int] | None = None,
     filters: Mapping[str, Any] | None = None,
+    boost_filters: Mapping[str, Any] | None = None,
     metadata_field_boost: float = 0.0,
     tag_boost: float = 0.0,
     lexical_scores: Mapping[int, float] | None = None,
@@ -94,13 +95,14 @@ def wave_search(
         current_wave = next_wave
 
     normalized_filters = normalize_filters(filters)
+    normalized_boost_filters = {**normalized_filters, **normalize_filters(boost_filters)}
     effective_tag_boost = 0.0 if disable_legacy_tag_boost else tag_boost
     boosted = {
         node_id: _apply_lexical_boost(
             _apply_metadata_boost(
                 score,
                 metadata_from_node(graph.nodes[node_id]),
-                normalized_filters,
+                normalized_boost_filters,
                 metadata_field_boost=metadata_field_boost,
                 tag_boost=effective_tag_boost,
             ),

@@ -42,6 +42,7 @@ Manual metadata can live next to each source file as `<manual>.metadata.json`:
 ```
 
 If no sidecar exists, TagMemoRAG creates fallback metadata from the relative path, filename, parent directory, and `language="unknown"`.
+During build, manual metadata is also mirrored into a generic document contract (`doc_id`, `domain`, `doc_type`, `attributes`) plus internal identity tags such as `brand:gorenje`, `model:nrk6192`, `category:fridge`, `doc:gorenje-nrk6192-zh-cn-v1`, and `manual:gorenje-nrk6192-zh-cn-v1`. These internal tags help retrieval narrow or boost by document identity; `/manuals` and search results continue to expose only the original user-facing metadata tags.
 
 ### 2. Search from CLI
 
@@ -50,6 +51,7 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 ```
 
 Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
+When a query contains a known exact model, category alias, or brand, search can infer metadata narrowing before ranking. For example, `NRK6192 温度怎么调` hard-filters to chunks from the matching model when that model exists in the loaded KB. Explicit CLI/API filters always win over inferred filters, and empty inferred candidate sets fall back safely.
 
 Filtered search narrows retrieval before WAVE propagation:
 
@@ -99,6 +101,7 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 Response includes `build_id`, `search_time_ms`, and a `results` array. Each result has the existing `node_id / score / text / header / path / source_file / anchor_key` fields plus manual metadata such as `manual_id`, `manual_title`, `brand`, `product_category`, `product_model`, `language`, `version`, and `tags`.
 The response also includes `cache: "hit" | "miss"`.
 Set request `debug: true` or `search.debug_metadata_enabled=true` to include a `debug` object with search strategy, ANN candidate/fallback details, lexical candidate/source counts, and effective search parameters. Diagnostics intentionally omit raw query text, extracted tokens, document text, vectors, trace/search ids, and candidate id lists.
+Debug output also includes `debug.metadata_narrowing`, which reports detected metadata entities, inferred hard filters, soft boost filters, before/after candidate counts, and fallback reason. This is intended for operator routing diagnostics, not as a user-facing explanation.
 
 ### `POST /rebuild`
 
@@ -621,6 +624,10 @@ search:
   lexical_boost: 0.2
   lexical_exact_code_boost: 0.15
   lexical_model_boost: 0.12
+  metadata_narrowing_enabled: true
+  metadata_narrowing_brand_policy: boost_if_not_unique      # boost_if_not_unique | hard_filter | boost
+  metadata_narrowing_category_policy: hard_filter_product_manual # hard_filter_product_manual | hard_filter | boost
+  metadata_narrowing_min_candidates: 1
   debug_metadata_enabled: false
   ann_preselect_enabled: false
   ann_candidate_k: 64
@@ -796,6 +803,8 @@ Troubleshooting guide:
 
 TagMemoRAG also adds a lightweight local lexical signal before WAVE-RAG ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
 
+Metadata narrowing runs just before filtering and ranking. It builds a local index from loaded graph metadata, detects high-confidence product-manual identity signals, and resolves them into hard filters or boost-only filters according to config. Exact model matches hard-filter by default, category aliases such as `冰箱`/`refrigerator` hard-filter in product-manual KBs, and brand-only matches boost unless the KB contains a single brand or policy says otherwise. Disable with `search.metadata_narrowing_enabled=false` for A/B checks or broad exploratory retrieval.
+
 Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
 
 The ANN path is intentionally conservative:
@@ -818,7 +827,7 @@ model:
   provider: http
   base_url: https://api.siliconflow.cn/v1
   api_key_env: SILICONFLOW_API_KEY
-  name: Qwen/Qwen3-VL-Embedding-8B
+  name: Qwen/Qwen3-Embedding-8B
   dim: 4096
   dimensions: 4096
   batch_size: 32
@@ -1006,7 +1015,7 @@ uv run python scripts/build_eval_baseline.py \
   --output tests/fixtures/eval/baselines/hashing.json
 ```
 
-For a SiliconFlow run with the production target model (`Qwen/Qwen3-VL-Embedding-8B`, 4096 dim), set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The script wraps `build_eval_baseline.py --embedder siliconflow` (with smoke test, exponential-backoff retry, and atomic write). To diff against hashing in one shot, append `--compare-with tests/fixtures/eval/baselines/hashing.json`:
+For a SiliconFlow run with the production target model (`Qwen/Qwen3-Embedding-8B`, 4096 dim), set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The script wraps `build_eval_baseline.py --embedder siliconflow` (with smoke test, exponential-backoff retry, and atomic write). To diff against hashing in one shot, append `--compare-with tests/fixtures/eval/baselines/hashing.json`:
 
 ```bash
 uv run python scripts/build_eval_baseline.py \

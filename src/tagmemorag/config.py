@@ -50,6 +50,10 @@ class SearchConfig(BaseModel):
     lexical_boost: float = 0.2
     lexical_exact_code_boost: float = 0.15
     lexical_model_boost: float = 0.12
+    metadata_narrowing_enabled: bool = True
+    metadata_narrowing_brand_policy: Literal["boost_if_not_unique", "hard_filter", "boost"] = "boost_if_not_unique"
+    metadata_narrowing_category_policy: Literal["hard_filter_product_manual", "hard_filter", "boost"] = "hard_filter_product_manual"
+    metadata_narrowing_min_candidates: int = Field(default=1, ge=1)
 
 
 class ParserConfig(BaseModel):

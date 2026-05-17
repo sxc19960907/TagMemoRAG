@@ -461,7 +461,13 @@ def test_build_save_load_kb(tmp_path, test_config, fake_embedder):
     assert loaded.graph.number_of_nodes() == state.graph.number_of_nodes()
     assert loaded.vectors.shape == state.vectors.shape
     assert loaded.graph.nodes[0]["manual_id"] == "coffee-manual"
-    assert loaded.graph.nodes[0]["metadata"]["tags"] == ["steam"]
+    assert loaded.graph.nodes[0]["metadata"]["public_tags"] == ["steam"]
+    assert loaded.graph.nodes[0]["metadata"]["tags"] == [
+        "steam",
+        "doc:coffee-manual",
+        "manual:coffee-manual",
+        "category:coffee",
+    ]
     meta = json.loads((tmp_path / "data" / "default" / "meta.json").read_text())
     assert meta["schema_version"] == "1"
 

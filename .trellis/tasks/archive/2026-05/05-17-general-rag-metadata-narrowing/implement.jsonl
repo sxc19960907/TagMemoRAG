@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/prd.md","reason":"Product requirements and scope for generic metadata + query-time narrowing."}
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/design.md","reason":"Technical design, contracts, data flow, compatibility, and rollout plan."}
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/implement.md","reason":"Ordered implementation checklist, validation commands, and review gates."}
+{"file":".trellis/tasks/archive/2026-05/05-17-pdf-manual-real-eval/research/realmanuals-eval-report.md","reason":"Empirical motivation: real PDF manual retrieval suffers from cross-product contamination and inert algorithm flags."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend quality rules for config, testing, HTTP embedder, and safe debug/log behavior."}

@@ -8,9 +8,9 @@ category.
 
 Usage:
   python scripts/diag_realmanuals_eval.py \
-      --config .trellis/tasks/05-17-pdf-manual-real-eval/research/realmanuals.yaml \
+      --config .trellis/tasks/archive/2026-05/05-17-pdf-manual-real-eval/research/realmanuals.yaml \
       --reuse-built-kb \
-      --output .trellis/tasks/05-17-pdf-manual-real-eval/research/realmanuals-diag.txt
+      --output .trellis/tasks/archive/2026-05/05-17-pdf-manual-real-eval/research/realmanuals-diag.txt
 """
 from __future__ import annotations
 
@@ -40,7 +40,16 @@ from tagmemorag.search_runtime import execute_search  # noqa: E402
 from tagmemorag.state import build_kb, load_kb, save_kb  # noqa: E402
 from tagmemorag.types import GraphState, Result  # noqa: E402
 
-DEFAULT_CONFIG = REPO_ROOT / ".trellis" / "tasks" / "05-17-pdf-manual-real-eval" / "research" / "realmanuals.yaml"
+DEFAULT_CONFIG = (
+    REPO_ROOT
+    / ".trellis"
+    / "tasks"
+    / "archive"
+    / "2026-05"
+    / "05-17-pdf-manual-real-eval"
+    / "research"
+    / "realmanuals.yaml"
+)
 DEFAULT_SUITE = REPO_ROOT / "tests" / "fixtures" / "eval" / "realmanuals.jsonl"
 DEFAULT_DOCS = REPO_ROOT / "product_manuals"
 PRODUCT_TAGS = {"washer", "dryer", "oven", "refrigerator", "dishwasher", "air_conditioner", "coffee"}

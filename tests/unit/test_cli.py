@@ -145,6 +145,63 @@ storage:
     assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
 
 
+def test_cli_search_auto_narrows_by_model_metadata(tmp_path):
+    docs = tmp_path / "docs"
+    (docs / "fridge").mkdir(parents=True)
+    (docs / "coffee").mkdir()
+    (docs / "fridge" / "manual.md").write_text("# 温度\n冷藏室温度可以调节。\n", encoding="utf-8")
+    (docs / "fridge" / "manual.metadata.json").write_text(
+        '{"manual_id":"fridge-manual","title":"Fridge Manual","source_file":"fridge/manual.md","brand":"Gorenje","product_category":"fridge","product_model":"NRK6192","language":"zh-CN","tags":["temperature-setting"]}',
+        encoding="utf-8",
+    )
+    (docs / "coffee" / "manual.md").write_text("# 温度\n咖啡温度和蒸汽设置。\n", encoding="utf-8")
+    (docs / "coffee" / "manual.metadata.json").write_text(
+        '{"manual_id":"coffee-manual","title":"Coffee Manual","source_file":"coffee/manual.md","brand":"Acme","product_category":"coffee","product_model":"CM1","language":"zh-CN","tags":["maintenance"]}',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+""",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "build", "--docs", str(docs), "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    search = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "search",
+            "NRK6192 温度怎么调",
+            "--config",
+            str(config),
+            "--top-k",
+            "5",
+            "--debug-search",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    body = json.loads(search.stdout)
+    assert body["results"]
+    assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+    assert body["debug"]["metadata_narrowing"]["hard_filters"] == {"product_model": "NRK6192"}
+
+
 def test_cli_search_debug_outputs_operator_metadata(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -195,6 +252,7 @@ storage:
     assert "lexical_candidate_count" in body["debug"]
     assert "lexical_source_count" in body["debug"]
     assert body["debug"]["lexical_profile"] == "source_boost"
+    assert body["debug"]["metadata_narrowing"]["mode"] == "none"
 
 
 def test_cli_search_with_ann_preselection_qdrant(tmp_path):

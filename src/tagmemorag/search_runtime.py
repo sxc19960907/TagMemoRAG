@@ -43,6 +43,7 @@ def execute_search(
     amplitude_cutoff: float,
     aggregate: str,
     filters: Mapping[str, Any] | None = None,
+    boost_filters: Mapping[str, Any] | None = None,
     query_text: str = "",
     core_tags: Sequence[str] = (),
     ghost_tags: Sequence[GhostTag] = (),
@@ -118,6 +119,7 @@ def execute_search(
         aggregate=aggregate,  # type: ignore[arg-type]
         eligible_node_ids=eligible_node_ids,
         filters=filter_dict,
+        boost_filters=boost_filters,
         metadata_field_boost=settings.search.metadata_field_boost,
         tag_boost=settings.search.tag_boost,
         lexical_scores=lexical_scores,

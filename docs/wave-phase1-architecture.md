@@ -576,7 +576,7 @@ Two baseline files live under `tests/fixtures/eval/baselines/`:
 | File | Embedder | Role | CI consumed by default? |
 |------|----------|------|--------------------------|
 | `hashing.json` | hashing 64-dim | Quality gate — `run_eval_ci.py` default | Yes (always) |
-| `siliconflow.json` | Qwen3-VL-Embedding-8B 4096-dim | Informational reference for readiness work | No |
+| `siliconflow.json` | Qwen3-Embedding-8B 4096-dim | Informational reference for readiness work | No |
 
 `hashing.json` is the byte-stable PR gate (offline, fast, deterministic). It
 is what every commit on this branch exercises through GitHub Actions.
@@ -650,7 +650,7 @@ to get a clean exit code while the four stress-test suites print
 Empirical evaluation of the three default-false flags
 (`cross_domain_resonance_enabled`, `intrinsic_residuals_enabled`,
 `geodesic_rerank_enabled`) against the 4 strict siliconflow suites
-under Qwen3-VL-Embedding-8B (see
+under Qwen3-Embedding-8B (see
 `scripts/diag_wave_readiness_flags.py` and the archived
 `05-17-wave-readiness-flags` task):
 

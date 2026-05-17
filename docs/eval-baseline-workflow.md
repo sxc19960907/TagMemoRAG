@@ -7,7 +7,7 @@ The `tests/fixtures/eval/` suites are gated by per-suite baselines under `tests/
 | File | Embedder | Used by |
 |---|---|---|
 | `baselines/hashing.json` | `HashingEmbedder` (dim=64, deterministic, no network) | **Quality CI** (gate) |
-| `baselines/siliconflow.json` | `BAAI/bge-small-zh-v1.5` via SiliconFlow HTTP API | local sanity only |
+| `baselines/siliconflow.json` | `Qwen/Qwen3-Embedding-8B` via SiliconFlow HTTP API | local sanity only |
 
 The hashing baseline is the only one CI consumes. SiliconFlow is a smoke check for divergence between the test embedder and what production-like deployments use.
 

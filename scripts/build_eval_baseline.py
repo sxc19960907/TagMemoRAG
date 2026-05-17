@@ -49,9 +49,9 @@ EMBEDDER_HASHING = "hashing"
 EMBEDDER_SILICONFLOW = "siliconflow"
 SUPPORTED_EMBEDDERS = (EMBEDDER_HASHING, EMBEDDER_SILICONFLOW)
 
-# D5: Qwen3-VL-Embedding-8B is the production model target. 4096 dim, 32K
-# context window, OpenAI-compatible /v1/embeddings endpoint on SiliconFlow.
-SILICONFLOW_MODEL_NAME = "Qwen/Qwen3-VL-Embedding-8B"
+# D5: Qwen3-Embedding-8B is the production text-RAG model target. 4096 dim,
+# OpenAI-compatible /v1/embeddings endpoint on SiliconFlow.
+SILICONFLOW_MODEL_NAME = "Qwen/Qwen3-Embedding-8B"
 SILICONFLOW_MODEL_DIM = 4096
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SILICONFLOW_API_KEY_ENV = "SILICONFLOW_API_KEY"

@@ -20,6 +20,7 @@ from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
+from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .qdrant_ops import inspect_qdrant
 from .rebuild_queue import RebuildQueue
 from .retrieval_feedback import (
@@ -271,6 +272,16 @@ def main(argv: list[str] | None = None) -> int:
             "language": args.language,
             "tags": resolve_tags_for_search(args.tag, load_tag_policy(args.kb, cfg)),
         }
+        narrowing = infer_metadata_narrowing(
+            query_text=args.question,
+            graph=state.graph,
+            explicit_filters=filters,
+            enabled=cfg.search.metadata_narrowing_enabled,
+            category_policy=cfg.search.metadata_narrowing_category_policy,
+            brand_policy=cfg.search.metadata_narrowing_brand_policy,
+            min_candidates=cfg.search.metadata_narrowing_min_candidates,
+        )
+        filters = merge_inferred_filters(filters, narrowing)
         execution = execute_search(
             state=state,
             query_vec=query_vec,
@@ -283,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=str(params["aggregate"]),
             filters=filters,
+            boost_filters=narrowing.boost_filters,
         )
         payload = {"build_id": state.build_id, "results": [r.to_dict() for r in execution.results]}
         if search_debug_enabled(args.debug_search, cfg):
@@ -290,6 +302,9 @@ def main(argv: list[str] | None = None) -> int:
                 execution,
                 params,
                 ann_enabled=search_ann_enabled(state, cfg),
+            )
+            payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+                enabled=cfg.search.metadata_narrowing_enabled
             )
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
