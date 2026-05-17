@@ -74,6 +74,10 @@ def test_m2_auth_scope_kb_cache_and_list(tmp_path, fake_embedder):
     assert first.json()["cache"] == "miss"
     assert first.headers["X-RateLimit-Limit"] == "100"
 
+    retrieve = client.post("/retrieve", headers=cs_headers, json={"question": "蒸汽", "kb_name": "kb-a"})
+    assert retrieve.status_code == 200
+    assert retrieve.json()["evidence"]
+
     second = client.post("/search", headers=cs_headers, json={"question": "  蒸汽  ", "kb_name": "kb-a"})
     assert second.status_code == 200
     assert second.json()["cache"] == "hit"
@@ -81,6 +85,9 @@ def test_m2_auth_scope_kb_cache_and_list(tmp_path, fake_embedder):
     forbidden = client.post("/search", headers=cs_headers, json={"question": "保养", "kb_name": "kb-b"})
     assert forbidden.status_code == 403
     assert forbidden.json()["code"] == "FORBIDDEN"
+    retrieve_forbidden = client.post("/retrieve", headers=cs_headers, json={"question": "保养", "kb_name": "kb-b"})
+    assert retrieve_forbidden.status_code == 403
+    assert retrieve_forbidden.json()["code"] == "FORBIDDEN"
 
     rebuild = client.post("/rebuild", headers=cs_headers, json={"docs_dir": str(tmp_path), "kb_name": "kb-a"})
     assert rebuild.status_code == 403

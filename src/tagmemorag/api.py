@@ -54,6 +54,7 @@ from .observability.metrics import configure_metrics, get_metrics, metrics_respo
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
+from .retrieval import DEFAULT_TOKEN_BUDGET, build_retrieve_response
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -204,6 +205,10 @@ class SearchRequest(BaseModel):
     # diagnostics with no impact on weights.
     core_tags: list[str] = Field(default_factory=list)
     ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
+
+
+class RetrieveRequest(SearchRequest):
+    token_budget: int = Field(default=DEFAULT_TOKEN_BUDGET, ge=0, le=128000)
 
 
 class SearchFilters(BaseModel):
@@ -481,6 +486,12 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
+def _compute_retrieve_id(request: RetrieveRequest, state: GraphState, trace_id: str) -> str:
+    base = _compute_search_id(request, state, trace_id)
+    parts = ["retrieve", base, str(int(request.token_budget))]
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
 @app.middleware("http")
 async def trace_middleware(request: Request, call_next):
     request.app.state.settings = settings
@@ -639,6 +650,38 @@ def search(
         raise
 
 
+@app.post("/retrieve")
+def retrieve(
+    request: RetrieveRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    state = app_state.get_current(request.kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.retrieve", **span_attrs):
+            return _retrieve_impl(request, http_request, state, t0)
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=request.kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
     cache_status = "disabled"
     cache_key = _compute_cache_key(request, state)
@@ -778,6 +821,97 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         )
         get_metrics().record_cache_operation(operation="set", outcome="success")
         get_metrics().set_cache_entries(len(cache))
+    return payload
+
+
+def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):
+    emb_t0 = time.perf_counter()
+    try:
+        with start_span("tagmemorag.retrieve.embedding", **{"tagmemorag.kb_name": state.kb_name}):
+            query_vec = embedder.encode_query(request.question)
+        get_metrics().record_embedding(operation="query", outcome="success", duration=time.perf_counter() - emb_t0)
+    except Exception:
+        get_metrics().record_embedding(operation="query", outcome="error", duration=time.perf_counter() - emb_t0)
+        raise
+    params = _search_param_values(request)
+    aggregate = str(params["aggregate"])
+    if aggregate not in {"max", "sum"}:
+        raise ServiceError(
+            ErrorCode.INVALID_INPUT,
+            "aggregate must be 'max' or 'sum'.",
+            {"aggregate": aggregate},
+        )
+    with start_span("tagmemorag.retrieve.wave", **{"tagmemorag.kb_name": state.kb_name}):
+        filter_dict, narrowing = _resolved_filter_dict(request, state)
+        ghost_tag_args = tuple(
+            GhostTag(
+                name=str(g.name),
+                vector=np.asarray(g.vector, dtype=np.float32),
+                is_core=bool(g.is_core),
+            )
+            for g in request.ghost_tags
+        )
+        execution = execute_search(
+            state=state,
+            query_vec=query_vec,
+            settings=settings,
+            query_text=request.question,
+            top_k=int(params["top_k"]),
+            source_k=int(params["source_k"]),
+            steps=int(params["steps"]),
+            decay=float(params["decay"]),
+            amplitude_cutoff=float(params["amplitude_cutoff"]),
+            aggregate=aggregate,
+            filters=filter_dict,
+            boost_filters=narrowing.boost_filters,
+            core_tags=tuple(request.core_tags),
+            ghost_tags=ghost_tag_args,
+        )
+    search_time_ms = (time.perf_counter() - t0) * 1000.0
+    trace_id = str(getattr(http_request.state, "trace_id", ""))
+    search_id = _compute_search_id(request, state, trace_id)
+    payload = build_retrieve_response(
+        results=execution.results,
+        build_id=state.build_id,
+        kb_name=state.kb_name,
+        trace_id=trace_id,
+        search_id=search_id,
+        retrieve_id=_compute_retrieve_id(request, state, trace_id),
+        token_budget=request.token_budget,
+        search_time_ms=search_time_ms,
+    )
+    if search_debug_enabled(request.debug, settings):
+        payload["debug"] = search_debug_payload(
+            execution,
+            params,
+            ann_enabled=search_ann_enabled(state, settings),
+        )
+        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+            enabled=settings.search.metadata_narrowing_enabled
+        )
+    get_metrics().record_search(
+        kb_name=state.kb_name,
+        cache_status="disabled",
+        outcome="success",
+        duration=time.perf_counter() - t0,
+        result_count=len(execution.results),
+    )
+    set_span_attributes(
+        **{
+            "tagmemorag.result_count": len(execution.results),
+            "tagmemorag.search.strategy": execution.strategy,
+        }
+    )
+    structlog.get_logger().info(
+        "retrieve",
+        kb_name=state.kb_name,
+        build_id=state.build_id,
+        query_len=len(request.question),
+        top_k=request.top_k or settings.search.top_k,
+        result_count=len(execution.results),
+        latency_ms=round(search_time_ms, 3),
+        search_strategy=execution.strategy,
+    )
     return payload
 
 

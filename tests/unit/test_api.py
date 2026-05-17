@@ -36,6 +36,88 @@ def test_api_search_and_anchor(tmp_path, test_config, fake_embedder, monkeypatch
     assert client.delete(f"/anchor/{anchor_key}").status_code == 200
 
 
+def test_api_retrieve_returns_text_evidence_context_and_citations(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽很小", "top_k": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "retrieve.v1"
+    assert body["build_id"] == state.build_id
+    assert body["search_id"]
+    assert body["retrieve_id"]
+    assert body["results"]
+    assert body["evidence"]
+    evidence = body["evidence"][0]
+    assert evidence["evidence_id"] == "ev_001"
+    assert evidence["citation_id"] == "cit_001"
+    assert evidence["doc_id"]
+    assert evidence["chunk_id"].startswith("chunk:sha256:")
+    assert evidence["matched_chunk_ids"] == [evidence["chunk_id"]]
+    assert body["citations"][0]["evidence_id"] == "ev_001"
+    item = body["context_pack"]["items"][0]
+    assert item["context_item_id"] == "ctx_001"
+    assert item["citation_id"] == "cit_001"
+    assert item["evidence_refs"] == ["ev_001"]
+    assert body["answerability"]["answerable"] is True
+    assert "debug" not in body
+
+
+def test_api_retrieve_context_budget_exhausted_is_explicit(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽", "top_k": 1, "token_budget": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"]
+    assert body["context_pack"]["items"] == []
+    assert body["answerability"] == {
+        "answerable": False,
+        "confidence": 0.0,
+        "warnings": ["context_budget_exhausted"],
+        "fallback_reason": "context_budget_exhausted",
+    }
+
+
+def test_api_retrieve_no_results_returns_insufficient_evidence(tmp_path, test_config, fake_embedder):
+    cfg = test_config.model_copy(update={"search": SearchConfig(metadata_narrowing_enabled=False)})
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽", "filters": {"manual_id": "missing"}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
+    assert body["evidence"] == []
+    assert body["citations"] == []
+    assert body["context_pack"]["items"] == []
+    assert body["answerability"]["answerable"] is False
+    assert body["answerability"]["fallback_reason"] == "no_results"
+
+
 def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_config, fake_embedder):
     docs = tmp_path / "docs"
     docs.mkdir()
