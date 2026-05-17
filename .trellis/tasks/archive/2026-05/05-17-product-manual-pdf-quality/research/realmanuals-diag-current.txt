@@ -1,0 +1,71 @@
+=== Real Manuals PDF Routing Diagnostic ===
+KB chunk_count: 724
+KB model: Qwen/Qwen3-Embedding-8B (4096 dim)
+Top-K: 5
+Metrics: top1_category_hit / top3_category_hit / top5_category_hit / mean_reciprocal_category_rank
+
+--- PDF parser structure stats ---
+source_file                                 chunks  detected  fallback  sample_headers
+dryer/HISENSE DHGA901NL.pdf                    234       202        32 SAFETY PRECAUTIONS, DESCRIPTION OF THE DRYER, Technical information, Control unit, INSTALLATION AND CONNECTION, Page 2
+dryer/HISENSE DHQE800BW2.pdf                    44        36         8 Page 1, USER’S OPERATION MANUAL, EN, English, Page 16, $IBSHF J
+oven/HISENSE BSA5221.pdf                       234       214        20 MANUAL, Step 1: Switching on and Settings, Step 2: Choosing the Cooking System, Maintenance & Cleaning, Troubleshooting Table, IMPORTANT SAFETY INSTRUCTIONS
+refrigerator/HISENSE HR6FDFF701SW.pdf           11        10         1 Installing Your New Appliance, Display Controls, Using Your Appliance, Cleaning and Care, Troubleshooting, Brief introduction
+washer/ASKO W6564.pdf                          185       185         0 操作指南, 洗衣機, 目錄, 技術資料 21, 拆除運送保護裝置 22, 安裝 23
+
+--- Absolute metrics ---
+config                  top1      top3      top5     mrr_cat
+vec-only               1.000     1.000     1.000       1.000
+wave-baseline          1.000     1.000     1.000       1.000
+
+--- Delta: wave-baseline - vec-only ---
+top1_category_hit: +0.000
+top3_category_hit: +0.000
+top5_category_hit: +0.000
+mean_reciprocal_category_rank: +0.000
+
+--- Flag deltas vs wave-baseline ---
+
+--- Case top-1 routing ---
+case                          want                      vec-only       wave-baseline
+asko-washer-drain             washer                   washer/ok           washer/ok
+asko-washer-detergent         washer                   washer/ok           washer/ok
+asko-washer-program           washer                   washer/ok           washer/ok
+asko-washer-child-safe        washer                   washer/ok           washer/ok
+hisense-dryer-program-step    dryer                     dryer/ok            dryer/ok
+hisense-dryer-not-dried       dryer                     dryer/ok            dryer/ok
+hisense-dryer-ionizer         dryer                     dryer/ok            dryer/ok
+hisense-oven-cooking-system   oven                       oven/ok             oven/ok
+hisense-oven-steam-clean      oven                       oven/ok             oven/ok
+hisense-fridge-display-controlsrefrigerator       refrigerator/ok     refrigerator/ok
+
+--- Case detail (wave-baseline) ---
+asko-washer-drain: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+asko-washer-detergent: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+asko-washer-program: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+asko-washer-child-safe: want=washer rr=1.000
+  categories: washer, washer, washer, washer, washer
+  sources: washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf, washer/ASKO W6564.pdf
+hisense-dryer-program-step: want=dryer rr=1.000
+  categories: dryer, dryer, dryer, dryer, dryer
+  sources: dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-dryer-not-dried: want=dryer rr=1.000
+  categories: dryer, dryer, dryer, dryer, dryer
+  sources: dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-dryer-ionizer: want=dryer rr=1.000
+  categories: dryer, dryer, dryer, dryer, dryer
+  sources: dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf, dryer/HISENSE DHGA901NL.pdf
+hisense-oven-cooking-system: want=oven rr=1.000
+  categories: oven, oven, oven, oven, oven
+  sources: oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf
+hisense-oven-steam-clean: want=oven rr=1.000
+  categories: oven, oven, oven, oven, oven
+  sources: oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf, oven/HISENSE BSA5221.pdf
+hisense-fridge-display-controls: want=refrigerator rr=1.000
+  categories: refrigerator, refrigerator, refrigerator, refrigerator, refrigerator
+  sources: refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf, refrigerator/HISENSE HR6FDFF701SW.pdf
