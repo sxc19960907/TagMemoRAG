@@ -29,9 +29,16 @@ def test_parse_empty_file(tmp_path):
 def test_parse_nested_headings(tmp_path):
     path = tmp_path / "manual.md"
     path.write_text("# 产品\n概述内容很多很多很多很多很多。\n## 安装\n连接电源并检查水箱。\n", encoding="utf-8")
-    chunks = parse_document(path, min_chars=5)
+    chunks = parse_document(path, min_chars=5, metadata={"doc_id": "doc-1"})
     assert [chunk.header for chunk in chunks] == ["产品", "安装"]
     assert chunks[1].path == ("产品", "安装")
+    assert chunks[1].metadata["doc_id"] == "doc-1"
+    assert chunks[1].metadata["section_path"] == ["产品", "安装"]
+    assert chunks[1].metadata["asset_refs"] == []
+    assert chunks[1].metadata["parser_profile"] == "markdown"
+    assert chunks[1].metadata["parser_version"] == "1"
+    assert chunks[1].metadata["chunk_id"].startswith("chunk:sha256:")
+    assert chunks[1].metadata["element_ids"][0].startswith("element:sha256:")
 
 
 def test_parse_no_heading(tmp_path):
@@ -40,6 +47,9 @@ def test_parse_no_heading(tmp_path):
     chunks = parse_document(path, min_chars=5)
     assert len(chunks) == 1
     assert chunks[0].path == ("",)
+    assert chunks[0].metadata["section_path"] == []
+    assert chunks[0].metadata["parser_profile"] == "txt"
+    assert chunks[0].metadata["chunk_id"].startswith("chunk:sha256:")
 
 
 def test_split_long_blocks(tmp_path):
@@ -49,6 +59,8 @@ def test_split_long_blocks(tmp_path):
     assert len(chunks) > 1
     assert all(len(chunk.text) <= 80 for chunk in chunks)
     assert {chunk.metadata["manual_id"] for chunk in chunks} == {"manual-a"}
+    assert {chunk.metadata["doc_id"] for chunk in chunks} == {"manual-a"}
+    assert len({chunk.metadata["chunk_id"] for chunk in chunks}) == len(chunks)
 
 
 def test_short_chunks_do_not_merge_across_headings(tmp_path):
@@ -75,6 +87,12 @@ def test_parse_pdf_pages(monkeypatch, tmp_path):
     assert chunks[0].metadata["page_end"] == 1
     assert chunks[0].metadata["pdf_header_source"] == "page_fallback"
     assert chunks[0].metadata["pdf_parser_profile"] == "product_manual"
+    assert chunks[0].metadata["parser_profile"] == "pdf:product_manual"
+    assert chunks[0].metadata["parser_version"] == "1"
+    assert chunks[0].metadata["doc_id"] == "fridge"
+    assert chunks[0].metadata["section_path"] == ["Page 1"]
+    assert chunks[0].metadata["asset_refs"] == []
+    assert chunks[0].metadata["chunk_id"].startswith("chunk:sha256:")
     assert "冷藏室温度" in chunks[0].text
 
 
@@ -183,3 +201,26 @@ def test_parse_pdf_preserves_page_metadata_when_splitting(monkeypatch, tmp_path)
     assert all(chunk.metadata["page_start"] == 1 for chunk in chunks)
     assert all(chunk.metadata["page_end"] == 1 for chunk in chunks)
     assert all(chunk.metadata["pdf_header_source"] == "detected" for chunk in chunks)
+    assert len({chunk.metadata["chunk_id"] for chunk in chunks}) == len(chunks)
+
+
+def test_chunk_id_is_deterministic_for_same_content(tmp_path):
+    path = tmp_path / "manual.md"
+    path.write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+
+    first = parse_document(path, min_chars=1, root_dir=tmp_path, metadata={"manual_id": "coffee"})
+    second = parse_document(path, min_chars=1, root_dir=tmp_path, metadata={"manual_id": "coffee"})
+
+    assert [chunk.metadata["chunk_id"] for chunk in first] == [chunk.metadata["chunk_id"] for chunk in second]
+    assert [chunk.metadata["element_ids"] for chunk in first] == [chunk.metadata["element_ids"] for chunk in second]
+
+
+def test_chunk_id_changes_when_text_changes(tmp_path):
+    path = tmp_path / "manual.md"
+    path.write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    original = parse_document(path, min_chars=1, root_dir=tmp_path, metadata={"manual_id": "coffee"})[0]
+
+    path.write_text("# 操作\n蒸汽功能可以制作热奶泡。\n", encoding="utf-8")
+    changed = parse_document(path, min_chars=1, root_dir=tmp_path, metadata={"manual_id": "coffee"})[0]
+
+    assert changed.metadata["chunk_id"] != original.metadata["chunk_id"]

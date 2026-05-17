@@ -851,13 +851,17 @@ def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[in
     for node_id in selected_ids:
         entry = by_node_id.get(node_id)
         node = state.graph.nodes[node_id] if node_id in state.graph else {}
+        metadata = dict(node.get("metadata") or {})
+        entry_manual_id = entry.manual_id if entry is not None else ""
         payloads.append(
             {
                 "kb_name": state.kb_name,
                 "node_id": node_id,
                 "build_id": state.build_id,
+                "doc_id": str(metadata.get("doc_id") or node.get("doc_id") or entry_manual_id),
+                "chunk_id": str(metadata.get("chunk_id") or ""),
                 "chunk_identity_key": entry.identity_key if entry is not None else "",
-                "manual_id": entry.manual_id if entry is not None else str(node.get("manual_id") or ""),
+                "manual_id": entry_manual_id if entry is not None else str(node.get("manual_id") or ""),
                 "source_file": entry.source_file if entry is not None else str(node.get("source_file") or ""),
                 "text_hash": entry.text_hash if entry is not None else "",
             }

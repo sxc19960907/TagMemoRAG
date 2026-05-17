@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -10,6 +12,7 @@ from .types import Chunk
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 SUPPORTED_DOCUMENT_SUFFIXES = {".md", ".txt", ".pdf"}
+PARSER_LINEAGE_VERSION = "1"
 PDF_PRODUCT_MANUAL_HEADING_HINTS = {
     "appliance description",
     "before first use",
@@ -81,7 +84,8 @@ def parse_document(
     file_path = Path(path)
     source_file = str(file_path.relative_to(root_dir)) if root_dir else file_path.name
     chunk_metadata = dict(metadata or {})
-    if file_path.suffix.lower() == ".pdf":
+    suffix = file_path.suffix.lower()
+    if suffix == ".pdf":
         return _parse_pdf(
             file_path,
             source_file=source_file,
@@ -142,7 +146,8 @@ def parse_document(
             current_lines.append(line)
     flush()
 
-    return _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    return _with_lineage(processed, parser_profile=_text_parser_profile(suffix))
 
 
 def _parse_pdf(
@@ -174,7 +179,8 @@ def _parse_pdf(
                 heading_hints=heading_hints,
             )
         )
-    return _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    return _with_lineage(processed, parser_profile=f"pdf:{pdf_profile}")
 
 
 def _extract_pdf_page_text(page: Any) -> str:
@@ -403,6 +409,114 @@ def _is_title_like(value: str) -> bool:
     uppercase = sum(1 for char in letters if char.isupper())
     titlecase_words = sum(1 for word in value.split() if word[:1].isupper())
     return uppercase / max(len(letters), 1) >= 0.6 or titlecase_words >= max(1, len(value.split()) - 1)
+
+
+def _text_parser_profile(suffix: str) -> str:
+    return "markdown" if suffix == ".md" else "txt"
+
+
+def _with_lineage(chunks: list[Chunk], *, parser_profile: str) -> list[Chunk]:
+    return [_chunk_with_lineage(chunk, parser_profile=parser_profile) for chunk in chunks]
+
+
+def _chunk_with_lineage(chunk: Chunk, *, parser_profile: str) -> Chunk:
+    metadata = dict(chunk.metadata)
+    doc_id = _lineage_doc_id(metadata, chunk.source_file)
+    section_path = [str(part) for part in chunk.path if str(part)]
+    page_start = _lineage_optional_int(metadata.get("page_start"))
+    page_end = _lineage_optional_int(metadata.get("page_end"))
+    text_hash = _lineage_hash(chunk.text)
+
+    chunk_payload: dict[str, Any] = {
+        "doc_id": doc_id,
+        "parser_profile": parser_profile,
+        "parser_version": PARSER_LINEAGE_VERSION,
+        "source_file": _safe_source_for_lineage(chunk.source_file),
+        "section_path": section_path,
+        "start_line": int(chunk.start_line),
+        "text_hash": text_hash,
+    }
+    if page_start is not None:
+        chunk_payload["page_start"] = page_start
+    if page_end is not None:
+        chunk_payload["page_end"] = page_end
+
+    chunk_id = _lineage_id("chunk", chunk_payload)
+    element_id = _lineage_id(
+        "element",
+        {
+            "doc_id": doc_id,
+            "chunk_id": chunk_id,
+            "section_path": section_path,
+            "page_start": page_start,
+            "page_end": page_end,
+        },
+    )
+    metadata["doc_id"] = doc_id
+    metadata["chunk_id"] = chunk_id
+    metadata["element_ids"] = [element_id]
+    metadata["section_path"] = section_path
+    metadata["asset_refs"] = _lineage_string_list(metadata.get("asset_refs"))
+    metadata["parser_profile"] = parser_profile
+    metadata["parser_version"] = PARSER_LINEAGE_VERSION
+    if page_start is not None:
+        metadata["page_start"] = page_start
+    if page_end is not None:
+        metadata["page_end"] = page_end
+
+    return Chunk(
+        text=chunk.text,
+        header=chunk.header,
+        path=chunk.path,
+        level=chunk.level,
+        start_line=chunk.start_line,
+        source_file=chunk.source_file,
+        metadata=metadata,
+    )
+
+
+def _lineage_doc_id(metadata: dict[str, Any], source_file: str) -> str:
+    for key in ("doc_id", "manual_id"):
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            return value
+    return "source:" + _lineage_hash(_safe_source_for_lineage(source_file))[:24]
+
+
+def _safe_source_for_lineage(source_file: str) -> str:
+    value = str(source_file or "").replace("\\", "/").strip()
+    if not value:
+        return "<unknown-source>"
+    if Path(value).is_absolute():
+        return Path(value).name or "<unknown-source>"
+    return re.sub(r"/+", "/", value)
+
+
+def _lineage_id(prefix: str, payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return f"{prefix}:sha256:" + hashlib.sha256(encoded).hexdigest()[:32]
+
+
+def _lineage_hash(value: str) -> str:
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+
+def _lineage_optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _lineage_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if str(item)]
+    text = str(value)
+    return [text] if text else []
 
 
 def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[Chunk]:

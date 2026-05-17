@@ -626,23 +626,21 @@ def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake
     }
     assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
     assert FakeQdrantClient.set_payload_calls == []
-    assert FakeQdrantClient.batch_payload_calls[-1] == (
-        "test_default",
-        [
-            (
-                1,
-                {
-                    "kb_name": "default",
-                    "node_id": 1,
-                    "build_id": app.get_current("default").build_id,
-                    "chunk_identity_key": FakeQdrantClient.collections["test_default"][1].payload["chunk_identity_key"],
-                    "manual_id": "b",
-                    "source_file": "coffee/b.md",
-                    "text_hash": FakeQdrantClient.collections["test_default"][1].payload["text_hash"],
-                },
-            )
-        ],
-    )
+    assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
+    assert len(FakeQdrantClient.batch_payload_calls[-1][1]) == 1
+    reused_node_id, reused_payload = FakeQdrantClient.batch_payload_calls[-1][1][0]
+    assert reused_node_id == 1
+    assert reused_payload == {
+        "kb_name": "default",
+        "node_id": 1,
+        "build_id": app.get_current("default").build_id,
+        "doc_id": "b",
+        "chunk_id": FakeQdrantClient.collections["test_default"][1].payload["chunk_id"],
+        "chunk_identity_key": FakeQdrantClient.collections["test_default"][1].payload["chunk_identity_key"],
+        "manual_id": "b",
+        "source_file": "coffee/b.md",
+        "text_hash": FakeQdrantClient.collections["test_default"][1].payload["text_hash"],
+    }
     assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
     assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == app.get_current("default").build_id
 
@@ -674,6 +672,8 @@ def test_qdrant_incremental_sync_batches_multiple_reused_payloads(qdrant_library
     assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
     assert [node_id for node_id, _payload in FakeQdrantClient.batch_payload_calls[-1][1]] == [1, 2]
     assert all(payload["build_id"] == app.get_current("default").build_id for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1])
+    assert all(payload["chunk_id"].startswith("chunk:sha256:") for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1])
+    assert {payload["doc_id"] for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1]} == {"b", "c"}
 
 
 def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_path):

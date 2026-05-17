@@ -12,6 +12,7 @@ from tagmemorag.config import Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.graph_builder import build_graph
 from tagmemorag.errors import RebuildInProgressError
 from tagmemorag.qdrant_ops import inspect_qdrant
+from tagmemorag.parser import parse_document
 from tagmemorag.state import AppState, build_kb, load_kb, save_kb
 from tagmemorag.storage.atomic import atomic_write
 from tagmemorag.storage.json_anchor import JsonAnchorStore
@@ -160,6 +161,27 @@ def test_storage_round_trip(tmp_path):
     assert JsonAnchorStore(tmp_path / "anchors.json").load()[0].anchor_key == anchor.anchor_key
 
 
+def test_graph_storage_round_trip_preserves_lineage_metadata(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    path = docs / "manual.md"
+    path.write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    chunks = parse_document(path, min_chars=1, root_dir=docs, metadata={"manual_id": "coffee-manual"})
+    graph = build_graph(chunks, np.array([[1.0, 0.0]], dtype=np.float32))
+
+    JsonGraphStore(tmp_path / "graph.json").save(graph)
+    loaded_graph = JsonGraphStore(tmp_path / "graph.json").load()
+    metadata = loaded_graph.nodes[0]["metadata"]
+
+    assert metadata["doc_id"] == "coffee-manual"
+    assert metadata["section_path"] == ["操作"]
+    assert metadata["asset_refs"] == []
+    assert metadata["parser_profile"] == "markdown"
+    assert metadata["parser_version"] == "1"
+    assert metadata["chunk_id"].startswith("chunk:sha256:")
+    assert metadata["element_ids"][0].startswith("element:sha256:")
+
+
 def test_atomic_write_preserves_original_on_failure(tmp_path):
     target = tmp_path / "data.json"
     target.write_text("old", encoding="utf-8")
@@ -217,6 +239,8 @@ def test_qdrant_vector_store_update_payload_and_delete():
         payloads=[
             {
                 "build_id": "b1",
+                "doc_id": "doc-1",
+                "chunk_id": "chunk:sha256:abc",
                 "chunk_identity_key": "sha256:key",
                 "manual_id": "m1",
                 "source_file": "manual.md",
@@ -231,6 +255,8 @@ def test_qdrant_vector_store_update_payload_and_delete():
         "kb_name": "default",
         "node_id": 1,
         "build_id": "b1",
+        "doc_id": "doc-1",
+        "chunk_id": "chunk:sha256:abc",
         "chunk_identity_key": "sha256:key",
         "manual_id": "m1",
         "source_file": "manual.md",
@@ -340,7 +366,9 @@ def test_qdrant_inspect_reports_collection_counts_and_payload_keys(monkeypatch, 
     assert report["missing_vector_count"] == 0
     assert report["sample_payload_keys"] == [
         "build_id",
+        "chunk_id",
         "chunk_identity_key",
+        "doc_id",
         "kb_name",
         "manual_id",
         "node_id",
@@ -519,6 +547,9 @@ def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fak
     assert node["metadata"]["page_start"] == 1
     assert node["metadata"]["pdf_header_source"] == "page_fallback"
     assert node["metadata"]["pdf_parser_profile"] == "product_manual"
+    assert node["metadata"]["parser_profile"] == "pdf:product_manual"
+    assert node["metadata"]["doc_id"] == "fridge"
+    assert node["metadata"]["chunk_id"].startswith("chunk:sha256:")
     assert "冷藏室温度" in node["text"]
 
 
