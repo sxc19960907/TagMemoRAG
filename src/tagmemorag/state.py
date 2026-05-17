@@ -359,6 +359,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                     cfg.parser.min_chars,
                     root_dir=docs_root,
                     metadata=manual_node_attrs(metadata),
+                    pdf_profile=cfg.parser.pdf_profile,
+                    pdf_heading_hints=cfg.parser.pdf_heading_hints,
                 )
             )
         texts = [chunk.text for chunk in chunks]
@@ -530,6 +532,7 @@ def _build_for_rebuild(
         fallback_reason=fallback_reason,
         embedded_chunk_count=new_state.graph.number_of_nodes(),
         auto_decision_reason=auto_decision_reason,
+        chunk_identity_fallback_reason=task.chunk_identity_fallback_reason,
         impact_report=impact_report,
         tag_embeddings_added=int(new_state.meta.get("tag_embeddings_added", 0) or 0),
         tag_embeddings_skipped=int(new_state.meta.get("tag_embeddings_skipped", 0) or 0),
@@ -627,7 +630,17 @@ def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, ma
         metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
         if not is_active_status(metadata.status):
             continue
-        total += len(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root, metadata=manual_node_attrs(metadata)))
+        total += len(
+            parse_document(
+                path,
+                cfg.parser.max_chars,
+                cfg.parser.min_chars,
+                root_dir=docs_root,
+                metadata=manual_node_attrs(metadata),
+                pdf_profile=cfg.parser.pdf_profile,
+                pdf_heading_hints=cfg.parser.pdf_heading_hints,
+            )
+        )
     return total
 
 

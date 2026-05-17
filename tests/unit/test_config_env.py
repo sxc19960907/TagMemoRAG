@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
+from tagmemorag.config import ParserConfig
 from tagmemorag.config import load_config
 
 
@@ -21,6 +25,24 @@ def test_nested_env_delimiter(tmp_path, monkeypatch):
     monkeypatch.setenv("TAGMEMORAG__MODEL__NAME", "hashing")
 
     assert load_config(tmp_path / "missing.yaml").model.name == "hashing"
+
+
+def test_parser_profile_defaults_to_product_manual():
+    cfg = load_config("missing.yaml")
+
+    assert cfg.parser.pdf_profile == "product_manual"
+    assert cfg.parser.pdf_heading_hints == []
+
+
+def test_parser_profile_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__PARSER__PDF_PROFILE", "generic")
+
+    assert load_config(tmp_path / "missing.yaml").parser.pdf_profile == "generic"
+
+
+def test_parser_profile_rejects_unknown_explicit_value():
+    with pytest.raises(ValidationError):
+        ParserConfig(pdf_profile="unknown")
 
 
 def test_http_model_env_overrides(tmp_path, monkeypatch):

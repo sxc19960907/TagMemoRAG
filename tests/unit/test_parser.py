@@ -74,6 +74,7 @@ def test_parse_pdf_pages(monkeypatch, tmp_path):
     assert chunks[0].metadata["page_start"] == 1
     assert chunks[0].metadata["page_end"] == 1
     assert chunks[0].metadata["pdf_header_source"] == "page_fallback"
+    assert chunks[0].metadata["pdf_parser_profile"] == "product_manual"
     assert "冷藏室温度" in chunks[0].text
 
 
@@ -98,8 +99,72 @@ def test_parse_pdf_detects_section_headings(monkeypatch, tmp_path):
     assert [chunk.header for chunk in chunks] == ["Safety", "Operation"]
     assert [chunk.path for chunk in chunks] == [("Safety",), ("Operation",)]
     assert {chunk.metadata["pdf_header_source"] for chunk in chunks} == {"detected"}
+    assert {chunk.metadata["pdf_parser_profile"] for chunk in chunks} == {"product_manual"}
     assert {chunk.metadata["page_start"] for chunk in chunks} == {1}
     assert "press Start" in chunks[1].text
+
+
+def test_parse_pdf_generic_profile_uses_structural_headings_without_product_manual_hints(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [
+                _FakePdfPage(
+                    "1. Engine Diagnostics\n"
+                    "Check compression and ignition timing before replacing parts.\n"
+                    "2. Brake Service\n"
+                    "Inspect pads and hydraulic lines.\n"
+                )
+            ]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "vehicle.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    chunks = parse_document(path, min_chars=1, pdf_profile="generic")
+
+    assert [chunk.header for chunk in chunks] == ["1. Engine Diagnostics", "2. Brake Service"]
+    assert {chunk.metadata["pdf_header_source"] for chunk in chunks} == {"detected"}
+    assert {chunk.metadata["pdf_parser_profile"] for chunk in chunks} == {"generic"}
+
+
+def test_parse_pdf_generic_profile_ignores_product_manual_heading_hints(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [
+                _FakePdfPage(
+                    "troubleshooting\n"
+                    "Use this section only when the device reports an error.\n"
+                )
+            ]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "generic.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    chunks = parse_document(path, min_chars=1, pdf_profile="generic")
+
+    assert [chunk.header for chunk in chunks] == ["Page 1"]
+    assert chunks[0].metadata["pdf_header_source"] == "page_fallback"
+
+
+def test_parse_pdf_custom_heading_hints_extend_generic_profile(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [
+                _FakePdfPage(
+                    "troubleshooting\n"
+                    "Use this section only when the device reports an error.\n"
+                )
+            ]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "generic.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    chunks = parse_document(path, min_chars=1, pdf_profile="generic", pdf_heading_hints=["troubleshooting"])
+
+    assert [chunk.header for chunk in chunks] == ["troubleshooting"]
+    assert chunks[0].metadata["pdf_header_source"] == "detected"
 
 
 def test_parse_pdf_preserves_page_metadata_when_splitting(monkeypatch, tmp_path):

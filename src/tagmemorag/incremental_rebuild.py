@@ -118,6 +118,17 @@ def build_kb_incremental(
 
     try:
         identity, identity_fallback_reason = load_chunk_identity(kb_name, cfg)
+        if identity_fallback_reason == "parser_config_changed":
+            return IncrementalBuildResult(
+                None,
+                RebuildDetail(
+                    requested_mode,
+                    "full",
+                    dirty_count,
+                    identity_fallback_reason,
+                    chunk_identity_fallback_reason=identity_fallback_reason,
+                ),
+            )
         plan = _build_plan(Path(docs_dir), kb_name, cfg, old_state, manifest, identity, identity_fallback_reason)
         dirty_vectors = _embed_dirty_chunks(plan.dirty_chunks, cfg, embedder)
         final_chunks, final_vectors = _assemble_final_inputs(plan, dirty_vectors, cfg.model.dim)
@@ -310,6 +321,8 @@ def _build_plan(
             cfg.parser.min_chars,
             root_dir=docs_root,
             metadata=manual_node_attrs(metadata),
+            pdf_profile=cfg.parser.pdf_profile,
+            pdf_heading_hints=cfg.parser.pdf_heading_hints,
         ):
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)

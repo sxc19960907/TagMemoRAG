@@ -10,7 +10,7 @@ from .types import Chunk
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 SUPPORTED_DOCUMENT_SUFFIXES = {".md", ".txt", ".pdf"}
-PDF_SECTION_KEYWORDS = {
+PDF_PRODUCT_MANUAL_HEADING_HINTS = {
     "appliance description",
     "before first use",
     "care",
@@ -63,6 +63,11 @@ PDF_MANUALSLIB_NOISE = (
     "quick links",
 )
 
+PDF_PROFILE_HEADING_HINTS = {
+    "generic": frozenset[str](),
+    "product_manual": frozenset(PDF_PRODUCT_MANUAL_HEADING_HINTS),
+}
+
 
 def parse_document(
     path: str | Path,
@@ -70,6 +75,8 @@ def parse_document(
     min_chars: int = 50,
     root_dir: str | Path | None = None,
     metadata: dict[str, Any] | None = None,
+    pdf_profile: str = "product_manual",
+    pdf_heading_hints: list[str] | tuple[str, ...] | None = None,
 ) -> list[Chunk]:
     file_path = Path(path)
     source_file = str(file_path.relative_to(root_dir)) if root_dir else file_path.name
@@ -81,6 +88,8 @@ def parse_document(
             max_chars=max_chars,
             min_chars=min_chars,
             metadata=chunk_metadata,
+            pdf_profile=pdf_profile,
+            pdf_heading_hints=pdf_heading_hints,
         )
     text = file_path.read_text(encoding="utf-8")
     if not text.strip():
@@ -143,9 +152,14 @@ def _parse_pdf(
     max_chars: int,
     min_chars: int,
     metadata: dict[str, Any],
+    pdf_profile: str,
+    pdf_heading_hints: list[str] | tuple[str, ...] | None,
 ) -> list[Chunk]:
     reader = PdfReader(str(file_path))
     raw_chunks: list[Chunk] = []
+    heading_hints = _pdf_heading_hints_for_profile(pdf_profile, pdf_heading_hints)
+    pdf_metadata = dict(metadata)
+    pdf_metadata["pdf_parser_profile"] = pdf_profile
     for index, page in enumerate(reader.pages, 1):
         text = _extract_pdf_page_text(page)
         lines = _pdf_lines(text)
@@ -156,7 +170,8 @@ def _parse_pdf(
                 lines,
                 page_number=index,
                 source_file=source_file,
-                metadata=metadata,
+                metadata=pdf_metadata,
+                heading_hints=heading_hints,
             )
         )
     return _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
@@ -184,8 +199,9 @@ def _pdf_page_chunks(
     page_number: int,
     source_file: str,
     metadata: dict[str, Any],
+    heading_hints: frozenset[str],
 ) -> list[Chunk]:
-    heading_indexes = [idx for idx, line in enumerate(lines) if _is_pdf_heading(line)]
+    heading_indexes = [idx for idx, line in enumerate(lines) if _is_pdf_heading(line, heading_hints=heading_hints)]
     if not heading_indexes:
         return [
             _make_pdf_chunk(
@@ -263,6 +279,7 @@ def _make_pdf_chunk(
     chunk_metadata["page_start"] = int(page_number)
     chunk_metadata["page_end"] = int(page_number)
     chunk_metadata["pdf_header_source"] = header_source
+    chunk_metadata["pdf_parser_profile"] = str(metadata.get("pdf_parser_profile") or "product_manual")
     return Chunk(
         text=text,
         header=header,
@@ -274,7 +291,22 @@ def _make_pdf_chunk(
     )
 
 
-def _is_pdf_heading(line: str) -> bool:
+def _pdf_heading_hints_for_profile(
+    pdf_profile: str,
+    custom_hints: list[str] | tuple[str, ...] | None,
+) -> frozenset[str]:
+    try:
+        base_hints = set(PDF_PROFILE_HEADING_HINTS[pdf_profile])
+    except KeyError as exc:
+        raise ValueError(f"Unknown PDF parser profile: {pdf_profile}") from exc
+    for hint in custom_hints or ():
+        normalized = _normalize_pdf_heading_candidate(str(hint)).lower().strip(":-")
+        if normalized:
+            base_hints.add(normalized)
+    return frozenset(base_hints)
+
+
+def _is_pdf_heading(line: str, *, heading_hints: frozenset[str] = frozenset()) -> bool:
     normalized = _normalize_pdf_heading_candidate(line)
     if not normalized:
         return False
@@ -287,9 +319,9 @@ def _is_pdf_heading(line: str) -> bool:
     if PDF_NUMBERED_HEADING_RE.match(normalized):
         return True
     lowered = normalized.lower().strip(":-")
-    if lowered in PDF_SECTION_KEYWORDS:
+    if lowered in heading_hints:
         return True
-    if any(keyword in lowered for keyword in PDF_SECTION_KEYWORDS if len(keyword) >= 6):
+    if any(keyword in lowered for keyword in heading_hints if len(keyword) >= 6):
         return len(normalized) <= 72 and len(lowered.split()) <= 6 and not normalized.endswith((".", ",", ";"))
     if _has_cjk(normalized):
         return len(normalized) <= 18 and not normalized.endswith(("。", "，", "；", "："))

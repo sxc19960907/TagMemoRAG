@@ -8,7 +8,7 @@ import time
 import numpy as np
 import pytest
 
-from tagmemorag.config import ManualLibraryConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ManualLibraryConfig, ParserConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
     build_dirty_state_report,
@@ -321,6 +321,32 @@ def test_incremental_rebuild_reuses_unchanged_dirty_manual_chunk(library_config,
     assert task.embedded_chunk_count == 1
     assert task.chunk_identity_fallback_reason == ""
     assert task.impact_report["summary"]["chunks_reused"] >= 1
+
+
+def test_incremental_rebuild_falls_back_when_parser_profile_changes(library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# Same\nSteam works.\n", library_config)
+    old_state = build_kb(library_root("default", library_config), "default", library_config, embedder=fake_embedder)
+    app = AppState(old_state)
+    mark_pending("default", library_config, pending=True, build_id=old_state.build_id)
+    first = start_library_rebuild(app, "default", library_config, embedder=fake_embedder)
+    for _ in range(100):
+        if first.status != "running":
+            break
+        time.sleep(0.01)
+    assert first.status == "done"
+
+    cfg = library_config.model_copy(update={"parser": ParserConfig(pdf_profile="generic")})
+    update_manual_metadata("default", "a", {"product_model": "A1"}, cfg)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "full"
+    assert task.fallback_reason == "parser_config_changed"
+    assert task.chunk_identity_fallback_reason == "parser_config_changed"
 
 
 def test_auto_mode_threshold_chooses_full(library_config, fake_embedder):

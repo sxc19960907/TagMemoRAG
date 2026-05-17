@@ -59,6 +59,8 @@ class SearchConfig(BaseModel):
 class ParserConfig(BaseModel):
     max_chars: int = 500
     min_chars: int = 50
+    pdf_profile: Literal["product_manual", "generic"] = "product_manual"
+    pdf_heading_hints: list[str] = Field(default_factory=list)
 
 
 class StorageConfig(BaseModel):

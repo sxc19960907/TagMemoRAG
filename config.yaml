@@ -39,6 +39,8 @@ search:
 parser:
   max_chars: 500
   min_chars: 50
+  pdf_profile: product_manual
+  pdf_heading_hints: []
 storage:
   data_dir: data
   schema_version: "1"
