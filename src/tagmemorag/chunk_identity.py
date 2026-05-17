@@ -175,6 +175,7 @@ def parser_signature(cfg: Settings) -> dict[str, object]:
     return {
         "max_chars": int(cfg.parser.max_chars),
         "min_chars": int(cfg.parser.min_chars),
+        "overlap_chars": int(cfg.parser.overlap_chars),
         "pdf_profile": str(cfg.parser.pdf_profile),
         "pdf_heading_hints_hash": _stable_string_list_hash(cfg.parser.pdf_heading_hints),
     }

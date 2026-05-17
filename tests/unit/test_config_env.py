@@ -32,6 +32,7 @@ def test_parser_profile_defaults_to_product_manual():
 
     assert cfg.parser.pdf_profile == "product_manual"
     assert cfg.parser.pdf_heading_hints == []
+    assert cfg.parser.overlap_chars == 0
 
 
 def test_parser_profile_env_overrides(tmp_path, monkeypatch):
@@ -43,6 +44,11 @@ def test_parser_profile_env_overrides(tmp_path, monkeypatch):
 def test_parser_profile_rejects_unknown_explicit_value():
     with pytest.raises(ValidationError):
         ParserConfig(pdf_profile="unknown")
+
+
+def test_parser_overlap_rejects_negative_value():
+    with pytest.raises(ValidationError):
+        ParserConfig(overlap_chars=-1)
 
 
 def test_http_model_env_overrides(tmp_path, monkeypatch):

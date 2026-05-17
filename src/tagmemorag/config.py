@@ -59,6 +59,7 @@ class SearchConfig(BaseModel):
 class ParserConfig(BaseModel):
     max_chars: int = 500
     min_chars: int = 50
+    overlap_chars: int = Field(default=0, ge=0)
     pdf_profile: Literal["product_manual", "generic"] = "product_manual"
     pdf_heading_hints: list[str] = Field(default_factory=list)
 

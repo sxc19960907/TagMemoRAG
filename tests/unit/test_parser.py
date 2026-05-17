@@ -63,6 +63,91 @@ def test_split_long_blocks(tmp_path):
     assert len({chunk.metadata["chunk_id"] for chunk in chunks}) == len(chunks)
 
 
+def test_split_long_blocks_prefers_english_sentence_boundaries(tmp_path):
+    path = tmp_path / "long.md"
+    path.write_text(
+        "# Procedure\n"
+        "Open the service panel and remove the lower filter. "
+        "Rinse the filter under running water before reinstalling it. "
+        "Close the panel and run a short rinse cycle.\n",
+        encoding="utf-8",
+    )
+
+    chunks = parse_document(path, max_chars=90, min_chars=1)
+
+    assert len(chunks) == 3
+    assert chunks[0].text.endswith("filter.")
+    assert chunks[1].text.startswith("Rinse the filter")
+    assert chunks[2].text.startswith("Close the panel")
+    assert all(len(chunk.text) <= 90 for chunk in chunks)
+    assert {chunk.metadata["split_reason"] for chunk in chunks} == {"sentence_boundary"}
+
+
+def test_split_long_blocks_prefers_cjk_sentence_boundaries(tmp_path):
+    path = tmp_path / "long.md"
+    path.write_text(
+        "# 操作\n打开检修盖并取出过滤器。用清水冲洗过滤器后再装回。关闭检修盖并运行短程序。\n",
+        encoding="utf-8",
+    )
+
+    chunks = parse_document(path, max_chars=24, min_chars=1)
+
+    assert [chunk.text for chunk in chunks] == [
+        "操作\n打开检修盖并取出过滤器。",
+        "用清水冲洗过滤器后再装回。",
+        "关闭检修盖并运行短程序。",
+    ]
+
+
+def test_split_long_blocks_falls_back_for_unpunctuated_text(tmp_path):
+    path = tmp_path / "long.md"
+    path.write_text("# Data\n" + ("abcdefghijklmnopqrstuvwxyz" * 4), encoding="utf-8")
+
+    chunks = parse_document(path, max_chars=40, min_chars=1)
+
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= 40 for chunk in chunks)
+
+
+def test_overlap_applies_to_split_siblings_without_duplicate_chunk_ids(tmp_path):
+    path = tmp_path / "long.md"
+    path.write_text(
+        "# Procedure\n"
+        "Open the service panel and remove the lower filter. "
+        "Rinse the filter under running water before reinstalling it. "
+        "Close the panel and run a short rinse cycle.\n",
+        encoding="utf-8",
+    )
+
+    chunks = parse_document(path, max_chars=90, min_chars=1, overlap_chars=24)
+
+    assert len(chunks) == 3
+    assert chunks[1].text.startswith("remove the lower filter.")
+    assert len({chunk.metadata["chunk_id"] for chunk in chunks}) == len(chunks)
+
+
+def test_markdown_table_splits_on_rows_and_repeats_header(tmp_path):
+    path = tmp_path / "table.md"
+    path.write_text(
+        "# Faults\n"
+        "| Code | Meaning | Action |\n"
+        "| --- | --- | --- |\n"
+        "| E01 | Door is open | Close the door and restart. |\n"
+        "| E02 | Filter is blocked | Remove the lower filter and rinse it. |\n"
+        "| E03 | Water tank full | Empty the tank before continuing. |\n",
+        encoding="utf-8",
+    )
+
+    chunks = parse_document(path, max_chars=120, min_chars=1)
+
+    table_chunks = [chunk for chunk in chunks if chunk.metadata.get("chunk_kind") == "table"]
+
+    assert len(table_chunks) >= 2
+    assert all("| Code | Meaning | Action |" in chunk.text for chunk in table_chunks)
+    assert any("E02" in chunk.text for chunk in chunks)
+    assert {chunk.metadata["split_reason"] for chunk in table_chunks} == {"table_row_boundary"}
+
+
 def test_short_chunks_do_not_merge_across_headings(tmp_path):
     path = tmp_path / "short.md"
     path.write_text("# A\n短内容。\n# B\n短内容。\n", encoding="utf-8")

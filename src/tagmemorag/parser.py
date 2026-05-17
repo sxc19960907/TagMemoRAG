@@ -58,6 +58,7 @@ PDF_PAGE_NUMBER_RE = re.compile(r"^(?:page\s*)?\d{1,3}$", re.IGNORECASE)
 PDF_TOC_LEADER_RE = re.compile(r"\.{3,}\s*\d{1,3}$")
 PDF_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 PDF_MOJIBAKE_RE = re.compile(r"[\u0001-\u001f\ufffd]")
+SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[。！？.!?])\s+|(?<=[。！？])")
 PDF_MANUALSLIB_NOISE = (
     "manualslib.com",
     "the global manuals library",
@@ -78,6 +79,8 @@ def parse_document(
     min_chars: int = 50,
     root_dir: str | Path | None = None,
     metadata: dict[str, Any] | None = None,
+    *,
+    overlap_chars: int = 0,
     pdf_profile: str = "product_manual",
     pdf_heading_hints: list[str] | tuple[str, ...] | None = None,
 ) -> list[Chunk]:
@@ -91,6 +94,7 @@ def parse_document(
             source_file=source_file,
             max_chars=max_chars,
             min_chars=min_chars,
+            overlap_chars=overlap_chars,
             metadata=chunk_metadata,
             pdf_profile=pdf_profile,
             pdf_heading_hints=pdf_heading_hints,
@@ -146,7 +150,7 @@ def parse_document(
             current_lines.append(line)
     flush()
 
-    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars, overlap_chars=overlap_chars)
     return _with_lineage(processed, parser_profile=_text_parser_profile(suffix))
 
 
@@ -156,6 +160,7 @@ def _parse_pdf(
     source_file: str,
     max_chars: int,
     min_chars: int,
+    overlap_chars: int,
     metadata: dict[str, Any],
     pdf_profile: str,
     pdf_heading_hints: list[str] | tuple[str, ...] | None,
@@ -179,7 +184,7 @@ def _parse_pdf(
                 heading_hints=heading_hints,
             )
         )
-    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars)
+    processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars, overlap_chars=overlap_chars)
     return _with_lineage(processed, parser_profile=f"pdf:{pdf_profile}")
 
 
@@ -519,14 +524,19 @@ def _lineage_string_list(value: Any) -> list[str]:
     return [text] if text else []
 
 
-def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[Chunk]:
+def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int, overlap_chars: int = 0) -> list[Chunk]:
     split_chunks: list[Chunk] = []
     for chunk in chunks:
         if len(chunk.text) <= max_chars:
             split_chunks.append(chunk)
             continue
-        parts = _split_long_text(chunk.text, max_chars)
+        parts = _split_long_text(chunk.text, max_chars, overlap_chars=overlap_chars)
         for offset, part in enumerate(parts):
+            split_reason = _split_reason(part)
+            metadata = dict(chunk.metadata)
+            metadata["split_reason"] = split_reason
+            if split_reason == "table_row_boundary":
+                metadata["chunk_kind"] = "table"
             split_chunks.append(
                 Chunk(
                     text=part,
@@ -535,7 +545,7 @@ def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[C
                     level=chunk.level,
                     start_line=chunk.start_line + offset,
                     source_file=chunk.source_file,
-                    metadata=dict(chunk.metadata),
+                    metadata=metadata,
                 )
             )
 
@@ -557,7 +567,9 @@ def _post_process(chunks: list[Chunk], max_chars: int, min_chars: int) -> list[C
     return merged
 
 
-def _split_long_text(text: str, max_chars: int) -> list[str]:
+def _split_long_text(text: str, max_chars: int, *, overlap_chars: int = 0) -> list[str]:
+    if _contains_markdown_table(text):
+        return _with_overlap(_split_table_aware_text(text, max_chars), overlap_chars, max_chars)
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     parts: list[str] = []
     current = ""
@@ -567,11 +579,170 @@ def _split_long_text(text: str, max_chars: int) -> list[str]:
         elif len(current) + len(para) + 2 <= max_chars:
             current += "\n\n" + para
         else:
-            parts.extend(_hard_split(current, max_chars))
+            parts.extend(_split_sentence_aware(current, max_chars))
             current = para
     if current:
-        parts.extend(_hard_split(current, max_chars))
+        parts.extend(_split_sentence_aware(current, max_chars))
+    return _with_overlap(parts, overlap_chars, max_chars)
+
+
+def _split_sentence_aware(text: str, max_chars: int) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+    sentences = _sentence_units(text)
+    if len(sentences) <= 1:
+        return _hard_split(text, max_chars)
+    parts: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if len(sentence) > max_chars:
+            if current:
+                parts.append(current.strip())
+                current = ""
+            parts.extend(_hard_split(sentence, max_chars))
+            continue
+        separator = " " if current and _needs_space_between(current, sentence) else ""
+        candidate = current + separator + sentence if current else sentence
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            if current:
+                parts.append(current.strip())
+            current = sentence
+    if current:
+        parts.append(current.strip())
+    return [part for part in parts if part]
+
+
+def _sentence_units(text: str) -> list[str]:
+    units = [part.strip() for part in SENTENCE_BOUNDARY_RE.split(text.strip()) if part.strip()]
+    return units or [text.strip()]
+
+
+def _needs_space_between(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
+    return left[-1].isascii() and right[0].isascii()
+
+
+def _with_overlap(parts: list[str], overlap_chars: int, max_chars: int) -> list[str]:
+    clean_parts = [part.strip() for part in parts if part.strip()]
+    if overlap_chars <= 0 or len(clean_parts) <= 1:
+        return clean_parts
+    bounded_overlap = min(int(overlap_chars), max(max_chars // 3, 1))
+    overlapped = [clean_parts[0]]
+    for previous, current in zip(clean_parts, clean_parts[1:]):
+        if _contains_markdown_table(previous) or _contains_markdown_table(current):
+            overlapped.append(current)
+            continue
+        prefix = _overlap_tail(previous, bounded_overlap)
+        if not prefix:
+            overlapped.append(current)
+            continue
+        separator = "\n" if "\n" in prefix or "\n" in current else " "
+        overlapped.append((prefix + separator + current).strip())
+    return overlapped
+
+
+def _overlap_tail(text: str, overlap_chars: int) -> str:
+    if len(text) <= overlap_chars:
+        return text.strip()
+    window = text[-overlap_chars:]
+    for boundary in ("\n\n", "\n", "。", "！", "？", ". ", "! ", "? "):
+        index = window.find(boundary)
+        if index >= 0:
+            candidate = window[index + len(boundary) :].strip()
+            if candidate:
+                return candidate
+    return window.strip()
+
+
+def _contains_markdown_table(text: str) -> bool:
+    lines = text.splitlines()
+    return any(_is_markdown_table_separator(line) for line in lines)
+
+
+def _split_table_aware_text(text: str, max_chars: int) -> list[str]:
+    lines = text.splitlines()
+    parts: list[str] = []
+    current: list[str] = []
+    index = 0
+    while index < len(lines):
+        if _is_table_start(lines, index):
+            if current:
+                parts.extend(_split_sentence_aware("\n".join(current).strip(), max_chars))
+                current = []
+            table_lines: list[str] = []
+            while index < len(lines) and _is_markdown_table_line(lines[index]):
+                table_lines.append(lines[index].strip())
+                index += 1
+            parts.extend(_split_table_lines(table_lines, max_chars))
+            continue
+        current.append(lines[index])
+        index += 1
+    if current:
+        parts.extend(_split_sentence_aware("\n".join(current).strip(), max_chars))
     return parts
+
+
+def _split_table_lines(lines: list[str], max_chars: int) -> list[str]:
+    table = [line for line in lines if line.strip()]
+    if not table:
+        return []
+    if len("\n".join(table)) <= max_chars:
+        return ["\n".join(table)]
+    if len(table) < 3:
+        return _hard_split("\n".join(table), max_chars)
+    header = table[:2]
+    rows = table[2:]
+    parts: list[str] = []
+    current = list(header)
+    for row in rows:
+        candidate = current + [row]
+        if len("\n".join(candidate)) <= max_chars:
+            current.append(row)
+            continue
+        if len(current) > len(header):
+            parts.append("\n".join(current))
+            current = list(header)
+        if len("\n".join(current + [row])) <= max_chars:
+            current.append(row)
+        elif len(row) <= max_chars:
+            parts.append("\n".join(header + [row]))
+            current = list(header)
+        else:
+            parts.extend(_hard_split("\n".join(header + [row]), max_chars))
+            current = list(header)
+    if len(current) > len(header):
+        parts.append("\n".join(current))
+    return parts or _hard_split("\n".join(table), max_chars)
+
+
+def _is_table_start(lines: list[str], index: int) -> bool:
+    return (
+        index + 1 < len(lines)
+        and _is_markdown_table_line(lines[index])
+        and _is_markdown_table_separator(lines[index + 1])
+    )
+
+
+def _is_markdown_table_line(line: str) -> bool:
+    stripped = line.strip()
+    return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 2
+
+
+def _is_markdown_table_separator(line: str) -> bool:
+    stripped = line.strip()
+    if not _is_markdown_table_line(stripped):
+        return False
+    cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell or "") for cell in cells)
+
+
+def _split_reason(text: str) -> str:
+    if _contains_markdown_table(text):
+        return "table_row_boundary"
+    return "sentence_boundary"
 
 
 def _hard_split(text: str, max_chars: int) -> list[str]:

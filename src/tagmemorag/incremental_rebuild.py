@@ -319,6 +319,7 @@ def _build_plan(
             path,
             cfg.parser.max_chars,
             cfg.parser.min_chars,
+            overlap_chars=cfg.parser.overlap_chars,
             root_dir=docs_root,
             metadata=manual_node_attrs(metadata),
             pdf_profile=cfg.parser.pdf_profile,
