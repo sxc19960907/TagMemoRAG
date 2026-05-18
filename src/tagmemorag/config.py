@@ -177,6 +177,47 @@ class QueryPlanConfig(BaseModel):
     background_writer_max_queue: int = 1024
 
 
+class RerankerConfig(BaseModel):
+    """T3: Settings block for the Reranker first-class component (Architecture v2 § A3).
+
+    `enabled` defaults to False so T3 ships dormant; ops flips this in yaml
+    after observation. Vendor specifics (model_id, base_url) live here per
+    [[arch-vendor-specifics-discipline]] — never hard-coded in dispatcher
+    or build_plan.
+    """
+
+    enabled: bool = False
+    default_tier: Literal["off", "tier1", "tier2"] = "tier1"
+
+    provider: Literal["siliconflow", "noop"] = "siliconflow"
+    model_id: str = "Qwen/Qwen3-Reranker-0.6B"
+    model_version: str = "v1"
+    instruction: str | None = None
+    top_n: int = Field(default=20, ge=1)
+    rerank_candidates_n: int = Field(default=100, ge=1)
+
+    calibrator: Literal["minmax", "zscore", "sigmoid", "identity"] = "minmax"
+
+    max_seq_length: int = 32768
+    query_token_budget: int = 256
+    instruction_token_budget: int = 64
+
+    retry_max: int = Field(default=1, ge=0)
+    retry_backoff_ms: int = Field(default=200, ge=0)
+    circuit_breaker_threshold: int = Field(default=3, ge=1)
+    circuit_breaker_cooldown_seconds: int = Field(default=30, ge=1)
+
+    min_budget_ms: int = Field(default=500, ge=0)
+    hard_timeout_ms: int = Field(default=3000, ge=1)
+    downstream_reserve_ms: int = Field(default=200, ge=0)
+
+    cache_enabled: bool = True
+    cache_max_entries: int = Field(default=5000, ge=1)
+
+    api_key_env: str = "SILICONFLOW_API_KEY"
+    base_url: str = "https://api.siliconflow.cn/v1"
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -331,6 +372,7 @@ class Settings(BaseSettings):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
     queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

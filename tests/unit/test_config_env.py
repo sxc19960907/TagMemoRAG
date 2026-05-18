@@ -276,3 +276,59 @@ def test_queryplan_yaml_overrides(tmp_path):
     assert cfg.queryplan.retention_days == 90
     assert cfg.queryplan.private_kbs == ["secret_kb"]
     assert cfg.queryplan.out_of_scope_keywords == ["foo", "bar"]
+
+
+def test_reranker_defaults(tmp_path):
+    cfg = load_config(tmp_path / "missing.yaml")
+    r = cfg.reranker
+    assert r.enabled is False
+    assert r.default_tier == "tier1"
+    assert r.provider == "siliconflow"
+    assert r.model_id == "Qwen/Qwen3-Reranker-0.6B"
+    assert r.model_version == "v1"
+    assert r.top_n == 20
+    assert r.rerank_candidates_n == 100
+    assert r.calibrator == "minmax"
+    assert r.max_seq_length == 32768
+    assert r.retry_max == 1
+    assert r.circuit_breaker_threshold == 3
+    assert r.min_budget_ms == 500
+    assert r.hard_timeout_ms == 3000
+    assert r.cache_max_entries == 5000
+
+
+def test_reranker_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__RERANKER__ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__RERANKER__TOP_N", "30")
+    monkeypatch.setenv("TAGMEMORAG__RERANKER__CALIBRATOR", "zscore")
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg.reranker.enabled is True
+    assert cfg.reranker.top_n == 30
+    assert cfg.reranker.calibrator == "zscore"
+
+
+def test_reranker_yaml_overrides(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "reranker:\n  enabled: true\n  default_tier: tier2\n  rerank_candidates_n: 200\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(config)
+    assert cfg.reranker.enabled is True
+    assert cfg.reranker.default_tier == "tier2"
+    assert cfg.reranker.rerank_candidates_n == 200
+
+
+def test_reranker_validation_rejects_bad_values():
+    import pytest
+    from pydantic import ValidationError
+    from tagmemorag.config import RerankerConfig
+
+    with pytest.raises(ValidationError):
+        RerankerConfig(top_n=0)
+    with pytest.raises(ValidationError):
+        RerankerConfig(rerank_candidates_n=0)
+    with pytest.raises(ValidationError):
+        RerankerConfig(circuit_breaker_threshold=0)
+    with pytest.raises(ValidationError):
+        RerankerConfig(hard_timeout_ms=0)
