@@ -11,6 +11,7 @@ from .meta import (
     trim_history,
     write_meta,
 )
+from .migration import migrate_kb_to_g1_if_needed
 
 __all__ = [
     "INDEXGEN_META_FILENAME",
@@ -19,6 +20,7 @@ __all__ = [
     "KbMeta",
     "ReadyGeneration",
     "ShadowGeneration",
+    "migrate_kb_to_g1_if_needed",
     "read_meta",
     "trim_history",
     "write_meta",
