@@ -85,6 +85,7 @@ class SearchFeedback:
     note: str = ""
     status: FeedbackStatus = "new"
     operator_note: str = ""
+    plan_id: str = ""  # T2: optional QueryPlan reference; "" for legacy rows.
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -106,6 +107,7 @@ class SearchFeedback:
             "note": self.note,
             "status": self.status,
             "operator_note": self.operator_note,
+            "plan_id": self.plan_id,
         }
 
 
@@ -287,6 +289,7 @@ def feedback_from_payload(kb_name: str, payload: Mapping[str, Any]) -> SearchFee
         note=_bounded_text(str(payload.get("note") or ""), "note", MAX_NOTE_CHARS),
         status=status,  # type: ignore[arg-type]
         operator_note=_bounded_text(str(payload.get("operator_note") or ""), "operator_note", MAX_NOTE_CHARS),
+        plan_id=_bounded_text(str(payload.get("plan_id") or ""), "plan_id", 120),
     )
 
 

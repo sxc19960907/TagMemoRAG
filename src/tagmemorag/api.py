@@ -356,6 +356,7 @@ class FeedbackSubmitRequest(BaseModel):
     failure_reason: str = Field(default="", max_length=120)
     expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
     note: str = Field(default="", max_length=2000)
+    plan_id: str | None = Field(default=None, max_length=120)
 
 
 class FeedbackReviewRequest(BaseModel):
