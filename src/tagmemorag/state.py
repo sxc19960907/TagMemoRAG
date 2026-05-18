@@ -262,6 +262,77 @@ class AppState:
         result["orphan_shadow_detected"] = orphan_detected
         return result
 
+    def validate_settings_against_index(
+        self, kb_name: str, cfg: Settings
+    ) -> dict[str, Any]:
+        """Verify cfg matches the active generation snapshot in index.json.
+
+        Architecture v2 § A4 / Decisions D8 + D12: index.json is the truth
+        source for active generation versions; the in-process Settings should
+        agree at startup. Disagreement means either the operator changed the
+        yaml without going through swap, or shadow_build/swap left state in a
+        partial form. Either way the operator must reconcile manually before
+        serving traffic.
+
+        Returns a status dict:
+        - status="ok" if matched (or KB has no active generation yet, e.g.
+          freshly migrated empty KB)
+        - status="not_migrated" if KB has no index.json at all
+        Raises ServiceError(INDEXGEN_SETTINGS_META_MISMATCH) on disagreement.
+        """
+        from .indexgen import read_meta
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = self.get_generation_meta(kb_name) or read_meta(kb_root)
+        if meta is None:
+            return {"kb_name": kb_name, "status": "not_migrated"}
+        if meta.active_generation is None:
+            return {"kb_name": kb_name, "status": "no_active_generation"}
+        active = meta.get_active()
+        if active is None:
+            return {"kb_name": kb_name, "status": "no_active_generation"}
+
+        mismatches: list[dict[str, Any]] = []
+        checks = [
+            (
+                "embedding_model_id",
+                cfg.model.effective_embedding_model_id,
+                active.embedding_model_id,
+            ),
+            (
+                "embedding_model_version",
+                cfg.model.embedding_model_version,
+                active.embedding_model_version,
+            ),
+            (
+                "index_schema_version",
+                int(_safe_int(cfg.storage.schema_version, 1)),
+                active.index_schema_version,
+            ),
+        ]
+        for name, settings_value, meta_value in checks:
+            if str(settings_value) != str(meta_value):
+                mismatches.append(
+                    {"field": name, "settings": settings_value, "index_json": meta_value}
+                )
+
+        if mismatches:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_SETTINGS_META_MISMATCH,
+                "Settings disagree with active generation. "
+                "Operator must reconcile yaml config or swap to a matching generation.",
+                {
+                    "kb_name": kb_name,
+                    "active_generation": meta.active_generation,
+                    "mismatches": mismatches,
+                },
+            )
+        return {
+            "kb_name": kb_name,
+            "status": "ok",
+            "active_generation": meta.active_generation,
+        }
+
     def start_shadow_rebuild(
         self,
         docs_dir: str | Path,
