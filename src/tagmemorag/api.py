@@ -552,6 +552,37 @@ def _compute_retrieve_id(request: RetrieveRequest, state: GraphState, trace_id: 
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
+def _build_and_log_plan(request: SearchRequest, state: GraphState):
+    """T2: construct QueryPlan + insert basic row. Returns (plan, plan_log).
+
+    Caller is responsible for calling plan_log.update_result_async() before
+    returning the response to fill in result columns.
+    """
+    from .queryplan import PlanLog, build_plan
+
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    budget_spec = request.budget.to_planner_dict() if request.budget else None
+    plan = build_plan(
+        request.question,
+        request.kb_name,
+        settings,
+        filters=filter_dict,
+        budget_spec=budget_spec,
+    )
+    plan_log = PlanLog(request.kb_name, settings)
+    plan_log.insert_basic(plan)
+    return plan, plan_log
+
+
+def _served_by_generation(state: GraphState) -> int | None:
+    """T2: Try to read served_by_generation from state.meta; falls back to None
+    when index.json is not yet wired into rebuilds."""
+    if not isinstance(state.meta, dict):
+        return None
+    gen = state.meta.get("served_by_generation")
+    return int(gen) if gen is not None else None
+
+
 @app.middleware("http")
 async def trace_middleware(request: Request, call_next):
     request.app.state.settings = settings
@@ -743,6 +774,45 @@ def retrieve(
 
 
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
+    plan, plan_log = _build_and_log_plan(request, state)
+    warnings: list[str] = []
+
+    # Out-of-scope short-circuit (T2 D2): skip retrieval, return empty results,
+    # still write plan log so we can study these queries later.
+    from .queryplan import Intent
+
+    if plan.intent == Intent.OUT_OF_SCOPE:
+        warnings.append("out_of_scope_intent")
+        trace_id = str(getattr(http_request.state, "trace_id", ""))
+        search_id = _compute_search_id(request, state, trace_id)
+        payload = {
+            "build_id": state.build_id,
+            "kb_name": state.kb_name,
+            "trace_id": trace_id,
+            "search_id": search_id,
+            "plan_id": plan.plan_id,
+            "results": [],
+            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
+            "cache": "disabled",
+            "warnings": list(warnings),
+        }
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "disabled",
+            "evidence_ids": [],
+            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
+            "warnings": list(warnings),
+        })
+        get_metrics().record_search(
+            kb_name=state.kb_name,
+            cache_status="disabled",
+            outcome="success",
+            duration=time.perf_counter() - t0,
+            result_count=0,
+        )
+        return payload
+
     cache_status = "disabled"
     cache_key = _compute_cache_key(request, state)
     cache = app_state.query_cache if settings.cache.enabled else None
@@ -755,8 +825,16 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         search_time_ms = (time.perf_counter() - t0) * 1000.0
         trace_id = str(getattr(http_request.state, "trace_id", ""))
         search_id = _compute_search_id(request, state, trace_id)
-        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
+        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit", "plan_id": plan.plan_id}
         result_count = len(payload.get("results", []))
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "hit",
+            "evidence_ids": [],
+            "latency_ms_observed": int(search_time_ms),
+            "warnings": list(warnings),
+        })
         get_metrics().record_search(
             kb_name=state.kb_name,
             cache_status="hit",
@@ -860,10 +938,13 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         "kb_name": state.kb_name,
         "trace_id": trace_id,
         "search_id": _compute_search_id(request, state, trace_id),
+        "plan_id": plan.plan_id,
         "results": [r.to_dict() for r in results],
         "search_time_ms": round(search_time_ms, 3),
         "cache": "miss",
     }
+    if warnings:
+        payload["warnings"] = list(warnings)
     if search_debug_enabled(request.debug, settings):
         payload["debug"] = search_debug_payload(
             execution,
@@ -876,15 +957,64 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
     if cache is not None:
         cache.set(
             cache_key,
-            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache"}},
+            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache", "plan_id"}},
             kb_name=request.kb_name,
         )
         get_metrics().record_cache_operation(operation="set", outcome="success")
         get_metrics().set_cache_entries(len(cache))
+    plan_log.update_result_async(plan.plan_id, {
+        "served_by_generation": _served_by_generation(state),
+        "served_by_build_id": state.build_id,
+        "cache_status": cache_status,
+        "evidence_ids": [r.id for r in results if hasattr(r, "id")],
+        "latency_ms_observed": int(search_time_ms),
+        "warnings": list(warnings),
+    })
     return payload
 
 
 def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):
+    plan, plan_log = _build_and_log_plan(request, state)
+    warnings: list[str] = []
+
+    # Out-of-scope short-circuit (T2 D2)
+    from .queryplan import Intent
+
+    if plan.intent == Intent.OUT_OF_SCOPE:
+        warnings.append("out_of_scope_intent")
+        trace_id = str(getattr(http_request.state, "trace_id", ""))
+        search_id = _compute_search_id(request, state, trace_id)
+        retrieve_id = _compute_retrieve_id(request, state, trace_id)
+        empty_payload = {
+            "build_id": state.build_id,
+            "kb_name": state.kb_name,
+            "trace_id": trace_id,
+            "search_id": search_id,
+            "retrieve_id": retrieve_id,
+            "plan_id": plan.plan_id,
+            "results": [],
+            "evidence": [],
+            "context_pack": {"items": []},
+            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
+            "warnings": list(warnings),
+        }
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "disabled",
+            "evidence_ids": [],
+            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
+            "warnings": list(warnings),
+        })
+        get_metrics().record_search(
+            kb_name=state.kb_name,
+            cache_status="disabled",
+            outcome="success",
+            duration=time.perf_counter() - t0,
+            result_count=0,
+        )
+        return empty_payload
+
     emb_t0 = time.perf_counter()
     try:
         with start_span("tagmemorag.retrieve.embedding", **{"tagmemorag.kb_name": state.kb_name}):
@@ -976,6 +1106,20 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
         latency_ms=round(search_time_ms, 3),
         search_strategy=execution.strategy,
     )
+    payload["plan_id"] = plan.plan_id
+    if warnings:
+        payload["warnings"] = list(warnings)
+    plan_log.update_result_async(plan.plan_id, {
+        "served_by_generation": _served_by_generation(state),
+        "served_by_build_id": state.build_id,
+        "cache_status": "disabled",
+        "evidence_ids": [
+            ev.get("evidence_id") for ev in payload.get("evidence", [])
+            if isinstance(ev, dict) and ev.get("evidence_id")
+        ],
+        "latency_ms_observed": int(search_time_ms),
+        "warnings": list(warnings),
+    })
     return payload
 
 
