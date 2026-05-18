@@ -107,6 +107,34 @@ def build_plan(
         persist = False
         budget = replace(budget, allow_external_reranker=False)
 
+    # T3 D6: feature flag controls whether reranker is even reachable.
+    # When Settings.reranker.enabled=False, force tier=off regardless of
+    # client request — avoids accidental external calls during ramp-up.
+    # When enabled=True and client did not specify a tier, use default_tier.
+    rerank_cfg = getattr(settings, "reranker", None)
+    if rerank_cfg is None or not rerank_cfg.enabled:
+        budget = replace(budget, rerank_tier="off", rerank_candidates_n=0)
+    else:
+        client_specified_tier = bool(budget_spec and budget_spec.get("rerank_tier"))
+        if not client_specified_tier:
+            budget = replace(budget, rerank_tier=str(rerank_cfg.default_tier))
+        # Set candidate window when reranker actually active
+        if budget.rerank_tier != "off":
+            budget = replace(
+                budget,
+                rerank_candidates_n=int(rerank_cfg.rerank_candidates_n),
+            )
+
+    # T3: attach RerankSpec when tier!=off; downstream dispatcher reads it.
+    rerank_spec: dict | None = None
+    if budget.rerank_tier != "off" and rerank_cfg is not None:
+        rerank_spec = {
+            "reranker_id": _format_reranker_id(rerank_cfg),
+            "reranker_version": str(rerank_cfg.model_version),
+            "instruction": rerank_cfg.instruction,
+            "top_n": int(rerank_cfg.top_n),
+        }
+
     return QueryPlan(
         schema_version=PLAN_SCHEMA_VERSION,
         plan_id=plan_id,
@@ -116,11 +144,21 @@ def build_plan(
         intent=intent,
         filters=dict(filters) if filters else {},
         strategy=dict(strategy) if strategy else dict(DEFAULT_STRATEGY),
-        rerank=None,  # T3 fills
+        rerank=rerank_spec,
         budget=budget,
         created_at=now_iso_utc(),
         persist=persist,
     )
+
+
+def _format_reranker_id(rerank_cfg) -> str:
+    """Compose a vendor-neutral identity string the dispatcher can match against.
+
+    Format: "<short-model-name>@<provider>". Short name is the last path segment
+    of model_id lowercased.
+    """
+    short = str(rerank_cfg.model_id).split("/")[-1].lower()
+    return f"{short}@{rerank_cfg.provider}"
 
 
 __all__ = ["build_plan", "PLAN_SCHEMA_VERSION", "DEFAULT_STRATEGY"]

@@ -52,6 +52,7 @@ class Budget:
     max_evidence: int = 8
     allow_external_reranker: bool = True
     deadline_at: float = 0.0  # set by build_plan; not serialized
+    rerank_candidates_n: int = 0  # T3: candidate window when rerank_tier!=off; 0 means "use request.top_k"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,6 +60,7 @@ class Budget:
             "rerank_tier": self.rerank_tier,
             "max_evidence": self.max_evidence,
             "allow_external_reranker": self.allow_external_reranker,
+            "rerank_candidates_n": self.rerank_candidates_n,
         }
 
     @classmethod
@@ -68,6 +70,7 @@ class Budget:
             rerank_tier=str(data.get("rerank_tier") or "off"),
             max_evidence=int(data.get("max_evidence") or 8),
             allow_external_reranker=bool(data.get("allow_external_reranker", True)),
+            rerank_candidates_n=int(data.get("rerank_candidates_n") or 0),
         )
 
 

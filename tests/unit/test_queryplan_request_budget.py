@@ -75,8 +75,15 @@ def test_budget_spec_to_planner_dict_omits_none():
 
 
 def test_budget_spec_passes_through_build_plan():
-    """Integration: BudgetSpec → planner dict → build_plan applies override."""
+    """Integration: BudgetSpec → planner dict → build_plan applies override.
+
+    Note (T3 D6): rerank_tier is governed by Settings.reranker.enabled. With
+    reranker disabled (default), build_plan forces tier=off regardless of
+    client request. This test enables reranker explicitly to verify the
+    BudgetSpec wire-through.
+    """
     s = Settings()
+    s.reranker.enabled = True
     spec = BudgetSpec(latency_ms=1500, rerank_tier="tier1")
     plan = build_plan("hi", "default", s, budget_spec=spec.to_planner_dict())
     assert plan.budget.latency_ms == 1500

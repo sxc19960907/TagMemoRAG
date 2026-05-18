@@ -52,6 +52,7 @@ def test_budget_round_trip_omits_deadline_at():
         "rerank_tier": "off",
         "max_evidence": 8,
         "allow_external_reranker": True,
+        "rerank_candidates_n": 0,
     }
     decoded = Budget.from_dict(encoded)
     # deadline_at defaults to 0.0 after round-trip

@@ -95,7 +95,7 @@ class RerankerDispatcher:
         return hashlib.sha256(",".join(ids).encode("utf-8")).hexdigest()[:16]
 
     def _cache_key(self, plan: "QueryPlan", candidates: Iterable) -> tuple:
-        instruction = plan.rerank.instruction if plan.rerank else None
+        instruction = plan.rerank.get("instruction") if plan.rerank else None
         return (
             self.primary.id,
             self.primary.version,
@@ -186,7 +186,7 @@ class RerankerDispatcher:
             1,
             min(remaining - s.downstream_reserve_ms, s.hard_timeout_ms),
         )
-        instruction = plan.rerank.instruction if plan.rerank else None
+        instruction = plan.rerank.get("instruction") if plan.rerank else None
         docs = [RerankDoc(chunk_id=c.chunk_id, text=c.text) for c in candidates]
         t0 = time.perf_counter()
         try:

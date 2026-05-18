@@ -178,12 +178,13 @@ def test_dispatcher_passes_instruction_from_plan():
     fake = _FakeReranker()
     d = RerankerDispatcher(s, primary=fake)
     plan = _plan_with_tier(s, "tier1")
-    # Manually set rerank with instruction
-    from tagmemorag.reranker.base import RerankSpec
-    new_rerank = RerankSpec(
-        reranker_id="fake@test", reranker_version="v1",
-        instruction="Sort by recency", top_n=10,
-    )
+    # T3: rerank lives as a dict on plan.rerank (not a RerankSpec dataclass).
+    new_rerank = {
+        "reranker_id": "fake@test",
+        "reranker_version": "v1",
+        "instruction": "Sort by recency",
+        "top_n": 10,
+    }
     plan = type(plan)(
         schema_version=plan.schema_version,
         plan_id=plan.plan_id,
