@@ -19,6 +19,7 @@ SAFE_QDRANT_PAYLOAD_KEYS = {
     "manual_id",
     "source_file",
     "text_hash",
+    "vector_point_id",
 }
 
 
