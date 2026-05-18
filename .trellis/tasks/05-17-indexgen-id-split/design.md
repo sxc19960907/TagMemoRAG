@@ -111,10 +111,10 @@ Current implementation (`src/tagmemorag/chunk_identity.py:parser_signature`) alr
 
 No code change to derivation function.
 
-### 3.2 vector_point_id (new)
+### 3.2 vector_point_id (new, payload-only)
 
 ```python
-# storage/qdrant_vector.py (and parallel npz path)
+# src/tagmemorag/vector_id.py
 def vector_point_id(chunk_id: str, embedding_model_id: str, embedding_model_version: str) -> str:
     h = hashlib.sha256()
     h.update(chunk_id.encode("utf-8"))
@@ -122,16 +122,19 @@ def vector_point_id(chunk_id: str, embedding_model_id: str, embedding_model_vers
     h.update(embedding_model_id.encode("utf-8"))
     h.update(b"\x00")
     h.update(embedding_model_version.encode("utf-8"))
-    return h.hexdigest()
+    return str(uuid.UUID(bytes=h.digest()[:16]))
 ```
 
-Qdrant note: point ids must be either unsigned int or UUID. We use UUID-shaped: `uuid.UUID(bytes=hash_bytes[:16])` → 128-bit derivation from the SHA-256 digest. This is collision-safe at our scale.
+**Storage role (decided in Slice 1.5 review):** `vector_point_id` is a **payload field**, not the Qdrant point id. Per architecture.md § A1 "Storage role of vector_point_id":
 
-`_point_struct` (`storage/qdrant_vector.py:255`) replaces:
-- before: `id=node_id` (rebuild-local int)
-- after: `id=str(uuid.UUID(bytes=hash_bytes[:16]))`
+- A4 collection-per-generation already isolates embedder versions; `node_id` within one collection is unambiguous.
+- Promoting `vector_point_id` to Qdrant point id would force a UUID-vs-int type change across every call site (`delete`, `update_payloads`, `load`, `_scroll_ids`, `get`, `FakeQdrantClient`) for no additional isolation guarantee.
+- Therefore the Qdrant point id remains `int(node_id)` (unchanged). `vector_point_id` lives in the payload (added to `SAFE_QDRANT_PAYLOAD_KEYS` in Slice 1).
+- Cross-generation tools (eval replay, debug joins) read the payload field to match rows across `g{N}` collections.
 
-`node_id` remains in payload (`payload["node_id"]`) for runtime convenience but is no longer the durable key.
+NPZ backend: same principle. Vector ordering keyed by `node_id`; a parallel `vector_point_ids` array is added next to `vectors.npz` only when a tool actually needs it (deferred).
+
+**Slice 1.5 (point id type migration) is removed from this task.** The contract is delivered by Slice 1 alone (payload field) plus this design note.
 
 ## 4. AppState Dual-Generation Model
 

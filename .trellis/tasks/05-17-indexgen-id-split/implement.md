@@ -33,17 +33,15 @@ Scope contract: introduce the `vector_point_id` concept and lock `chunk_id` inva
 - [ ] Validation: `pytest tests/unit/test_chunk_identity.py tests/unit/test_vector_id.py tests/unit/test_storage_state.py`.
 - [ ] Commit: `feat(indexgen): introduce vector_point_id derivation; add to Qdrant payload`.
 
-## Slice 1.5 — Qdrant point id type migration (A1 cont.)
+## Slice 1.5 — REMOVED
 
-Scope contract: replace Qdrant point id from int(node_id) to UUID-shaped vector_point_id. NPZ continues to use int(node_id) keying internally; the parallel `vector_point_ids` array is added in this slice as the bridge for future generation comparisons.
+Originally proposed: replace Qdrant point id with UUID-shaped `vector_point_id`. Removed during Slice 1 review with rationale documented in `design.md` § 3.2 and `architecture.md` § A1 "Storage role of vector_point_id":
 
-- [ ] Update `_point_struct` to use `id=str(vector_point_id_for_node(node_id))`.
-- [ ] Update `delete`, `update_payloads`, `load`, `_scroll_ids`, `get` to translate between node_id (caller-facing) and vector_point_id (Qdrant-facing). New private helper `_node_id_to_point_id(node_id, payload_lookup)` returns the right id.
-- [ ] Test fixture (`FakeQdrantClient`) updates as needed.
-- [ ] Update existing tests that asserted on int point ids; they now assert on payload `node_id` field.
-- [ ] NPZ: persist `vector_point_ids: list[str]` array next to `vectors.npz`. NPZ search/get continue to use int node_id internally.
-- [ ] Validation: `pytest tests/unit tests/integration -k qdrant`.
-- [ ] Commit: `feat(indexgen): switch Qdrant point id to vector_point_id (UUID)`.
+- A4 collection-per-generation already isolates embedder versions; `node_id` is unambiguous within a collection.
+- Type migration (UUID vs int) would churn every Qdrant call site without adding isolation.
+- `vector_point_id` lives in the Qdrant payload (Slice 1) so cross-generation tools can match rows.
+
+Skip ahead to Slice 2.
 
 ## Slice 2 — generation-aware naming + meta.json schema (D1, D2 partial)
 

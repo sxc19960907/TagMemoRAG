@@ -155,7 +155,9 @@ Properties:
 
 **Migration.** Coexistence of old and new embedder vectors is delivered by A4 (IndexGeneration), not by mutating existing rows. While a shadow generation is being built with a new embedder, both generations exist in their own Qdrant collections (`{prefix}_{kb}_g1` and `{prefix}_{kb}_g2`), each addressed by its own `vector_point_id` namespace.
 
-**Implementation hint (for the follow-up task, not authoritative).** `qdrant_vector.collection_name(prefix, kb)` extends to `(prefix, kb, generation)`. `chunk_id` derivation lives where chunk lineage is computed today and changes only by removing any embedder coupling that may have crept in. `vector_point_id` is computed at the indexing step right before vectors are written.
+**Storage role of `vector_point_id`.** Because A4 isolates generations into separate Qdrant collections (and separate `g{N}/` directories), the underlying vector store can continue to key vectors by the rebuild-local `node_id` without ambiguity — within one collection there is exactly one embedder version, so `node_id` does not collide. `vector_point_id` therefore lives as a **payload field** alongside `chunk_id`, not as the Qdrant point id itself. Its job is to be a stable cross-generation handle: tools that compare g1 vs g2 (eval replay, debug joins) match rows by `vector_point_id` regardless of which collection they were retrieved from. Promoting it to point id was considered and rejected: A4's collection-per-generation already provides isolation, and changing the point id type triggers churn across every Qdrant call site for no additional safety.
+
+**Implementation hint (for the follow-up task, not authoritative).** `qdrant_vector.collection_name(prefix, kb)` extends to `(prefix, kb, generation)`. `chunk_id` derivation lives where chunk lineage is computed today and changes only by removing any embedder coupling that may have crept in. `vector_point_id` is computed at the indexing step right before vectors are written and is added to the Qdrant payload allowlist; the point id remains `int(node_id)`.
 
 ### A2. QueryPlan and Request Budget  🚧
 
