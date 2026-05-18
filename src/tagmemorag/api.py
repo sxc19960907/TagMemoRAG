@@ -584,6 +584,44 @@ def _served_by_generation(state: GraphState) -> int | None:
     return int(gen) if gen is not None else None
 
 
+_RERANK_DISPATCHER_CACHE: dict[int, "object"] = {}
+
+
+def _rerank_dispatcher():
+    """T3: lazy singleton dispatcher keyed by current Settings identity.
+
+    Rebuilt when api.settings is replaced (test fixtures swap settings
+    between tests).
+    """
+    from .reranker import RerankerDispatcher
+
+    key = id(settings)
+    cached = _RERANK_DISPATCHER_CACHE.get(key)
+    if cached is None:
+        cached = RerankerDispatcher(settings)
+        _RERANK_DISPATCHER_CACHE[key] = cached
+    return cached
+
+
+def _reorder_results(original_results, rerank_outcome):
+    """Reorder execute_search results by rerank_outcome's chunk_id ordering.
+
+    Items not in rerank_outcome are dropped (rerank already filtered to top_n).
+    Falls back to original order when rerank_outcome is empty.
+    """
+    if not rerank_outcome.items:
+        return list(original_results)
+    from .reranker.dispatcher import _candidate_chunk_id
+
+    by_id = {_candidate_chunk_id(r): r for r in original_results}
+    out = []
+    for item in rerank_outcome.items:
+        cid = item.chunk_id
+        if cid in by_id and by_id[cid] is not None:
+            out.append(by_id[cid])
+    return out
+
+
 @app.middleware("http")
 async def trace_middleware(request: Request, call_next):
     request.app.state.settings = settings
@@ -980,6 +1018,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
 
     # Out-of-scope short-circuit (T2 D2)
     from .queryplan import Intent
+    from .queryplan.budget import BudgetGuard
 
     if plan.intent == Intent.OUT_OF_SCOPE:
         warnings.append("out_of_scope_intent")
@@ -1042,12 +1081,22 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
             )
             for g in request.ghost_tags
         )
+        # T3 D1: when reranker active, expand candidate window to
+        # rerank_candidates_n; reranker prunes back to top_n; downstream
+        # build_retrieve_response truncates to user's token_budget.
+        effective_top_k = int(params["top_k"])
+        rerank_active = (
+            plan.budget.rerank_tier != "off"
+            and plan.budget.rerank_candidates_n > 0
+        )
+        if rerank_active:
+            effective_top_k = max(effective_top_k, plan.budget.rerank_candidates_n)
         execution = execute_search(
             state=state,
             query_vec=query_vec,
             settings=settings,
             query_text=request.question,
-            top_k=int(params["top_k"]),
+            top_k=effective_top_k,
             source_k=int(params["source_k"]),
             steps=int(params["steps"]),
             decay=float(params["decay"]),
@@ -1058,12 +1107,30 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
             core_tags=tuple(request.core_tags),
             ghost_tags=ghost_tag_args,
         )
+    candidates_used = execution.results
+    rerank_log_entry: dict | None = None
+    if rerank_active:
+        guard = BudgetGuard(plan)
+        rerank_outcome = _rerank_dispatcher().rerank(plan, list(execution.results), guard)
+        if rerank_outcome.warnings:
+            warnings.extend(rerank_outcome.warnings)
+        candidates_used = _reorder_results(execution.results, rerank_outcome)
+        rerank_log_entry = {
+            "vendor_used": rerank_outcome.vendor_used,
+            "calibrator": settings.reranker.calibrator,
+            "calibrated": True,
+            "latency_ms": rerank_outcome.latency_ms,
+            "top_n_returned": len(rerank_outcome.items),
+            "truncated_count": len(rerank_outcome.truncated_chunk_ids),
+            "cache_status": rerank_outcome.cache_status,
+            "warnings": list(rerank_outcome.warnings),
+        }
     search_time_ms = (time.perf_counter() - t0) * 1000.0
     trace_id = str(getattr(http_request.state, "trace_id", ""))
     search_id = _compute_search_id(request, state, trace_id)
     asset_manifest = load_asset_manifest(state.kb_name, settings) if settings.assets.enabled else None
     payload = build_retrieve_response(
-        results=execution.results,
+        results=candidates_used,
         build_id=state.build_id,
         kb_name=state.kb_name,
         trace_id=trace_id,
@@ -1120,6 +1187,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
         ],
         "latency_ms_observed": int(search_time_ms),
         "warnings": list(warnings),
+        "rerank": rerank_log_entry,
     })
     return payload
 

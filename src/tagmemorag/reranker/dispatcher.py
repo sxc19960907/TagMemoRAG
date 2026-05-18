@@ -44,6 +44,35 @@ if TYPE_CHECKING:  # pragma: no cover
 _LOGGER = structlog.get_logger()
 
 
+def _candidate_chunk_id(c) -> str:
+    """Extract a stable chunk identifier from a candidate.
+
+    Supports duck-typed candidates with .chunk_id (test fakes) AND the
+    real `Result` dataclass where chunk_id lives in metadata. Falls back
+    to anchor_key, then to str(node_id) so we always have *some* key.
+    """
+    cid = getattr(c, "chunk_id", None)
+    if cid:
+        return str(cid)
+    meta = getattr(c, "metadata", None)
+    if isinstance(meta, dict):
+        meta_cid = meta.get("chunk_id")
+        if meta_cid:
+            return str(meta_cid)
+    anchor = getattr(c, "anchor_key", None)
+    if anchor:
+        return str(anchor)
+    node_id = getattr(c, "node_id", None)
+    if node_id is not None:
+        return f"node:{node_id}"
+    return ""
+
+
+def _candidate_text(c) -> str:
+    text = getattr(c, "text", None)
+    return str(text) if text else ""
+
+
 class _CandidateLike:
     """Duck-type for SearchResult — only chunk_id and text needed.
 
@@ -91,7 +120,7 @@ class RerankerDispatcher:
 
     @staticmethod
     def _chunk_id_set_hash(candidates: Iterable) -> str:
-        ids = sorted(c.chunk_id for c in candidates)
+        ids = sorted(_candidate_chunk_id(c) for c in candidates)
         return hashlib.sha256(",".join(ids).encode("utf-8")).hexdigest()[:16]
 
     def _cache_key(self, plan: "QueryPlan", candidates: Iterable) -> tuple:
@@ -124,7 +153,7 @@ class RerankerDispatcher:
     ) -> RerankResult:
         outcome = self.noop.rerank(
             query="",
-            docs=[RerankDoc(chunk_id=c.chunk_id, text="") for c in candidates],
+            docs=[RerankDoc(chunk_id=_candidate_chunk_id(c), text="") for c in candidates],
             instruction=None,
             budget_ms=0,
         )
@@ -187,7 +216,10 @@ class RerankerDispatcher:
             min(remaining - s.downstream_reserve_ms, s.hard_timeout_ms),
         )
         instruction = plan.rerank.get("instruction") if plan.rerank else None
-        docs = [RerankDoc(chunk_id=c.chunk_id, text=c.text) for c in candidates]
+        docs = [
+            RerankDoc(chunk_id=_candidate_chunk_id(c), text=_candidate_text(c))
+            for c in candidates
+        ]
         t0 = time.perf_counter()
         try:
             outcome: RerankerOutcome = self.primary.rerank(
