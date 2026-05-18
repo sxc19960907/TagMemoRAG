@@ -8,7 +8,7 @@ import json
 import sys
 import time
 from io import StringIO
-from typing import cast
+from typing import Literal, cast
 import uuid
 
 from pathlib import Path
@@ -206,6 +206,36 @@ class SearchRequest(BaseModel):
     # diagnostics with no impact on weights.
     core_tags: list[str] = Field(default_factory=list)
     ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
+    # T2: optional per-request budget override; missing fields fall through to
+    # Settings.queryplan.default_*. None means "use settings defaults entirely".
+    budget: "BudgetSpec | None" = None
+
+
+class BudgetSpec(BaseModel):
+    """T2: optional per-request resource budget override.
+
+    Missing fields fall through to Settings.queryplan.default_*. The
+    deadline_at lifecycle field on the runtime Budget is computed by
+    build_plan and never appears in the API surface.
+    """
+
+    latency_ms: int | None = Field(default=None, ge=1)
+    rerank_tier: Literal["off", "tier1", "tier2"] | None = None
+    max_evidence: int | None = Field(default=None, ge=1)
+    allow_external_reranker: bool | None = None
+
+    def to_planner_dict(self) -> dict:
+        """Convert to the dict shape expected by build_plan(budget_spec=...)."""
+        out: dict = {}
+        if self.latency_ms is not None:
+            out["latency_ms"] = self.latency_ms
+        if self.rerank_tier is not None:
+            out["rerank_tier"] = self.rerank_tier
+        if self.max_evidence is not None:
+            out["max_evidence"] = self.max_evidence
+        if self.allow_external_reranker is not None:
+            out["allow_external_reranker"] = self.allow_external_reranker
+        return out
 
 
 class RetrieveRequest(SearchRequest):
