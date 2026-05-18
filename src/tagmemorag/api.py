@@ -287,6 +287,30 @@ class CacheClearRequest(BaseModel):
     kb_name: str | None = None
 
 
+class IndexGenBuildShadowRequest(BaseModel):
+    kb_name: str = "default"
+    docs_dir: str | None = None
+    embedding_model_id: str | None = None
+    embedding_model_version: str | None = None
+    parser_version: str | None = None
+    chunker_version: str | None = None
+    index_schema_version: int | None = None
+
+
+class IndexGenCancelShadowRequest(BaseModel):
+    kb_name: str = "default"
+
+
+class IndexGenSwapRequest(BaseModel):
+    kb_name: str = "default"
+
+
+class IndexGenRetireRequest(BaseModel):
+    kb_name: str = "default"
+    generation: int
+    force: bool = False
+
+
 class FeedbackSubmitRequest(BaseModel):
     kb_name: str = "default"
     trace_id: str = ""
@@ -1700,6 +1724,94 @@ def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_s
         get_metrics().set_cache_entries(len(app_state.query_cache))
         structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
         return {"cleared_count": cleared}
+
+
+def _resolve_indexgen_target_versions(req: IndexGenBuildShadowRequest) -> dict[str, object]:
+    diff: dict[str, object] = {}
+    if req.embedding_model_id is not None:
+        diff["embedding_model_id"] = req.embedding_model_id
+    if req.embedding_model_version is not None:
+        diff["embedding_model_version"] = req.embedding_model_version
+    if req.parser_version is not None:
+        diff["parser_version"] = req.parser_version
+    if req.chunker_version is not None:
+        diff["chunker_version"] = req.chunker_version
+    if req.index_schema_version is not None:
+        diff["index_schema_version"] = req.index_schema_version
+    return diff
+
+
+@app.post("/admin/generation/build-shadow")
+def admin_build_shadow(
+    request: IndexGenBuildShadowRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    target_versions = _resolve_indexgen_target_versions(request)
+    if not target_versions:
+        raise ServiceError(
+            ErrorCode.INDEXGEN_NO_VERSION_DIFF,
+            "build-shadow requires at least one version field different from active.",
+            {"kb_name": request.kb_name},
+        )
+    docs_dir = request.docs_dir or settings.manual_library.root_dir
+    task = app_state.start_shadow_rebuild(
+        docs_dir,
+        request.kb_name,
+        settings,
+        target_versions=target_versions,
+        embedder=embedder,
+    )
+    meta = app_state.get_generation_meta(request.kb_name)
+    return {
+        "kb_name": request.kb_name,
+        "shadow_generation": meta.shadow_generation if meta else None,
+        "task_id": task.task_id,
+        "status": task.status,
+    }
+
+
+@app.post("/admin/generation/cancel-shadow")
+def admin_cancel_shadow(
+    request: IndexGenCancelShadowRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.cancel_shadow_rebuild(request.kb_name, settings)
+
+
+@app.post("/admin/generation/swap")
+def admin_swap_generation(
+    request: IndexGenSwapRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.swap_generation(request.kb_name, settings)
+
+
+@app.post("/admin/generation/retire")
+def admin_retire_generation(
+    request: IndexGenRetireRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.retire_generation(
+        request.kb_name, request.generation, settings, force=request.force
+    )
+
+
+@app.get("/admin/generation/status")
+def admin_generation_status(
+    kb_name: str = "default",
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    from .indexgen import read_meta
+
+    kb_root = Path(settings.storage.data_dir) / kb_name
+    meta = app_state.get_generation_meta(kb_name) or read_meta(kb_root)
+    if meta is None:
+        raise ServiceError(
+            ErrorCode.INDEXGEN_NO_SUCH_KB,
+            "KB has no index.json.",
+            {"kb_name": kb_name},
+        )
+    return meta.to_dict()
 
 
 def _parse_metadata_form(metadata: str) -> dict[str, object]:

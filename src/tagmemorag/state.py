@@ -640,6 +640,105 @@ class AppState:
         finally:
             active_lock.release()
 
+    def cancel_shadow_rebuild(self, kb_name: str, cfg: Settings) -> dict[str, Any]:
+        """Cancel a shadow build (whether building or already ready).
+
+        - If a shadow rebuild task is running, sets cancel_requested = True.
+          The worker thread observes the flag at the next progress callback.
+        - If the shadow is already READY (or FAILED), this acts as
+          "un-promote": clears shadow_kbs slot, removes shadow entry from
+          index.json, and deletes the g{N}/ directory.
+
+        Distinct from retire_generation, which only operates on retired-or-old
+        ReadyGeneration entries.
+        """
+        from .indexgen import KbPaths, read_meta, write_meta
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SHADOW,
+                "No shadow generation to cancel.",
+                {"kb_name": kb_name},
+            )
+        target_gen = meta.shadow_generation
+        shadow_entry = meta.get_shadow()
+
+        # Find the running RebuildTask if any
+        cancelled_task_id = None
+        if shadow_entry and shadow_entry.task_id:
+            task = self.rebuild_tasks.get(shadow_entry.task_id)
+            if task is not None and task.status == "running":
+                task.cancel_requested = True
+                cancelled_task_id = task.task_id
+
+        # Wait briefly for the worker to release the lock if it was running.
+        if cancelled_task_id is not None:
+            shadow_lock = self.lock_for(f"{kb_name}:shadow")
+            for _ in range(50):  # up to ~5s
+                if shadow_lock.acquire(blocking=False):
+                    shadow_lock.release()
+                    break
+                time.sleep(0.1)
+
+        # Clear in-memory shadow slot.
+        self.clear_shadow(kb_name)
+
+        # Remove shadow entry from index.json (the failure path of the worker
+        # marks status=FAILED; this call removes the entry entirely).
+        new_generations = dict(meta.generations)
+        new_generations.pop(target_gen, None)
+        new_meta = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=None,
+            generations=new_generations,
+        )
+        write_meta(kb_root, new_meta)
+        self.set_generation_meta(kb_name, new_meta)
+
+        # Delete the shadow generation directory + Qdrant collection.
+        gen_paths = KbPaths(kb_name, cfg, generation=target_gen)
+        gen_dir = gen_paths.generation_root
+        if gen_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(gen_dir)
+
+        if cfg.vector_store.provider == "qdrant":
+            try:
+                from qdrant_client import QdrantClient
+
+                from .storage.qdrant_vector import collection_name
+
+                client = QdrantClient(
+                    url=cfg.vector_store.qdrant_url,
+                    timeout=cfg.vector_store.timeout_seconds,
+                )
+                target_coll = collection_name(
+                    cfg.vector_store.collection_prefix, kb_name, generation=target_gen
+                )
+                try:
+                    client.delete_collection(collection_name=target_coll)
+                except Exception:  # noqa: BLE001
+                    pass
+            except ImportError:
+                pass
+
+        return {
+            "kb_name": kb_name,
+            "cancelled_generation": target_gen,
+            "cancelled_task_id": cancelled_task_id,
+        }
+
     def retire_generation(
         self,
         kb_name: str,
