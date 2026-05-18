@@ -221,6 +221,10 @@ def test_qdrant_vector_store_round_trip_and_search():
     assert store.get(20).tolist() == [0.0, 1.0]
     assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
     assert collection_name("tmr", "product/a") == "tmr_product-a"
+    assert collection_name("tmr", "product/a", generation=1) == "tmr_product-a_g1"
+    assert collection_name("tmr", "product/a", generation=42) == "tmr_product-a_g42"
+    with pytest.raises(ValueError):
+        collection_name("tmr", "product/a", generation=0)
 
 
 def test_qdrant_vector_store_update_payload_and_delete():

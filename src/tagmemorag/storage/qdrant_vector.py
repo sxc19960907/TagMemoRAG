@@ -292,10 +292,22 @@ class QdrantVectorStore(VectorStore):
         return QdrantClient(**kwargs)
 
 
-def collection_name(prefix: str, kb_name: str) -> str:
+def collection_name(prefix: str, kb_name: str, generation: int | None = None) -> str:
+    """Derive a Qdrant collection name.
+
+    When `generation` is None, returns the legacy `{prefix}_{kb}` form (backward
+    compatible). When `generation` is an int, returns `{prefix}_{kb}_g{N}` for
+    A4 IndexGeneration support. The legacy form is preserved for migration
+    aliasing and for callers that do not yet read `meta.json`.
+    """
     safe_prefix = _safe_collection_part(prefix or "tagmemorag")
     safe_kb = _safe_collection_part(kb_name or "default")
-    return f"{safe_prefix}_{safe_kb}"
+    base = f"{safe_prefix}_{safe_kb}"
+    if generation is None:
+        return base
+    if generation < 1:
+        raise ValueError(f"generation must be >= 1, got {generation}")
+    return f"{base}_g{generation}"
 
 
 def _safe_collection_part(value: str) -> str:
