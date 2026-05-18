@@ -162,6 +162,21 @@ class ManualLibraryConfig(BaseModel):
     s3_timeout_seconds: float = 10.0
 
 
+class QueryPlanConfig(BaseModel):
+    """T2: Settings block for QueryPlan + plan log behavior (Architecture v2 § A2)."""
+
+    persist_enabled: bool = True
+    retention_days: int = 30
+    private_kbs: list[str] = Field(default_factory=list)
+    default_latency_ms: int = 5000
+    default_max_evidence: int = 8
+    default_rerank_tier: Literal["off", "tier1", "tier2"] = "off"
+    default_allow_external_reranker: bool = True
+    out_of_scope_keywords: list[str] | None = None
+    pii_mask_rules: list[dict] | None = None
+    background_writer_max_queue: int = 1024
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -315,6 +330,7 @@ class Settings(BaseSettings):
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
+    queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

@@ -240,3 +240,39 @@ def test_embedding_model_id_explicit_override(tmp_path, monkeypatch):
     assert cfg.model.embedding_model_id == "qwen3-embedding-8b"
     assert cfg.model.effective_embedding_model_id == "qwen3-embedding-8b"
     assert cfg.model.embedding_model_version == "v1.1"
+
+
+def test_queryplan_defaults(tmp_path):
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg.queryplan.persist_enabled is True
+    assert cfg.queryplan.retention_days == 30
+    assert cfg.queryplan.private_kbs == []
+    assert cfg.queryplan.default_latency_ms == 5000
+    assert cfg.queryplan.default_max_evidence == 8
+    assert cfg.queryplan.default_rerank_tier == "off"
+    assert cfg.queryplan.default_allow_external_reranker is True
+    assert cfg.queryplan.out_of_scope_keywords is None
+    assert cfg.queryplan.pii_mask_rules is None
+    assert cfg.queryplan.background_writer_max_queue == 1024
+
+
+def test_queryplan_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__QUERYPLAN__PERSIST_ENABLED", "false")
+    monkeypatch.setenv("TAGMEMORAG__QUERYPLAN__RETENTION_DAYS", "7")
+    monkeypatch.setenv("TAGMEMORAG__QUERYPLAN__DEFAULT_LATENCY_MS", "2000")
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg.queryplan.persist_enabled is False
+    assert cfg.queryplan.retention_days == 7
+    assert cfg.queryplan.default_latency_ms == 2000
+
+
+def test_queryplan_yaml_overrides(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "queryplan:\n  retention_days: 90\n  private_kbs: [secret_kb]\n  out_of_scope_keywords: [foo, bar]\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(config)
+    assert cfg.queryplan.retention_days == 90
+    assert cfg.queryplan.private_kbs == ["secret_kb"]
+    assert cfg.queryplan.out_of_scope_keywords == ["foo", "bar"]
