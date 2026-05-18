@@ -12,12 +12,14 @@ from .meta import (
     write_meta,
 )
 from .migration import migrate_kb_to_g1_if_needed
+from .paths import KbPaths
 
 __all__ = [
     "INDEXGEN_META_FILENAME",
     "INDEXGEN_META_SCHEMA_VERSION",
     "GenerationStatus",
     "KbMeta",
+    "KbPaths",
     "ReadyGeneration",
     "ShadowGeneration",
     "migrate_kb_to_g1_if_needed",

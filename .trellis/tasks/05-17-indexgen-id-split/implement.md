@@ -69,6 +69,18 @@ Skip ahead to Slice 2.
 - [ ] Unit tests: install_shadow does not affect active reads; orphan shadow marked failed on startup.
 - [ ] Commit: `feat(indexgen): add shadow generation slot to AppState`.
 
+## Slice 4.5 — KbPaths abstraction (prerequisite for Slice 5)
+
+Discovered during Slice 5 prep: `_kb_dir`, `identity_path`, `impact_path`, anchor/vector/asset path helpers etc. are spread across the codebase, all hard-coding `{data_dir}/{kb}/...` as "where this artifact lives". For shadow build to direct outputs into `g{N}/`, every product path needs to be parameterizable by generation.
+
+- [ ] New module `src/tagmemorag/indexgen/paths.py` with `KbPaths(kb_name, cfg, generation: int | None = None)` dataclass:
+  - `KbPaths(kb, cfg)` — legacy paths under `{kb_root}/` (backward compatible)
+  - `KbPaths(kb, cfg, 1)` — generation paths under `{kb_root}/g1/`
+  - Properties: `kb_root`, `generation_root`, `graph`, `vectors`, `chunk_identity`, `anchors`, `anchors_dir`, `epa_basis`, `tag_embeddings`, `tag_cooccurrence`, `tag_intrinsic_residuals`, `rebuild_impact`, `meta` (the GraphState meta.json), `assets_root`, `index_json` (for IndexGeneration index.json — this lives at kb_root regardless of generation).
+- [ ] Tests: round-trip both modes; `index_json` always lives at `kb_root`; `generation_root` returns `kb_root` when `generation=None`.
+- [ ] Do NOT yet migrate existing callers; they keep using `_kb_dir` etc. The new abstraction is purely additive; Slice 5 will use it on the shadow build path only.
+- [ ] Commit: `feat(indexgen): add KbPaths abstraction (additive; no caller changes)`.
+
 ## Slice 5 — shadow build runtime (D3, D6, D7)
 
 - [ ] Implement `start_shadow_rebuild` (separate lock `kb+":shadow"`).
