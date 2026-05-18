@@ -224,3 +224,19 @@ def test_phase4_geodesic_rerank_validation_rejects_out_of_range():
         WavePhase1Config(geodesic_oversample_factor=0.5)
     with pytest.raises(ValidationError):
         WavePhase1Config(geodesic_min_geo_samples=0)
+
+
+def test_embedding_model_id_defaults_to_name(tmp_path):
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg.model.embedding_model_id is None
+    assert cfg.model.effective_embedding_model_id == cfg.model.name
+    assert cfg.model.embedding_model_version == "v1"
+
+
+def test_embedding_model_id_explicit_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__MODEL__EMBEDDING_MODEL_ID", "qwen3-embedding-8b")
+    monkeypatch.setenv("TAGMEMORAG__MODEL__EMBEDDING_MODEL_VERSION", "v1.1")
+    cfg = load_config(tmp_path / "missing.yaml")
+    assert cfg.model.embedding_model_id == "qwen3-embedding-8b"
+    assert cfg.model.effective_embedding_model_id == "qwen3-embedding-8b"
+    assert cfg.model.embedding_model_version == "v1.1"

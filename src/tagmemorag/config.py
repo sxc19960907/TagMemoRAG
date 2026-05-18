@@ -20,6 +20,12 @@ class ModelConfig(BaseModel):
     timeout_seconds: float = 30.0
     dimensions: int | None = None
     normalize: bool = True
+    embedding_model_id: str | None = None
+    embedding_model_version: str = "v1"
+
+    @property
+    def effective_embedding_model_id(self) -> str:
+        return self.embedding_model_id or self.name
 
 
 class GraphConfig(BaseModel):
