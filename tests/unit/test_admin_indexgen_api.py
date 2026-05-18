@@ -57,11 +57,16 @@ def _client(tmp_path, fake_embedder) -> TestClient:
 
 
 def _seed_index(cfg: Settings, kb_name: str) -> None:
+    from datetime import datetime, timezone
+
     kb_root = Path(cfg.storage.data_dir) / kb_name
     kb_root.mkdir(parents=True, exist_ok=True)
+    # Use current time so retire-window tests reflect "freshly swapped" semantics
+    # regardless of when this test runs.
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     g1 = ReadyGeneration(
-        created_at="2026-05-17T10:00:00Z",
-        swap_at="2026-05-17T10:00:00Z",
+        created_at=now_iso,
+        swap_at=now_iso,
         retired_at=None,
         parser_version="default",
         chunker_version="legacy",
