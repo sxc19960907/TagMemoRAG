@@ -71,7 +71,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | Parser + element/asset extraction | ✅ | Markdown / TXT / text-PDF (with product-manual profile); domain keywords behind profile boundary (Phase 0). |
 | Chunker (structure + sentence + table + hierarchical) | ✅ | Phase 2 production chunker. |
 | Text / lexical / metadata / graph / asset indexes | ✅ | Phase 2.5 indexing strategy; Qdrant payload schema versioned. |
-| QueryPlan + Budget layer | 🚧 | New cross-cutting layer (A2). |
+| QueryPlan + Budget layer | ✅ | T2 shipped 2026-05-18; rule-based planner + per-KB SQLite plan log + early-exit Budget. |
 | Retrieval Executor | ✅ | Hybrid (vector + lexical + metadata + graph). |
 | Reranker Tier | 🚧 | New first-class component (A3). |
 | Evidence Builder (text) | ✅ | Phase 3 text evidence with citations. |
@@ -159,7 +159,7 @@ Properties:
 
 **Implementation hint (for the follow-up task, not authoritative).** `qdrant_vector.collection_name(prefix, kb)` extends to `(prefix, kb, generation)`. `chunk_id` derivation lives where chunk lineage is computed today and changes only by removing any embedder coupling that may have crept in. `vector_point_id` is computed at the indexing step right before vectors are written and is added to the Qdrant payload allowlist; the point id remains `int(node_id)`.
 
-### A2. QueryPlan and Request Budget  🚧
+### A2. QueryPlan and Request Budget  ✅
 
 **Why.** Today, query intent, rewrites, filters, and resource limits are scattered across request-handling code paths and request-scoped variables. There is no serializable plan and no early-exit budget protocol. This blocks query understanding investments (HyDE, multi-query, intent classification), blocks reproducible eval (no replayable artifact), and prevents per-request resource control (Agent calls with different urgency get the same global budget).
 
@@ -211,6 +211,17 @@ Privacy rules for persistence (mandatory):
 4. **Plan retention is per-KB configurable** with a default rolling window (30 days). Off by default for KBs marked as private/sensitive — those KBs persist nothing beyond the response itself.
 
 This persisted plan set is the spine of C9 (eval-as-driver). Without it, "every `/retrieve` call is a candidate eval sample" is a slogan, not a mechanism.
+
+**T2 shipped (2026-05-18).** Implementation lives at `src/tagmemorag/queryplan/`:
+- `plan.py` — `Budget` and `QueryPlan` frozen dataclasses; `Intent` enum with 6 reserved values, T2 emits 2 (`text_answer`, `out_of_scope`).
+- `planner.py` — pure `build_plan(question, kb_name, settings, ...)` returns `QueryPlan`; deadline_at set via `time.monotonic()`.
+- `intent.py` — keyword-based out-of-scope classifier with Settings override.
+- `privacy.py` — `mask_rewrites(rewrites, rules)` PII hook; T2 ships passthrough.
+- `budget.py` — `BudgetGuard` with `remaining_ms()` / `exhausted()`; used at retrieval/evidence/context-pack stage entries; never raises.
+- `plan_log.py` — per-KB `{kb_root}/query_plans.db` with `PRAGMA user_version=1` schema; `PlanLog.insert_basic` sync; `BackgroundWriter` (singleton, bounded queue, drop-on-overflow) for async result UPDATEs; `prune_expired` admin-callable.
+- `Settings.queryplan` block: `private_kbs`, `default_latency_ms=5000`, `default_max_evidence=8`, `default_rerank_tier="off"`, `out_of_scope_keywords`, `pii_mask_rules`, `background_writer_max_queue=1024`.
+- `/search` and `/retrieve` responses include `plan_id`. `SearchRequest.budget: BudgetSpec | None` accepts per-request overrides. Out-of-scope queries short-circuit with empty results + `warnings: ["out_of_scope_intent"]`. Cache hits produce a fresh `plan_id`. Private KBs (`Settings.queryplan.private_kbs`) skip persistence entirely; `plan_id` is still returned.
+- `SearchFeedback.plan_id` (optional) lets feedback rows reference the plan that produced them. Legacy jsonl rows without `plan_id` parse as empty string for backward compat.
 
 ### A3. Reranker as a First-Class Component  🚧
 
@@ -515,7 +526,7 @@ The storage layer is split by data shape, each backed by a small adapter under `
 | NPZ vector | `storage/npz_vector.py` | vectors (default file backend) | ✅ |
 | Qdrant vector | `storage/qdrant_vector.py` | vectors (optional, generation-aware naming per A4) | ✅ |
 | Local/S3 blob | `storage/...` (existing manual blob store) | source files + assets | ✅ |
-| **SQLite plan log** | `storage/sqlite_planlog.py` (new) | QueryPlan persistence per A2/D6 | 🚧 |
+| **SQLite plan log** | `queryplan/plan_log.py` | QueryPlan persistence per A2/D6 | ✅ T2 shipped 2026-05-18 |
 | Atomic write primitive | `storage/atomic.py` | safe single-file replace | ✅ |
 
 **SQLite plan log design notes.**
