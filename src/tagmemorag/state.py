@@ -262,6 +262,268 @@ class AppState:
         result["orphan_shadow_detected"] = orphan_detected
         return result
 
+    def start_shadow_rebuild(
+        self,
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        *,
+        target_versions: dict[str, Any] | None = None,
+        embedder: Any = None,
+    ) -> "RebuildTask":
+        """Kick off a shadow build for kb_name into a fresh generation directory.
+
+        Returns the RebuildTask immediately; the build runs in a background
+        thread. The caller may poll task.status / consult index.json for
+        progress, or cancel via task.cancel_requested = True.
+
+        Concurrency rules (Architecture v2 § A4 design § 5.4):
+        - Only one shadow build per KB at a time. A second call while one is
+          in progress raises ShadowBuildInProgressError (added in Slice 7).
+        - Active rebuilds and shadow builds use SEPARATE locks (`kb` vs
+          `kb:shadow`) so they can run concurrently.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            KbPaths,
+            ShadowGeneration,
+            build_shadow_kb,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = self.get_generation_meta(kb_name) or read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "Cannot start shadow build: KB has not been migrated. "
+                "Call migrate_kb_for_indexgen first.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is not None:
+            shadow_entry = meta.get_shadow()
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "A shadow build is already in progress or pending.",
+                {
+                    "kb_name": kb_name,
+                    "shadow_generation": meta.shadow_generation,
+                    "status": shadow_entry.status.value if shadow_entry else None,
+                    "progress": shadow_entry.progress if shadow_entry else None,
+                },
+            )
+        target_gen = (meta.active_generation or 0) + 1
+        if target_gen <= 0:
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "Cannot start shadow build: KB has no active generation.",
+                {"kb_name": kb_name},
+            )
+
+        shadow_lock_key = f"{kb_name}:shadow"
+        shadow_lock = self.lock_for(shadow_lock_key)
+        if not shadow_lock.acquire(blocking=False):
+            raise RebuildInProgressError(kb_name)
+
+        task_id = str(uuid.uuid4())
+        task = RebuildTask(
+            task_id=task_id,
+            status="running",
+            kb_name=kb_name,
+            started_at=_now(),
+            requested_mode="shadow",
+            effective_mode="shadow",
+        )
+        self.rebuild_tasks[task_id] = task
+        get_metrics().record_rebuild_started(kb_name=kb_name)
+
+        # Persist shadow_generation slot in index.json with status=building.
+        trigger_diff: list[str] = []
+        if target_versions:
+            active = meta.get_active()
+            if active is not None:
+                for key in (
+                    "embedding_model_id",
+                    "embedding_model_version",
+                    "parser_version",
+                    "chunker_version",
+                    "index_schema_version",
+                ):
+                    if key not in target_versions:
+                        continue
+                    current = getattr(active, key, None)
+                    requested = target_versions[key]
+                    if current is None or str(current) != str(requested):
+                        trigger_diff.append(key)
+        shadow_entry = ShadowGeneration(
+            status=GenerationStatus.BUILDING,
+            progress=0.0,
+            build_started_at=_now(),
+            trigger_diff=tuple(trigger_diff),
+            task_id=task_id,
+        )
+        new_generations = dict(meta.generations)
+        new_generations[target_gen] = shadow_entry
+        meta_with_shadow = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=target_gen,
+            generations=new_generations,
+        )
+        write_meta(kb_root, meta_with_shadow)
+        self.set_generation_meta(kb_name, meta_with_shadow)
+
+        paths = KbPaths(kb_name, cfg, generation=target_gen)
+
+        thread = threading.Thread(
+            target=self._shadow_build_worker,
+            args=(task, docs_dir, kb_name, cfg, paths, target_versions, embedder, shadow_lock, target_gen),
+            daemon=True,
+        )
+        thread.start()
+        return task
+
+    def _shadow_build_worker(
+        self,
+        task: "RebuildTask",
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        paths: "KbPaths",  # noqa: F821
+        target_versions: dict[str, Any] | None,
+        embedder: Any,
+        shadow_lock: threading.Lock,
+        target_gen: int,
+    ) -> None:
+        from .indexgen import (
+            GenerationStatus,
+            ShadowGeneration,
+            build_shadow_kb,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        t0 = time.perf_counter()
+
+        def progress_cb(progress: float, stage: str) -> None:
+            if task.cancel_requested:
+                raise RebuildCancelledError(task.task_id)
+            current = read_meta(kb_root)
+            if current is None or current.shadow_generation != target_gen:
+                return
+            entry = current.generations.get(target_gen)
+            if not isinstance(entry, ShadowGeneration):
+                return
+            updated = ShadowGeneration(
+                status=entry.status,
+                progress=float(progress),
+                build_started_at=entry.build_started_at,
+                trigger_diff=entry.trigger_diff,
+                task_id=entry.task_id,
+                requested_by=entry.requested_by,
+                error=entry.error,
+            )
+            new_generations = dict(current.generations)
+            new_generations[target_gen] = updated
+            write_meta(
+                kb_root,
+                type(current)(
+                    schema_version=current.schema_version,
+                    kb_name=current.kb_name,
+                    active_generation=current.active_generation,
+                    shadow_generation=current.shadow_generation,
+                    generations=new_generations,
+                ),
+            )
+            self.set_generation_meta(kb_name, read_meta(kb_root))
+
+        try:
+            shadow_state = build_shadow_kb(
+                docs_dir,
+                kb_name,
+                cfg,
+                paths=paths,
+                target_versions=target_versions,
+                embedder=embedder,
+                progress_cb=progress_cb,
+            )
+            self.install_shadow(kb_name, shadow_state)
+
+            current = read_meta(kb_root)
+            if current is not None and current.shadow_generation == target_gen:
+                entry = current.generations.get(target_gen)
+                if isinstance(entry, ShadowGeneration):
+                    updated = ShadowGeneration(
+                        status=GenerationStatus.READY,
+                        progress=1.0,
+                        build_started_at=entry.build_started_at,
+                        trigger_diff=entry.trigger_diff,
+                        task_id=entry.task_id,
+                        requested_by=entry.requested_by,
+                    )
+                    new_generations = dict(current.generations)
+                    new_generations[target_gen] = updated
+                    write_meta(
+                        kb_root,
+                        type(current)(
+                            schema_version=current.schema_version,
+                            kb_name=current.kb_name,
+                            active_generation=current.active_generation,
+                            shadow_generation=current.shadow_generation,
+                            generations=new_generations,
+                        ),
+                    )
+                    self.set_generation_meta(kb_name, read_meta(kb_root))
+            task.status = "done"
+            task.build_id = shadow_state.build_id
+            get_metrics().record_rebuild_done(kb_name=kb_name, duration=time.perf_counter() - t0)
+        except RebuildCancelledError:
+            task.status = "cancelled"
+            self._mark_shadow_failed(kb_root, target_gen, {"type": "Cancelled", "message": "shadow build cancelled"})
+        except Exception as exc:  # pragma: no cover -- exception path is logged
+            task.status = "failed"
+            task.error = {"type": type(exc).__name__, "message": str(exc)}
+            self._mark_shadow_failed(kb_root, target_gen, {"type": type(exc).__name__, "message": str(exc)})
+            get_metrics().record_rebuild_failed(kb_name=kb_name, duration=time.perf_counter() - t0)
+        finally:
+            task.finished_at = _now()
+            shadow_lock.release()
+
+    def _mark_shadow_failed(self, kb_root: Path, target_gen: int, error: dict) -> None:
+        from .indexgen import GenerationStatus, ShadowGeneration, read_meta, write_meta
+
+        current = read_meta(kb_root)
+        if current is None or current.shadow_generation != target_gen:
+            return
+        entry = current.generations.get(target_gen)
+        if not isinstance(entry, ShadowGeneration):
+            return
+        updated = ShadowGeneration(
+            status=GenerationStatus.FAILED,
+            progress=entry.progress,
+            build_started_at=entry.build_started_at,
+            trigger_diff=entry.trigger_diff,
+            task_id=entry.task_id,
+            requested_by=entry.requested_by,
+            error=error,
+        )
+        new_generations = dict(current.generations)
+        new_generations[target_gen] = updated
+        write_meta(
+            kb_root,
+            type(current)(
+                schema_version=current.schema_version,
+                kb_name=current.kb_name,
+                active_generation=current.active_generation,
+                shadow_generation=current.shadow_generation,
+                generations=new_generations,
+            ),
+        )
+        self.set_generation_meta(kb_root.name, read_meta(kb_root))
+
     def list_kbs(self) -> list[str]:
         with self._lock:
             return sorted(self.kbs)

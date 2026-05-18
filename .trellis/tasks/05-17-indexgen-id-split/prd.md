@@ -182,6 +182,37 @@ Architecture references:
 - migration 的 LEGACY_FILES 加入 `meta.json`，迁移时一起进 g1。
 - PRD 的 D1–D8 历史决议正文保留原文（"meta.json"），所有真实命名以 D9 + 代码常量 `INDEXGEN_META_FILENAME = "index.json"` 为准。
 
+### D10 Shadow build 实现路线：独立 `build_shadow_kb` 函数（Z 方案）
+
+**Context (Slice 5 实施前)**：现有 `build_kb_incremental` 内部硬编码大量 `_kb_dir`/`save_kb`/`save_chunk_identity`/`save_rebuild_impact`/`sync_rebuild_tags` 调用，无法直接注入 `KbPaths` 让产物落到 `g{N+1}/`。三种路线对比：X 全链路传 paths（影响面大易污染 active）、Y monkey-patch Settings.data_dir（破坏 `_global` 共享路径）、Z 独立 shadow build 函数。
+**Decision**：新写 `src/tagmemorag/indexgen/shadow_build.py:build_shadow_kb(...)`。
+- shadow build 语义本就是**全量从零构建**——用新 embedder 把整个 KB 重新 parse + chunk + embed + build_graph，不需要 `build_kb_incremental` 的 chunk-identity 复用逻辑。
+- 复用现有可重入子函数：`parse_document` / `chunk` 流程 / `embedder` / `build_graph` / 产物 retrain（`sync_rebuild_tags`、`retrain_report`、`build_chunk_identity_map` 等）。
+- 通过 `KbPaths(kb, cfg, target_gen)` 把所有产物写入 `g{N+1}/`，对 active 完全隔离。
+- D6 衍生品要求：tag/EPA/co-occurrence/residuals 都按 generation 写入 `g{N+1}/`；`_global/` 共享路径不在 shadow build 范围内（属于 KB 间共享，由全局 retrain 流程负责）。
+**Consequences**：
+- `build_kb_incremental` 不动，active 增量 rebuild 路径零回归风险。
+- shadow build 不依赖 `chunk_identity.json` 增量复用——每次 shadow 都是全量 embedder 调用（这是 D8 触发条件本身要求的：换 embedder 就要全量重算）。
+- shadow build 函数对外契约：`build_shadow_kb(docs_dir, kb, target_versions, paths) -> GraphState`，不涉及 AppState；接进 AppState 由 Slice 5 第二步 `start_shadow_rebuild` 完成。
+- 必须解决：`sync_rebuild_tags` 等下游函数当前用 `_kb_dir(kb, cfg)` 写入；shadow build 调用时需要它们尊重 `KbPaths(generation=N+1)`。逐个评估：可改的最小路径用 paths 注入；不可改的（如 `_global` 路径）保持现状（shadow 与 active 共享）。
+
+### D11 D6 范围收紧：T1 内只隔离 graph/vectors/chunk_identity（C 方案）
+
+**Context (Slice 5 实施时发现)**：D6 决议要求衍生品（tag embeddings / EPA basis / co-occurrence / residuals）按 generation 各算一份。但代码现状：这些 artifact 存在 `{data_dir}/_global/...` 而非 `{kb_root}/...`，是**跨 KB 共享**的全局结构（见 `epa_basis.py:54`、`tag_cooccurrence.py:35`）。把它们改成 generation 级会改变底层全局共享语义，工程量超出 T1 范围。
+**Decision**：T1 范围内 shadow build 只 generation 级隔离 KB-级 artifact：
+- `g{N}/graph.json`
+- `g{N}/vectors.npz`（NPZ 后端）/ `{prefix}_{kb}_g{N}` Qdrant collection
+- `g{N}/chunk_identity.json`
+- `g{N}/anchors.json`
+- `g{N}/meta.json`（GraphState 元数据）
+
+跨 KB 共享的全局 artifact（EPA basis / tag co-occurrence / tag intrinsic residuals）**保持全局**，不进 generation 子目录。tag embeddings 当前由 `sync_rebuild_tags` 写到 `_global/`-类共享存储，**T1 内 shadow build 不动它们**——swap 后由 active 路径正常的 retrain 流程负责更新。
+**Consequences**：
+- 失去"swap 一次性原子带衍生品"承诺。短窗口期间（swap 后到下一次全局 retrain 完成）衍生品仍反映旧 active 的状态，但不会破坏检索（衍生品只影响 wave/tag-co-occurrence 路径，主检索路径不依赖）。
+- 这是 T1 工程量的现实妥协——彻底的衍生品 generation 化推到后续 T1.5 任务（路线图增加）。
+- shadow build 函数契约简化：只需写 graph/vectors/chunk_identity/anchors/meta 五件。
+- 文档：architecture.md A4 需要追加 "T1 scope: only KB-level core artifacts isolated; KB-shared global artifacts deferred"，避免架构文档与 T1 行为不符。
+
 ## Open Questions
 
 All blocking questions resolved during brainstorm (D1–D8). Remaining detail-level decisions deferred to `design.md` drafting:

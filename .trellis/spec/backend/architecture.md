@@ -305,6 +305,8 @@ class Reranker(Protocol):
 
 `index.json` is updated via the file-level atomic write primitive that already exists (`storage/atomic.atomic_write`). The pointer flip is a single `os.replace` on `index.json`; it does not need cross-file coordination.
 
+**T1 scope (initial implementation).** The first IndexGeneration follow-up task (T1) intentionally limits per-generation isolation to KB-level core artifacts: `graph.json`, `vectors.npz` (or the `{prefix}_{kb}_g{N}` Qdrant collection), `chunk_identity.json`, `anchors.json`, and the GraphState `meta.json`. KB-shared global artifacts — EPA basis, tag co-occurrence, tag intrinsic residuals, and tag embeddings — currently live under `{data_dir}/_global/...` and are **not** generation-isolated by T1. After a swap, the next regular retrain pass refreshes them against the new active generation. Comprehensive generation-isolation of derivatives (the original D6 intent) is a follow-up task (T1.5 in the roadmap) gated on the T1 mechanism stabilizing first. The "swap is a single atomic operation" guarantee therefore holds for core artifacts, not for derivatives, in T1.
+
 **Qdrant collection naming.** `{prefix}_{kb}_g{N}`, extending the current `{prefix}_{kb}` convention. Existing collections are treated as `g1`-equivalent during initial migration: a one-time rename or alias accomplishes the upgrade without rebuild.
 
 **Trigger conditions for a new generation.** Any of these version fields changing must trigger a shadow build, never an in-place mutation:
@@ -537,6 +539,7 @@ The following tasks are the work this document creates. They are NOT pre-created
 | T2 | QueryPlan + Budget contract + SQLite plan log | T1 | P1 | A2 + D6 combined; introduces planner protocol, early-exit protocol, persistence adapter |
 | T3 | Reranker first-class component + initial vendor integration | T2 | P1 | A3; defines Reranker Protocol, dispatcher, calibration step, fallback chain; first vendor concrete in Appendix A |
 | T4 | WAVE repositioning + documentation honesty patch | — | P3 | A5 + C10; small task; updates operator-facing docs and code-level doc strings to match this architecture |
+| T1.5 | IndexGeneration derivatives isolation | T1 | P3 | Generation-isolate EPA basis / tag co-occurrence / tag intrinsic residuals / tag embeddings; closes the gap left by T1 D11 between A4 storage layout and current `_global/` placement |
 | T5 | eval-as-driver replay tool | T2 | P2 | C9; CLI tool, metric set, plan-filter language |
 | T6 | Phase 6 `/answer` kickoff | T2, T3 | P2 | B6 (independent brainstorm; this task only enters after T2+T3 land) |
 | T7 | Phase 7A OCR kickoff | T1 | P2 | B7A (independent brainstorm) |

@@ -13,6 +13,7 @@ from .meta import (
 )
 from .migration import migrate_kb_to_g1_if_needed
 from .paths import KbPaths
+from .shadow_build import build_shadow_kb
 
 __all__ = [
     "INDEXGEN_META_FILENAME",
@@ -22,6 +23,7 @@ __all__ = [
     "KbPaths",
     "ReadyGeneration",
     "ShadowGeneration",
+    "build_shadow_kb",
     "migrate_kb_to_g1_if_needed",
     "read_meta",
     "trim_history",
