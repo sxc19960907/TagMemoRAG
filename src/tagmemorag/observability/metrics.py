@@ -260,6 +260,12 @@ class Metrics:
             ["kb_name", "consumer"],
             registry=registry,
         )
+        self.plan_log_events = Counter(
+            "tagmemorag_plan_log_events_total",
+            "QueryPlan log events (insert / update / overflow / drop).",
+            ["kb_name", "event"],
+            registry=registry,
+        )
         self.tag_pyramid_residual_prior_applied = Counter(
             "tagmemorag_tag_pyramid_residual_prior_applied_total",
             "ResidualPyramid analyze calls using intrinsic residual prior weighting.",
@@ -374,6 +380,9 @@ class Metrics:
     def record_epa_basis_retrain(self, *, outcome: str, duration: float) -> None:
         self.epa_basis_retrain.labels(outcome=outcome).inc()
         self.epa_basis_retrain_duration.labels(outcome=outcome).observe(max(duration, 0.0))
+
+    def record_plan_log_event(self, *, kb_name: str, event: str, count: int = 1) -> None:
+        self.plan_log_events.labels(kb_name=kb_name, event=event).inc(int(count))
 
     def set_tag_cooccurrence_edges(self, *, kb_name: str, count: int) -> None:
         self.tag_cooccurrence_edges.labels(kb_name=kb_name).set(max(int(count), 0))
