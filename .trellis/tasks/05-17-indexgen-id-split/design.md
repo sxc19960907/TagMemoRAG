@@ -4,7 +4,7 @@ This document is the technical design for the task. It implements the contracts 
 
 ## 1. Goal & Boundaries
 
-**In scope:** chunk_id audit; vector_point_id introduction (Qdrant point id replacement); generation-aware Qdrant collection naming; per-KB `meta.json` index; `{kb_root}/g{N}/...` directory layout; AppState dual-generation slot; shadow build path reusing existing rebuild flow; 5 admin endpoints (build-shadow / cancel-shadow / swap / retire / status); Settings sync on swap; lazy idempotent migration to g1.
+**In scope:** chunk_id audit; vector_point_id introduction (Qdrant point id replacement); generation-aware Qdrant collection naming; per-KB `index.json` index; `{kb_root}/g{N}/...` directory layout; AppState dual-generation slot; shadow build path reusing existing rebuild flow; 5 admin endpoints (build-shadow / cancel-shadow / swap / retire / status); Settings sync on swap; lazy idempotent migration to g1.
 
 **Out of scope:** real-flow traffic split (deferred indefinitely per architecture-v2 D5); T5 replay tool; T2 QueryPlan / Reranker / `/answer`; any change to architecture.md itself.
 
@@ -16,7 +16,7 @@ This document is the technical design for the task. It implements the contracts 
 
 ```
 {settings.storage.data_dir}/
-  meta.json                                # NEW: KB-level index (D2)
+  index.json                                # NEW: KB-level index (D2)
   g{N}/                                    # NEW: per-generation subdir
     graph.json
     vectors.npz                            # if NPZ backend
@@ -36,15 +36,15 @@ This document is the technical design for the task. It implements the contracts 
 
 - New naming: `{prefix}_{kb}_g{N}` produced by `collection_name(prefix, kb, generation)`.
 - Migration (D1): on first startup after this change, for each existing KB:
-  1. Detect legacy collection `{prefix}_{kb}` (no `_g` suffix) and absence of `meta.json`.
+  1. Detect legacy collection `{prefix}_{kb}` (no `_g` suffix) and absence of `index.json`.
   2. Create Qdrant **alias** `{prefix}_{kb}_g1 → {prefix}_{kb}` via `qdrant_client.create_alias`.
   3. Move legacy file artifacts into `{kb_root}/g1/`.
-  4. Write `meta.json` with `active_generation=1`.
+  4. Write `index.json` with `active_generation=1`.
   5. All subsequent reads/writes go through `{prefix}_{kb}_g1` (resolved via alias to the legacy underlying collection).
-- Migration is idempotent: if `meta.json` already exists, skip.
+- Migration is idempotent: if `index.json` already exists, skip.
 - Future swaps create real new collections; the legacy underlying collection name remains hidden behind the g1 alias until the day g1 is retired (then the alias and the underlying collection are both deleted).
 
-### 2.3 `meta.json` schema
+### 2.3 `index.json` schema
 
 ```jsonc
 {
@@ -98,7 +98,7 @@ Invariants:
 - A "ready-shape" entry MUST contain a non-null `swap_at` (used by D4 retire window check).
 - `retired_at` is set only on retire; once set the generation is no longer addressable.
 - All writes go through `storage/atomic.atomic_write` to prevent partial files.
-- `meta.json` size is bounded: history entries with `retired_at` set may be trimmed if `len(generations) > settings.indexgen.history_max` (default 20). Trimming removes oldest retired entries.
+- `index.json` size is bounded: history entries with `retired_at` set may be trimmed if `len(generations) > settings.indexgen.history_max` (default 20). Trimming removes oldest retired entries.
 
 ## 3. ID Derivation
 
@@ -148,7 +148,7 @@ class AppState:
     kbs: dict[str, GraphState] = field(default_factory=dict)
     # new fields:
     shadow_kbs: dict[str, GraphState] = field(default_factory=dict)
-    generation_meta: dict[str, GenerationMeta] = field(default_factory=dict)  # in-memory cache of meta.json per kb
+    generation_meta: dict[str, GenerationMeta] = field(default_factory=dict)  # in-memory cache of index.json per kb
 
     def get_kb(self, kb_name: str) -> GraphState:
         # unchanged: returns active GraphState
@@ -165,7 +165,7 @@ class AppState:
 
     def swap_generation(self, kb_name: str) -> SwapResult:
         # atomic: shadow → active, active → previous (kept until retire)
-        # also rewrites meta.json and Settings file (D8)
+        # also rewrites index.json and Settings file (D8)
         ...
 
     def retire_generation(self, kb_name: str, generation: int, force: bool = False) -> None:
@@ -199,9 +199,9 @@ Differences from existing `start_rebuild`:
 
 1. Acquires `lock_for(kb_name + ":shadow")` (separate lock from active rebuild lock — active incremental rebuild can run concurrently with shadow build per D7).
 2. Builds an **ephemeral Settings clone** with `target_versions` overlaid; passes into `build_kb_incremental` so embedder/parser/chunker are instantiated for the new versions.
-3. On success: writes artifacts to `{kb_root}/g{N+1}/...` and `{prefix}_{kb}_g{N+1}` Qdrant collection (NOT KB root or active collection); calls `install_shadow(kb_name, new_state)`; updates `meta.json` to set `generations[N+1].status="ready"`, clears progress.
-4. On failure: updates `meta.json` to `status="failed"` with structured error; cleans up partial files in `g{N+1}/`; cancel-shadow API later removes the entry.
-5. Progress updates: the build worker periodically writes `meta.json.generations[N+1].progress` via atomic_write; granularity = embed-batch level (the embedding step dominates wall time).
+3. On success: writes artifacts to `{kb_root}/g{N+1}/...` and `{prefix}_{kb}_g{N+1}` Qdrant collection (NOT KB root or active collection); calls `install_shadow(kb_name, new_state)`; updates `index.json` to set `generations[N+1].status="ready"`, clears progress.
+4. On failure: updates `index.json` to `status="failed"` with structured error; cleans up partial files in `g{N+1}/`; cancel-shadow API later removes the entry.
+5. Progress updates: the build worker periodically writes `index.json.generations[N+1].progress` via atomic_write; granularity = embed-batch level (the embedding step dominates wall time).
 
 ### 5.2 Cancel semantics
 
@@ -209,12 +209,12 @@ Differences from existing `start_rebuild`:
 
 1. Marks `RebuildTask.status="cancelled"` (existing `_raise_if_cancelled` poll points trigger).
 2. Worker thread observes cancellation at the next poll, raises `RebuildCancelledError`, exits.
-3. Cleanup: delete `{kb_root}/g{N+1}/` partial files; delete Qdrant collection `{prefix}_{kb}_g{N+1}` if created; clear `meta.json.shadow_generation` and remove the `generations[N+1]` entry.
+3. Cleanup: delete `{kb_root}/g{N+1}/` partial files; delete Qdrant collection `{prefix}_{kb}_g{N+1}` if created; clear `index.json.shadow_generation` and remove the `generations[N+1]` entry.
 4. `cancel_shadow` is also valid against a `ready` shadow (un-promote without retire); same cleanup.
 
 ### 5.3 Crash recovery
 
-On `AppState` startup, for each KB with `meta.json.shadow_generation != null` AND `generations[shadow].status == "building"`:
+On `AppState` startup, for each KB with `index.json.shadow_generation != null` AND `generations[shadow].status == "building"`:
 
 1. Mark `generations[shadow].status="failed"`, set `error={"type":"OrphanedShadow","message":"process restarted during shadow build"}`.
 2. Do not auto-cleanup files; require explicit `cancel-shadow` to delete (audit).
@@ -269,7 +269,7 @@ POST /admin/generation/retire
   404 NO_SUCH_GENERATION
 
 GET /admin/generation/status?kb_name=default
-  200: <full meta.json contents for that kb>
+  200: <full index.json contents for that kb>
   404 NO_SUCH_KB
 ```
 
@@ -293,7 +293,7 @@ Added to `errors.py` ErrorCode enum:
 - `INDEXGEN_NO_SUCH_KB`
 - `INDEXGEN_SETTINGS_META_MISMATCH` (startup check)
 
-## 7. Settings ↔ meta.json Sync (D8)
+## 7. Settings ↔ index.json Sync (D8)
 
 ### 7.1 Read path on startup
 
@@ -322,9 +322,9 @@ Called for each KB during startup (before serving traffic). Settings file path: 
 ```python
 def swap_generation(self, kb_name: str) -> SwapResult:
     # 1. Acquire active+shadow rebuild locks.
-    # 2. Snapshot current meta.json.
-    # 3. Build new meta.json: active → shadow value; previous active gets swap_at preserved (already set on initial build); shadow_generation → null.
-    # 4. atomic_write(meta.json, new_meta) — primary persistence point.
+    # 2. Snapshot current index.json.
+    # 3. Build new index.json: active → shadow value; previous active gets swap_at preserved (already set on initial build); shadow_generation → null.
+    # 4. atomic_write(index.json, new_meta) — primary persistence point.
     # 5. Compute target Settings dict from new_meta.generations[new_active].
     # 6. atomic_write(Settings.config_path, new_settings_dict).
     # 7. Reload Settings into the running process (config.load_config from disk).
@@ -335,7 +335,7 @@ def swap_generation(self, kb_name: str) -> SwapResult:
 Failure handling:
 
 - Step 4 fails (meta write): no state change, return error. Operator retries.
-- Step 4 succeeds, Step 6 fails (settings write): meta.json is the truth; old settings file remains; startup will detect mismatch on next restart and require manual fix. Log loud error. Continue serving on new active (read path uses meta.json, not settings, for choosing generation).
+- Step 4 succeeds, Step 6 fails (settings write): index.json is the truth; old settings file remains; startup will detect mismatch on next restart and require manual fix. Log loud error. Continue serving on new active (read path uses index.json, not settings, for choosing generation).
 - Step 6 succeeds, Step 7 fails (process reload): unlikely (in-process reload is local); if it does, log error and rely on next restart.
 ## 8. Migration Flow (D1)
 
@@ -343,7 +343,7 @@ Triggered lazily on `AppState` startup, per KB:
 
 ```python
 def migrate_kb_to_g1_if_needed(kb_root: Path, settings: Settings) -> None:
-    meta_path = kb_root / "meta.json"
+    meta_path = kb_root / "index.json"
     if meta_path.exists():
         return  # already migrated; idempotent
 
@@ -352,7 +352,7 @@ def migrate_kb_to_g1_if_needed(kb_root: Path, settings: Settings) -> None:
                     "tag_embeddings.npz", "tag_cooccurrence.json", "tag_intrinsic_residuals.npz"]
     has_legacy = any((kb_root / f).exists() for f in legacy_files)
     if not has_legacy:
-        # Empty KB; create meta.json with no generations
+        # Empty KB; create index.json with no generations
         atomic_write(meta_path, lambda p: p.write_text(json.dumps({
             "schema_version": 1, "kb_name": kb_root.name,
             "active_generation": None, "shadow_generation": None, "generations": {}
@@ -381,7 +381,7 @@ def migrate_kb_to_g1_if_needed(kb_root: Path, settings: Settings) -> None:
         except qdrant_exceptions.AlreadyExists:
             pass  # idempotent
 
-    # Write meta.json with full snapshot of current Settings as the g1 entry
+    # Write index.json with full snapshot of current Settings as the g1 entry
     g1_entry = {
         "created_at": _now(),
         "swap_at": _now(),
@@ -404,7 +404,7 @@ Idempotency: re-running on a migrated KB exits at the first `if meta_path.exists
 
 Atomicity caveat: file moves are sequential (`os.rename` is per-file atomic but the set is not transactional). If process crashes mid-migration, on restart:
 - Some files in `g1/`, some in root → migration code detects and resumes (each rename is independently idempotent because target exists check).
-- Add resume logic: if `g1/` exists but `meta.json` does not, finish the move + write meta. If `meta.json` exists but some legacy files still in root (corruption), log error and abort startup.
+- Add resume logic: if `g1/` exists but `index.json` does not, finish the move + write meta. If `index.json` exists but some legacy files still in root (corruption), log error and abort startup.
 
 ## 9. Storage Backend Abstraction Updates (D5)
 
@@ -418,7 +418,7 @@ NPZ implementation: paths interpolate generation; `npz_vector.py` reads/writes `
 
 Qdrant implementation: `collection_name(prefix, kb, generation)` returns `{prefix}_{kb}_g{N}`; `_safe_collection_part` already handles sanitization.
 
-Read paths (`/retrieve`, `/search`) get the active generation from `meta.json` via AppState.generation_meta cache; never read from raw Settings for collection name resolution.
+Read paths (`/retrieve`, `/search`) get the active generation from `index.json` via AppState.generation_meta cache; never read from raw Settings for collection name resolution.
 
 Shadow build paths get the shadow generation explicitly from `start_shadow_rebuild` argument.
 
@@ -467,10 +467,10 @@ Eval slice (per architecture C9): replay current `search-feedback.jsonl` against
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| Settings file write fails after meta.json swap | low | meta.json is the truth source; startup check catches mismatch loudly |
+| Settings file write fails after index.json swap | low | index.json is the truth source; startup check catches mismatch loudly |
 | Qdrant alias not idempotent across versions | medium | catch AlreadyExists; verify on integration test |
 | Active incremental rebuild + shadow build interfere through shared state | medium | separate locks (active vs shadow); separate target dirs; concurrency table |
-| Shadow build progress writes corrupt meta.json | low | atomic_write; progress is one field, write is small |
+| Shadow build progress writes corrupt index.json | low | atomic_write; progress is one field, write is small |
 | Process crash during migration leaves half-moved files | low | idempotent migration with resume logic |
 | Test coverage gaps | medium | explicit test matrix; eval slice replay before merge |
 

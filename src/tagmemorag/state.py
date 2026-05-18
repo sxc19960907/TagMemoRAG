@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import json
 import threading
 import time
@@ -43,6 +43,9 @@ from .storage.npz_vector import NpzVectorStore
 from .storage.qdrant_vector import QdrantVectorStore
 from .tag_rebuild import sync_rebuild_tags
 from .types import Anchor, GraphState
+
+if TYPE_CHECKING:
+    from .indexgen import KbMeta
 
 
 @dataclass
@@ -124,6 +127,8 @@ class RebuildTask:
 class AppState:
     current: GraphState | None = None
     kbs: dict[str, GraphState] = field(default_factory=dict)
+    shadow_kbs: dict[str, GraphState] = field(default_factory=dict)
+    generation_meta: dict[str, "KbMeta"] = field(default_factory=dict)
     rebuild_locks: dict[str, threading.Lock] = field(default_factory=dict)
     rebuild_tasks: dict[str, RebuildTask] = field(default_factory=dict)
     embedder_ready: bool = False
@@ -157,6 +162,105 @@ class AppState:
             self.kbs[kb_name] = new_state
             if kb_name == "default" or self.current is None or self.current.kb_name == kb_name:
                 self.current = new_state
+
+    def get_shadow_kb(self, kb_name: str) -> GraphState | None:
+        """Return the shadow GraphState for a KB, or None if no shadow exists.
+
+        Read paths (/retrieve, /search) MUST NOT call this. Shadow state is
+        only addressable by build-shadow / cancel-shadow / swap workflows.
+        """
+        with self._lock:
+            return self.shadow_kbs.get(kb_name)
+
+    def install_shadow(self, kb_name: str, shadow_state: GraphState) -> None:
+        """Install a freshly-built shadow GraphState.
+
+        Called by the shadow-build worker when its build completes. Does NOT
+        touch active state; swap is a separate operation.
+        """
+        with self._lock:
+            self.shadow_kbs[kb_name] = shadow_state
+
+    def clear_shadow(self, kb_name: str) -> GraphState | None:
+        """Remove and return the shadow GraphState (cancel/retire path)."""
+        with self._lock:
+            return self.shadow_kbs.pop(kb_name, None)
+
+    def get_generation_meta(self, kb_name: str) -> "KbMeta | None":
+        with self._lock:
+            return self.generation_meta.get(kb_name)
+
+    def set_generation_meta(self, kb_name: str, meta: "KbMeta") -> None:
+        with self._lock:
+            self.generation_meta[kb_name] = meta
+
+    def migrate_kb_for_indexgen(
+        self, kb_name: str, cfg: Settings, *, create_qdrant_alias: bool = True
+    ) -> dict[str, Any]:
+        """Idempotent IndexGeneration migration step for a single KB.
+
+        1. Calls migrate_kb_to_g1_if_needed() — moves legacy artifacts into g1/
+           and writes meta.json (no-op if already migrated).
+        2. Loads meta.json into the in-memory generation_meta cache.
+        3. Detects orphan shadow: meta.json says shadow.status=building but
+           shadow_kbs dict has no entry → mark status=failed and persist.
+
+        Safe to call multiple times. Idempotent.
+
+        Returns the migration status dict for logging.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            ShadowGeneration,
+            migrate_kb_to_g1_if_needed,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        result = migrate_kb_to_g1_if_needed(
+            kb_root, cfg, create_qdrant_alias=create_qdrant_alias
+        )
+        meta = read_meta(kb_root)
+        if meta is None:
+            return result
+
+        orphan_detected = False
+        if meta.shadow_generation is not None:
+            shadow_entry = meta.get_shadow()
+            in_memory_shadow = self.get_shadow_kb(kb_name)
+            if (
+                shadow_entry is not None
+                and shadow_entry.status == GenerationStatus.BUILDING
+                and in_memory_shadow is None
+            ):
+                orphan_detected = True
+                replaced = ShadowGeneration(
+                    status=GenerationStatus.FAILED,
+                    progress=shadow_entry.progress,
+                    build_started_at=shadow_entry.build_started_at,
+                    trigger_diff=shadow_entry.trigger_diff,
+                    task_id=shadow_entry.task_id,
+                    requested_by=shadow_entry.requested_by,
+                    error={
+                        "type": "OrphanedShadow",
+                        "message": "process restarted during shadow build",
+                    },
+                )
+                new_generations = dict(meta.generations)
+                new_generations[meta.shadow_generation] = replaced
+                meta = type(meta)(
+                    schema_version=meta.schema_version,
+                    kb_name=meta.kb_name,
+                    active_generation=meta.active_generation,
+                    shadow_generation=meta.shadow_generation,
+                    generations=new_generations,
+                )
+                write_meta(kb_root, meta)
+
+        self.set_generation_meta(kb_name, meta)
+        result["orphan_shadow_detected"] = orphan_detected
+        return result
 
     def list_kbs(self) -> list[str]:
         with self._lock:

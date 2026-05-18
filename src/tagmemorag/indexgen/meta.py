@@ -19,7 +19,7 @@ from ..storage.atomic import atomic_write
 
 
 INDEXGEN_META_SCHEMA_VERSION = 1
-INDEXGEN_META_FILENAME = "meta.json"
+INDEXGEN_META_FILENAME = "index.json"
 DEFAULT_HISTORY_MAX = 20
 
 

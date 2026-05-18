@@ -173,6 +173,15 @@ Architecture references:
 - 需要新增错误码：`NO_VERSION_DIFF`、`SETTINGS_META_MISMATCH`。
 - swap 成功的写入顺序：先写 meta.json（atomic）→ 再写 Settings 文件（atomic）→ 再刷新进程内 Settings。中间任一步失败的恢复策略由 design.md 定。
 
+### D9 索引文件名：`index.json`（避免与 GraphState meta 冲突）
+
+**Context (Slice 4 实施时发现)**：现有 `state.save_kb()` 已经在 `{kb_root}/meta.json` 写 GraphState 元数据（schema_version、model_name、build_id、chunk_count、impact_report 等）。原 D2 决议把 IndexGeneration 索引也叫 `meta.json`，两边语义不同会互相覆盖。
+**Decision**：IndexGeneration 索引改名为 `{kb_root}/index.json`。GraphState 元数据继续用 `meta.json`，并在迁移时跟随其他 g1 artifacts 一起搬进 `g1/meta.json`（这是它本来的逻辑归宿——它本来就是单 generation 内的元数据）。
+**Consequences**：
+- D2 文本中的 "meta.json" 实际指 `{kb_root}/index.json`；架构文档（architecture.md）+ 任务设计（design.md）+ 实施清单（implement.md）已同步改名。
+- migration 的 LEGACY_FILES 加入 `meta.json`，迁移时一起进 g1。
+- PRD 的 D1–D8 历史决议正文保留原文（"meta.json"），所有真实命名以 D9 + 代码常量 `INDEXGEN_META_FILENAME = "index.json"` 为准。
+
 ## Open Questions
 
 All blocking questions resolved during brainstorm (D1–D8). Remaining detail-level decisions deferred to `design.md` drafting:

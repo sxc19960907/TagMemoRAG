@@ -292,7 +292,7 @@ class Reranker(Protocol):
 
 ```text
 {kb_root}/
-  meta.json              # active_generation, shadow_generation, history[]
+  index.json              # active_generation, shadow_generation, history[]
   g1/
     graph.json
     chunk_identity.json
@@ -303,7 +303,7 @@ class Reranker(Protocol):
     ...                          # same shape; built in shadow, swapped in atomically
 ```
 
-`meta.json` is updated via the file-level atomic write primitive that already exists (`storage/atomic.atomic_write`). The pointer flip is a single `os.replace` on `meta.json`; it does not need cross-file coordination.
+`index.json` is updated via the file-level atomic write primitive that already exists (`storage/atomic.atomic_write`). The pointer flip is a single `os.replace` on `index.json`; it does not need cross-file coordination.
 
 **Qdrant collection naming.** `{prefix}_{kb}_g{N}`, extending the current `{prefix}_{kb}` convention. Existing collections are treated as `g1`-equivalent during initial migration: a one-time rename or alias accomplishes the upgrade without rebuild.
 
@@ -321,7 +321,7 @@ In contrast, content-only changes (a new document added to the KB) update the ac
 | Endpoint | Action | Reversible? |
 |---|---|---|
 | `POST /admin/generation/build-shadow` | starts background rebuild into `g{N+1}` with new versions | yes (cancel before swap) |
-| `POST /admin/generation/swap` | atomic pointer swap in `meta.json` | yes (swap back) until retire |
+| `POST /admin/generation/swap` | atomic pointer swap in `index.json` | yes (swap back) until retire |
 | `POST /admin/generation/retire` | deletes retired generation files and Qdrant collection | **no** |
 | `GET  /admin/generation/status` | returns active id, shadow id, build progress, last-swap time | n/a |
 
@@ -533,7 +533,7 @@ The following tasks are the work this document creates. They are NOT pre-created
 
 | ID | Title | Depends on | Priority | Scope hint |
 |---|---|---|---|---|
-| T1 | IndexGeneration mechanism + ID system split | — | P1 | A1 + A4 combined; touches `qdrant_vector`, `state.AppState`, file layout, admin API, atomic meta.json swap |
+| T1 | IndexGeneration mechanism + ID system split | — | P1 | A1 + A4 combined; touches `qdrant_vector`, `state.AppState`, file layout, admin API, atomic index.json swap |
 | T2 | QueryPlan + Budget contract + SQLite plan log | T1 | P1 | A2 + D6 combined; introduces planner protocol, early-exit protocol, persistence adapter |
 | T3 | Reranker first-class component + initial vendor integration | T2 | P1 | A3; defines Reranker Protocol, dispatcher, calibration step, fallback chain; first vendor concrete in Appendix A |
 | T4 | WAVE repositioning + documentation honesty patch | — | P3 | A5 + C10; small task; updates operator-facing docs and code-level doc strings to match this architecture |

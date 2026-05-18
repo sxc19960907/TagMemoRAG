@@ -43,7 +43,7 @@ Originally proposed: replace Qdrant point id with UUID-shaped `vector_point_id`.
 
 Skip ahead to Slice 2.
 
-## Slice 2 — generation-aware naming + meta.json schema (D1, D2 partial)
+## Slice 2 — generation-aware naming + index.json schema (D1, D2 partial)
 
 - [ ] Extend `storage/qdrant_vector.py:collection_name(prefix, kb)` → `collection_name(prefix, kb, generation)`. Keep a thin shim returning legacy name when called without generation, used only by migration.
 - [ ] Define `KbMeta` dataclass and JSON shape per design § 2.3 in new `src/tagmemorag/indexgen/meta.py`.
@@ -75,7 +75,7 @@ Skip ahead to Slice 2.
 - [ ] Build ephemeral Settings clone overlaid with `target_versions`.
 - [ ] Direct `build_kb_incremental` output to `g{N+1}/` and Qdrant `_g{N+1}` collection.
 - [ ] Persist all derivatives (tag embeddings, EPA basis, co-occurrence, residuals) into `g{N+1}/`.
-- [ ] Periodic progress write to `meta.json.generations[N+1].progress`.
+- [ ] Periodic progress write to `index.json.generations[N+1].progress`.
 - [ ] Cancel via existing `_raise_if_cancelled` poll points; cleanup partial files + Qdrant collection.
 - [ ] Concurrency: prove active incremental rebuild can run during shadow build (D7).
 - [ ] Tests: shadow build success; cancel mid-build; second build-shadow returns 409; concurrent active incremental rebuild succeeds.
@@ -108,12 +108,12 @@ Skip ahead to Slice 2.
 - [ ] Wire into AppState startup; raise `INDEXGEN_SETTINGS_META_MISMATCH` and refuse to serve if mismatch.
 - [ ] Test: mismatched fixture → startup fails with structured error.
 - [ ] Test: matching fixture → startup succeeds.
-- [ ] Commit: `feat(indexgen): startup validation of Settings vs meta.json`.
+- [ ] Commit: `feat(indexgen): startup validation of Settings vs index.json`.
 
 ## Slice 9 — eval slice replay (C9 obligation)
 
 - [ ] Pick eval slice: rolling 100 entries from `search-feedback.jsonl` per loaded KB; if jsonl insufficient, use `tests/fixtures/eval` fixtures.
-- [ ] Write a small ad-hoc script `scripts/replay_against_generation.py` (DO NOT block on T5 replay tool): reads jsonl/fixtures, replays each query against `meta.json.active_generation`, prints hit@5.
+- [ ] Write a small ad-hoc script `scripts/replay_against_generation.py` (DO NOT block on T5 replay tool): reads jsonl/fixtures, replays each query against `index.json.active_generation`, prints hit@5.
 - [ ] Run shadow build with identical versions as active (control case): hit@5 must match active baseline (smoke proof of the mechanism).
 - [ ] Document the result in this implement.md before reporting completion.
 - [ ] Commit: `chore(indexgen): add eval-replay script for shadow validation`.
@@ -151,7 +151,7 @@ All must pass. Eval slice deltas reported above. No `production-grade` self-labe
 
 ## Rollback Strategy
 
-Each slice's commit is independently revertable. The migration in Slice 3 has a manual reverse: rename `g1/*` back to KB root and delete `meta.json` + Qdrant alias. Document the reverse procedure in a comment in `migrate_kb_to_g1_if_needed`.
+Each slice's commit is independently revertable. The migration in Slice 3 has a manual reverse: rename `g1/*` back to KB root and delete `index.json` + Qdrant alias. Document the reverse procedure in a comment in `migrate_kb_to_g1_if_needed`.
 
 ## Out-of-Band Notes
 

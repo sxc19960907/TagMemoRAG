@@ -144,7 +144,7 @@ def test_read_meta_round_trips_through_disk(tmp_path: Path):
 
 
 def test_read_meta_rejects_corrupt_file(tmp_path: Path):
-    (tmp_path / "meta.json").write_text("not json", encoding="utf-8")
+    (tmp_path / "index.json").write_text("not json", encoding="utf-8")
     with pytest.raises(ValueError, match="not valid JSON"):
         read_meta(tmp_path)
 

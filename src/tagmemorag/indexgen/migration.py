@@ -39,6 +39,7 @@ LEGACY_FILES = (
     "tag_intrinsic_residuals.npz",
     "rebuild_impact.json",
     "anchors.json",
+    "meta.json",
 )
 LEGACY_DIRS = ("anchors",)
 
