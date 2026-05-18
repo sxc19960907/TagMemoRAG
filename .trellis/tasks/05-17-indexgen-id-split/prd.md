@@ -213,6 +213,18 @@ Architecture references:
 - shadow build 函数契约简化：只需写 graph/vectors/chunk_identity/anchors/meta 五件。
 - 文档：architecture.md A4 需要追加 "T1 scope: only KB-level core artifacts isolated; KB-shared global artifacts deferred"，避免架构文档与 T1 行为不符。
 
+### D12 D8 收紧：Settings 同步只在进程内做（不写 yaml）
+
+**Context (Slice 6 实施前)**：D8 原文要求 swap 成功后把版本字段回写 Settings 持久化文件。但配置文件可能被 git 维护、可能在容器里只读、可能由 ops 工具管理；编程式重写带来真实风险。
+**Decision**：swap 完成后只更新进程内 Settings 对象的字段（in-place mutate cfg.model 的 `embedding_model_id`/`embedding_model_version`、cfg.storage 的 `schema_version`），**不**写回 yaml/json 配置文件。
+- 真实事实源依然是 `index.json`，启动时从 `index.json` 读 active 版本，不依赖 Settings 文件的字段（Slice 8 启动校验保证两者一致或拒绝启动）。
+- 这种"index.json 权威 + Settings 镜像"避免了文件竞争。
+- 副作用：Settings 内存值在重启后会从 yaml 重新加载——但 Slice 8 校验会立即 catch 不一致并要求人工处理。
+**Consequences**：
+- swap 实现简化：只 mutate cfg 对象，不 atomic_write 配置文件。
+- D8 中的"swap 成功 → 回写 settings 文件"语义降级为"swap 成功 → mutate 进程内 cfg + 留待 Slice 8 启动校验对齐"。
+- T1 实现保持单进程语义；多进程部署下重启后需要 ops 手工对齐 Settings 与 active generation 版本。
+
 ## Open Questions
 
 All blocking questions resolved during brainstorm (D1–D8). Remaining detail-level decisions deferred to `design.md` drafting:

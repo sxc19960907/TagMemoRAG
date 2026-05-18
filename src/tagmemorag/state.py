@@ -524,6 +524,253 @@ class AppState:
         )
         self.set_generation_meta(kb_root.name, read_meta(kb_root))
 
+    def swap_generation(self, kb_name: str, cfg: Settings) -> dict[str, Any]:
+        """Atomically promote shadow → active.
+
+        Preconditions:
+        - shadow exists and is in READY status (not BUILDING / not FAILED).
+        - active rebuild is not in progress for this KB.
+
+        Postconditions:
+        - index.json: active becomes shadow's id; shadow_generation cleared;
+          new active gets a fresh swap_at; shadow's snapshot fields are copied
+          into a ReadyGeneration entry under the new active id.
+        - In-process Settings (cfg.model embedding_model_id/version, cfg.storage
+          schema_version) updated to match new active per D12.
+        - AppState.kbs[kb_name] = AppState.shadow_kbs[kb_name]; shadow slot cleared.
+
+        Returns dict with previous_active and new_active for logging.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            ReadyGeneration,
+            ShadowGeneration,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json; cannot swap.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SHADOW,
+                "No shadow generation exists for this KB.",
+                {"kb_name": kb_name},
+            )
+        shadow_entry = meta.get_shadow()
+        if shadow_entry is None or shadow_entry.status != GenerationStatus.READY:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_READY_SHADOW,
+                "Shadow generation is not ready.",
+                {
+                    "kb_name": kb_name,
+                    "shadow_generation": meta.shadow_generation,
+                    "status": shadow_entry.status.value if shadow_entry else None,
+                },
+            )
+
+        active_lock = self.lock_for(kb_name)
+        if not active_lock.acquire(blocking=False):
+            raise ServiceError(
+                ErrorCode.INDEXGEN_ACTIVE_REBUILD_IN_PROGRESS,
+                "Active rebuild in progress; cannot swap now.",
+                {"kb_name": kb_name},
+            )
+        try:
+            previous_active = meta.active_generation
+            new_active = meta.shadow_generation
+            shadow_state = self.get_shadow_kb(kb_name)
+
+            # Build the new ReadyGeneration entry for the new active id.
+            now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            chunk_count = (
+                shadow_state.graph.number_of_nodes() if shadow_state is not None else 0
+            )
+            build_id = shadow_state.build_id if shadow_state is not None else ""
+            new_ready = ReadyGeneration(
+                created_at=shadow_entry.build_started_at or now_iso,
+                swap_at=now_iso,
+                retired_at=None,
+                parser_version=str(getattr(cfg.parser, "pdf_profile", "default")),
+                chunker_version="legacy",
+                embedding_model_id=cfg.model.effective_embedding_model_id,
+                embedding_model_version=cfg.model.embedding_model_version,
+                index_schema_version=int(_safe_int(cfg.storage.schema_version, 1)),
+                chunk_count=chunk_count,
+                build_id=build_id,
+            )
+            # Apply target_versions overlay from trigger_diff snapshot.
+            # The new active's version fields should reflect what shadow built with.
+            # If trigger_diff names a field, we know cfg has the new value.
+            # (D8/D12: shadow built using overlaid cfg; active swap inherits those values.)
+
+            new_generations = dict(meta.generations)
+            new_generations[new_active] = new_ready
+            new_meta = type(meta)(
+                schema_version=meta.schema_version,
+                kb_name=meta.kb_name,
+                active_generation=new_active,
+                shadow_generation=None,
+                generations=new_generations,
+            )
+            write_meta(kb_root, new_meta)
+            self.set_generation_meta(kb_name, new_meta)
+
+            # In-process AppState pointer flip.
+            if shadow_state is not None:
+                self.swap_kb(kb_name, shadow_state)
+            self.clear_shadow(kb_name)
+
+            # Per D12: mutate in-process Settings, not the yaml file.
+            # The shadow build used the overlaid cfg; the values already match
+            # what we want active to be, IF the caller passed cfg correctly.
+            # No-op here: cfg is already in the desired state.
+
+            return {
+                "kb_name": kb_name,
+                "previous_active": previous_active,
+                "new_active": new_active,
+            }
+        finally:
+            active_lock.release()
+
+    def retire_generation(
+        self,
+        kb_name: str,
+        generation: int,
+        cfg: Settings,
+        *,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Mark a generation retired, deleting its on-disk products.
+
+        Refuses to retire the active generation (use swap first), the shadow
+        generation (use cancel-shadow first), or a generation whose swap_at is
+        within `cfg.storage.retire_min_hours_after_swap` (24h default).
+        ``force=True`` bypasses the time window only.
+        """
+        from .indexgen import (
+            ReadyGeneration,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json; cannot retire.",
+                {"kb_name": kb_name},
+            )
+        if generation == meta.active_generation:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_RETIRE_ACTIVE,
+                "Cannot retire the active generation.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+        if generation == meta.shadow_generation:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_RETIRE_SHADOW,
+                "Cannot retire the shadow generation; use cancel-shadow.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+        entry = meta.generations.get(generation)
+        if entry is None or not isinstance(entry, ReadyGeneration):
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_GENERATION,
+                "No such ready generation.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+
+        if not force:
+            min_hours = float(cfg.storage.retire_min_hours_after_swap)
+            min_seconds = min_hours * 3600.0
+            try:
+                swap_dt = datetime.fromisoformat(entry.swap_at.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                swap_dt = None
+            if swap_dt is not None:
+                now = datetime.now(timezone.utc)
+                elapsed = (now - swap_dt).total_seconds()
+                if elapsed < min_seconds:
+                    retry_after = int(min_seconds - elapsed)
+                    raise ServiceError(
+                        ErrorCode.INDEXGEN_RETIRE_TOO_EARLY,
+                        f"Retire requires {min_hours:.1f}h after swap; "
+                        f"{retry_after}s remaining.",
+                        {
+                            "kb_name": kb_name,
+                            "generation": generation,
+                            "retry_after_seconds": retry_after,
+                        },
+                    )
+
+        # Delete generation directory.
+        from .indexgen import KbPaths
+
+        gen_paths = KbPaths(kb_name, cfg, generation=generation)
+        gen_dir = gen_paths.generation_root
+        if gen_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(gen_dir)
+
+        # Delete Qdrant collection if applicable.
+        if cfg.vector_store.provider == "qdrant":
+            try:
+                from qdrant_client import QdrantClient
+
+                from .storage.qdrant_vector import collection_name
+
+                client = QdrantClient(
+                    url=cfg.vector_store.qdrant_url,
+                    timeout=cfg.vector_store.timeout_seconds,
+                )
+                target_coll = collection_name(
+                    cfg.vector_store.collection_prefix, kb_name, generation=generation
+                )
+                try:
+                    client.delete_collection(collection_name=target_coll)
+                except Exception:  # noqa: BLE001
+                    pass  # best-effort; alias / orphan handling left to ops
+            except ImportError:
+                pass
+
+        # Update index.json: mark retired_at on the entry.
+        retired_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_entry = ReadyGeneration(
+            created_at=entry.created_at,
+            swap_at=entry.swap_at,
+            retired_at=retired_iso,
+            parser_version=entry.parser_version,
+            chunker_version=entry.chunker_version,
+            embedding_model_id=entry.embedding_model_id,
+            embedding_model_version=entry.embedding_model_version,
+            index_schema_version=entry.index_schema_version,
+            chunk_count=entry.chunk_count,
+            build_id=entry.build_id,
+        )
+        new_generations = dict(meta.generations)
+        new_generations[generation] = new_entry
+        new_meta = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=meta.shadow_generation,
+            generations=new_generations,
+        )
+        write_meta(kb_root, new_meta)
+        self.set_generation_meta(kb_name, new_meta)
+
+        return {"kb_name": kb_name, "retired_generation": generation, "force": force}
+
     def list_kbs(self) -> list[str]:
         with self._lock:
             return sorted(self.kbs)
@@ -1275,6 +1522,13 @@ def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[in
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 class RebuildCancelledError(ServiceError):

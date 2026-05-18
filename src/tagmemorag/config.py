@@ -73,6 +73,7 @@ class ParserConfig(BaseModel):
 class StorageConfig(BaseModel):
     data_dir: str = "data"
     schema_version: str = "1"
+    retire_min_hours_after_swap: float = 24.0
 
 
 class AssetConfig(BaseModel):
