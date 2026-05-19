@@ -73,7 +73,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | Text / lexical / metadata / graph / asset indexes | ✅ | Phase 2.5 indexing strategy; Qdrant payload schema versioned. |
 | QueryPlan + Budget layer | ✅ | T2 shipped 2026-05-18; rule-based planner + per-KB SQLite plan log + early-exit Budget. |
 | Retrieval Executor | ✅ | Hybrid (vector + lexical + metadata + graph). |
-| Reranker Tier | 🚧 | New first-class component (A3). |
+| Reranker Tier | ✅ | T3 shipped 2026-05-18; SF Qwen3-Reranker-0.6B Tier-1; fallback to noop. Dormant by default (Settings.reranker.enabled=False). |
 | Evidence Builder (text) | ✅ | Phase 3 text evidence with citations. |
 | Evidence Builder (visual) | ✅ | Phase 4–5 page snapshots, asset references via `/assets/{id}`. |
 | Agent Context Builder | ✅ | Token-budgeted `context_pack` with citations. |
@@ -223,7 +223,7 @@ This persisted plan set is the spine of C9 (eval-as-driver). Without it, "every 
 - `/search` and `/retrieve` responses include `plan_id`. `SearchRequest.budget: BudgetSpec | None` accepts per-request overrides. Out-of-scope queries short-circuit with empty results + `warnings: ["out_of_scope_intent"]`. Cache hits produce a fresh `plan_id`. Private KBs (`Settings.queryplan.private_kbs`) skip persistence entirely; `plan_id` is still returned.
 - `SearchFeedback.plan_id` (optional) lets feedback rows reference the plan that produced them. Legacy jsonl rows without `plan_id` parse as empty string for backward compat.
 
-### A3. Reranker as a First-Class Component  🚧
+### A3. Reranker as a First-Class Component  ✅
 
 **Why.** Reranking is the single largest lever for retrieval quality among the components listed under "System Overview". It is currently buried inside specific retrieval paths rather than abstracted behind a vendor-neutral contract. This makes vendor migration painful, makes calibration impossible to enforce, and blocks any tier-classification policy.
 
@@ -274,6 +274,19 @@ class Reranker(Protocol):
 **Failure semantics.** A reranker call may fail (timeout, vendor rate limit, network). The dispatcher applies, in order: budget-aware retry once, fallback chain, noop. A failed rerank never produces an HTTP error from `/retrieve` — only `warnings` entries. This contract makes reranker failures non-incidents from the API consumer's perspective.
 
 **Vendor reference.** Specific model ids, prices, rate limits, and integration constants live in Appendix A. They are not part of this contract.
+
+**T3 shipped (2026-05-18).** Implementation lives at `src/tagmemorag/reranker/`:
+- `base.py` — `Reranker` Protocol + `RerankDoc` / `RerankResultItem` / `RerankResult` / `RerankSpec` / `RerankerOutcome` dataclasses.
+- `local_fallback.py` — `NoopReranker` end of fallback chain; preserves input order.
+- `siliconflow.py` — `SFQwen3Reranker` adapter (Qwen3-Reranker-0.6B); httpx-based; pre-truncation; retry+breaker; HTTP 4xx no-retry; budget_ms→httpx timeout.
+- `calibration.py` — 4 calibrators (MinMax default; ZScore; Sigmoid overflow-safe; Identity); shared edge-case handling.
+- `circuit_breaker.py` — process-internal Lock-protected breaker; threshold + cooldown; success resets.
+- `cache.py` — `RerankCache` LRU; key-tuple `(reranker_id, version, instruction_hash, query_hash, chunk_id_set_hash)`; generation-independent.
+- `dispatcher.py` — `RerankerDispatcher` 6-step routing tree (enabled / tier / ACL / budget / cache / vendor); never raises to caller; falls back to noop on any failure.
+- `Settings.reranker` block: `enabled` (default False, ops flips in yaml), `default_tier`, `provider`, `model_id`, `model_version`, `instruction`, `top_n=20`, `rerank_candidates_n=100`, `calibrator="minmax"`, `max_seq_length=32768`, `query_token_budget=256`, `instruction_token_budget=64`, `retry_max=1`, `retry_backoff_ms=200`, `circuit_breaker_threshold=3`, `circuit_breaker_cooldown_seconds=30`, `min_budget_ms=500`, `hard_timeout_ms=3000`, `downstream_reserve_ms=200`, `cache_enabled=True`, `cache_max_entries=5000`, `api_key_env`, `base_url`.
+- `/retrieve` integration: when reranker active, `execute_search` top_k expanded to `rerank_candidates_n`; dispatcher reorders; `build_retrieve_response` truncates to user's `token_budget`. `/search` (legacy) unchanged.
+- T2 plan log `rerank_json` column populated with `vendor_used / calibrator / latency_ms / cache_status / top_n_returned / truncated_count / warnings`.
+- Feature flag `Settings.reranker.enabled=False` keeps T3 dormant on production until ops flips it. Cleanly reverts to T2 behavior.
 
 ### A4. IndexGeneration  🚧
 
