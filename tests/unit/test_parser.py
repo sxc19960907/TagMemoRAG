@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from tagmemorag.parser import parse_document
+from tagmemorag.parser import parse_document_with_ocr_summary
+from tagmemorag.ocr.base import OCRPageResult
+from tagmemorag.ocr.provider import DeterministicOCRProvider
 
 
 class _FakePdfPage:
@@ -287,6 +290,143 @@ def test_parse_pdf_preserves_page_metadata_when_splitting(monkeypatch, tmp_path)
     assert all(chunk.metadata["page_end"] == 1 for chunk in chunks)
     assert all(chunk.metadata["pdf_header_source"] == "detected" for chunk in chunks)
     assert len({chunk.metadata["chunk_id"] for chunk in chunks}) == len(chunks)
+
+
+def test_parse_pdf_ocr_disabled_skips_empty_page(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("")]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(
+        path,
+        min_chars=1,
+        metadata={"manual_id": "scan", "ocr_pages": {"1": "OCR text"}},
+        ocr_provider=DeterministicOCRProvider(),
+        ocr_enabled=False,
+    )
+
+    assert result.chunks == []
+    assert result.ocr_summary.to_dict()["skipped"] == 1
+
+
+def test_parse_pdf_ocr_empty_page_becomes_chunk(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("")]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(
+        path,
+        min_chars=1,
+        metadata={"manual_id": "scan", "ocr_pages": {"1": "Steam button label is visible."}},
+        ocr_provider=DeterministicOCRProvider(version="fixture.v1"),
+        ocr_enabled=True,
+    )
+
+    assert len(result.chunks) == 1
+    chunk = result.chunks[0]
+    assert "Steam button" in chunk.text
+    assert chunk.metadata["parser_profile"] == "pdf_ocr:product_manual"
+    assert chunk.metadata["ocr_provider"] == "deterministic"
+    assert chunk.metadata["ocr_version"] == "fixture.v1"
+    assert chunk.metadata["ocr_source"] == "pdf_missing_text"
+    assert chunk.metadata["page_start"] == 1
+    assert result.ocr_summary.to_dict()["attempted"] == 1
+    assert result.ocr_summary.to_dict()["created"] == 1
+
+
+def test_parse_pdf_ocr_skips_native_text_page(monkeypatch, tmp_path):
+    class FailingIfCalledProvider:
+        provider_name = "test"
+        version = "v1"
+
+        def recognize_pdf_page(self, context):
+            raise AssertionError("OCR should not run for native text pages")
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("Operation\nNative extracted text.")]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "native.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(
+        path,
+        min_chars=1,
+        metadata={"manual_id": "native"},
+        ocr_provider=FailingIfCalledProvider(),
+        ocr_enabled=True,
+    )
+
+    assert len(result.chunks) == 1
+    assert result.chunks[0].metadata["parser_profile"] == "pdf:product_manual"
+    assert "ocr_provider" not in result.chunks[0].metadata
+    assert result.ocr_summary.to_dict()["skipped"] == 1
+
+
+def test_parse_pdf_ocr_provider_failure_is_summarized(monkeypatch, tmp_path):
+    class FailingProvider:
+        provider_name = "test"
+        version = "v1"
+
+        def recognize_pdf_page(self, context):
+            raise RuntimeError("boom")
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("")]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(
+        path,
+        min_chars=1,
+        metadata={"manual_id": "scan"},
+        ocr_provider=FailingProvider(),
+        ocr_enabled=True,
+    )
+
+    assert result.chunks == []
+    assert result.ocr_summary.to_dict()["failed"] == 1
+    assert result.ocr_summary.to_dict()["failure_reasons"] == {"runtimeerror": 1}
+
+
+def test_parse_pdf_ocr_empty_result_records_warning(monkeypatch, tmp_path):
+    class EmptyProvider:
+        provider_name = "test"
+        version = "v1"
+
+        def recognize_pdf_page(self, context):
+            return OCRPageResult(text="", warnings=("ocr_empty_result",))
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_FakePdfPage("")]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(
+        path,
+        min_chars=1,
+        metadata={"manual_id": "scan"},
+        ocr_provider=EmptyProvider(),
+        ocr_enabled=True,
+    )
+
+    assert result.chunks == []
+    assert result.ocr_summary.to_dict()["warnings"] == ["ocr_empty_result"]
 
 
 def test_chunk_id_is_deterministic_for_same_content(tmp_path):

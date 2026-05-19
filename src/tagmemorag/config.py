@@ -234,6 +234,16 @@ class AnswerConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0)
 
 
+class OCRConfig(BaseModel):
+    """T7: Settings block for optional OCR text ingestion."""
+
+    enabled: bool = False
+    provider: Literal["deterministic"] = "deterministic"
+    version: str = "ocr.v1"
+    trigger: Literal["missing_text"] = "missing_text"
+    strict_extraction: bool = False
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -390,6 +400,7 @@ class Settings(BaseSettings):
     queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     answer: AnswerConfig = Field(default_factory=AnswerConfig)
+    ocr: OCRConfig = Field(default_factory=OCRConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

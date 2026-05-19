@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import Any
 
 from pypdf import PdfReader
 
+from .ocr.base import OCRPageContext, OCRProvider, OCRSummary
 from .types import Chunk
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -83,7 +85,49 @@ def parse_document(
     overlap_chars: int = 0,
     pdf_profile: str = "product_manual",
     pdf_heading_hints: list[str] | tuple[str, ...] | None = None,
+    ocr_provider: OCRProvider | None = None,
+    ocr_enabled: bool = False,
+    ocr_strict: bool = False,
+    kb_name: str = "default",
 ) -> list[Chunk]:
+    result = parse_document_with_ocr_summary(
+        path,
+        max_chars=max_chars,
+        min_chars=min_chars,
+        root_dir=root_dir,
+        metadata=metadata,
+        overlap_chars=overlap_chars,
+        pdf_profile=pdf_profile,
+        pdf_heading_hints=pdf_heading_hints,
+        ocr_provider=ocr_provider,
+        ocr_enabled=ocr_enabled,
+        ocr_strict=ocr_strict,
+        kb_name=kb_name,
+    )
+    return result.chunks
+
+
+@dataclass(frozen=True)
+class ParsedDocument:
+    chunks: list[Chunk]
+    ocr_summary: OCRSummary = OCRSummary()
+
+
+def parse_document_with_ocr_summary(
+    path: str | Path,
+    max_chars: int = 500,
+    min_chars: int = 50,
+    root_dir: str | Path | None = None,
+    metadata: dict[str, Any] | None = None,
+    *,
+    overlap_chars: int = 0,
+    pdf_profile: str = "product_manual",
+    pdf_heading_hints: list[str] | tuple[str, ...] | None = None,
+    ocr_provider: OCRProvider | None = None,
+    ocr_enabled: bool = False,
+    ocr_strict: bool = False,
+    kb_name: str = "default",
+) -> ParsedDocument:
     file_path = Path(path)
     source_file = str(file_path.relative_to(root_dir)) if root_dir else file_path.name
     chunk_metadata = dict(metadata or {})
@@ -98,10 +142,14 @@ def parse_document(
             metadata=chunk_metadata,
             pdf_profile=pdf_profile,
             pdf_heading_hints=pdf_heading_hints,
+            ocr_provider=ocr_provider,
+            ocr_enabled=ocr_enabled,
+            ocr_strict=ocr_strict,
+            kb_name=kb_name,
         )
     text = file_path.read_text(encoding="utf-8")
     if not text.strip():
-        return []
+        return ParsedDocument([])
 
     headings: dict[int, str] = {}
     current_lines: list[str] = []
@@ -151,7 +199,7 @@ def parse_document(
     flush()
 
     processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars, overlap_chars=overlap_chars)
-    return _with_lineage(processed, parser_profile=_text_parser_profile(suffix))
+    return ParsedDocument(_with_lineage(processed, parser_profile=_text_parser_profile(suffix)))
 
 
 def _parse_pdf(
@@ -164,9 +212,14 @@ def _parse_pdf(
     metadata: dict[str, Any],
     pdf_profile: str,
     pdf_heading_hints: list[str] | tuple[str, ...] | None,
-) -> list[Chunk]:
+    ocr_provider: OCRProvider | None,
+    ocr_enabled: bool,
+    ocr_strict: bool,
+    kb_name: str,
+) -> ParsedDocument:
     reader = PdfReader(str(file_path))
     raw_chunks: list[Chunk] = []
+    ocr_summary = OCRSummary()
     heading_hints = _pdf_heading_hints_for_profile(pdf_profile, pdf_heading_hints)
     pdf_metadata = dict(metadata)
     pdf_metadata["pdf_parser_profile"] = pdf_profile
@@ -174,7 +227,22 @@ def _parse_pdf(
         text = _extract_pdf_page_text(page)
         lines = _pdf_lines(text)
         if not lines:
+            ocr_chunks, page_summary = _ocr_pdf_page_chunks(
+                file_path,
+                source_file=source_file,
+                page_number=index,
+                metadata=pdf_metadata,
+                heading_hints=heading_hints,
+                ocr_provider=ocr_provider,
+                ocr_enabled=ocr_enabled,
+                ocr_strict=ocr_strict,
+                kb_name=kb_name,
+            )
+            raw_chunks.extend(ocr_chunks)
+            ocr_summary = ocr_summary.merge(page_summary)
             continue
+        if ocr_enabled:
+            ocr_summary = ocr_summary.merge(OCRSummary(skipped=1))
         raw_chunks.extend(
             _pdf_page_chunks(
                 lines,
@@ -185,7 +253,69 @@ def _parse_pdf(
             )
         )
     processed = _post_process(raw_chunks, max_chars=max_chars, min_chars=min_chars, overlap_chars=overlap_chars)
-    return _with_lineage(processed, parser_profile=f"pdf:{pdf_profile}")
+    native_chunks: list[Chunk] = []
+    ocr_chunks: list[Chunk] = []
+    for chunk in processed:
+        if chunk.metadata.get("ocr_source"):
+            ocr_chunks.append(chunk)
+        else:
+            native_chunks.append(chunk)
+    return ParsedDocument(
+        [
+            *_with_lineage(native_chunks, parser_profile=f"pdf:{pdf_profile}"),
+            *_with_lineage(ocr_chunks, parser_profile=f"pdf_ocr:{pdf_profile}"),
+        ],
+        ocr_summary=ocr_summary,
+    )
+
+
+def _ocr_pdf_page_chunks(
+    file_path: Path,
+    *,
+    source_file: str,
+    page_number: int,
+    metadata: dict[str, Any],
+    heading_hints: frozenset[str],
+    ocr_provider: OCRProvider | None,
+    ocr_enabled: bool,
+    ocr_strict: bool,
+    kb_name: str,
+) -> tuple[list[Chunk], OCRSummary]:
+    if not ocr_enabled or ocr_provider is None:
+        return [], OCRSummary(skipped=1)
+    doc_id = _lineage_doc_id(metadata, source_file)
+    try:
+        result = ocr_provider.recognize_pdf_page(
+            OCRPageContext(
+                source_path=file_path,
+                source_file=source_file,
+                page_number=page_number,
+                kb_name=kb_name,
+                doc_id=doc_id,
+                metadata=dict(metadata),
+            )
+        )
+    except Exception as exc:
+        if ocr_strict:
+            raise
+        reason = _bounded_ocr_reason(type(exc).__name__)
+        return [], OCRSummary(attempted=1, failed=1, failure_reasons={reason: 1})
+    lines = _pdf_lines(result.text)
+    if not lines:
+        return [], OCRSummary(attempted=1, skipped=1, warnings=tuple(result.warnings))
+    ocr_metadata = dict(metadata)
+    ocr_metadata["ocr_provider"] = ocr_provider.provider_name
+    ocr_metadata["ocr_version"] = ocr_provider.version
+    ocr_metadata["ocr_trigger"] = "missing_text"
+    ocr_metadata["ocr_source"] = "pdf_missing_text"
+    chunks = _pdf_page_chunks(
+        lines,
+        page_number=page_number,
+        source_file=source_file,
+        metadata=ocr_metadata,
+        heading_hints=heading_hints,
+    )
+    return chunks, OCRSummary(attempted=1, created=len(chunks), warnings=tuple(result.warnings))
 
 
 def _extract_pdf_page_text(page: Any) -> str:
@@ -401,6 +531,11 @@ def _looks_like_toc_mixed_line(value: str) -> bool:
     return digit_tokens >= 2 and short_tokens / len(tokens) >= 0.35
 
 
+def _bounded_ocr_reason(reason: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(reason).strip().lower())[:80].strip("_")
+    return normalized or "unknown"
+
+
 def _has_cjk(value: str) -> bool:
     return bool(re.search(r"[\u4e00-\u9fff]", value))
 
@@ -445,6 +580,10 @@ def _chunk_with_lineage(chunk: Chunk, *, parser_profile: str) -> Chunk:
         chunk_payload["page_start"] = page_start
     if page_end is not None:
         chunk_payload["page_end"] = page_end
+    for key in ("ocr_provider", "ocr_version", "ocr_trigger", "ocr_source"):
+        value = str(metadata.get(key) or "")
+        if value:
+            chunk_payload[key] = value
 
     chunk_id = _lineage_id("chunk", chunk_payload)
     element_id = _lineage_id(
@@ -464,6 +603,10 @@ def _chunk_with_lineage(chunk: Chunk, *, parser_profile: str) -> Chunk:
     metadata["asset_refs"] = _lineage_string_list(metadata.get("asset_refs"))
     metadata["parser_profile"] = parser_profile
     metadata["parser_version"] = PARSER_LINEAGE_VERSION
+    for key in ("ocr_provider", "ocr_version", "ocr_trigger", "ocr_source"):
+        value = str(metadata.get(key) or "")
+        if value:
+            metadata[key] = value
     if page_start is not None:
         metadata["page_start"] = page_start
     if page_end is not None:

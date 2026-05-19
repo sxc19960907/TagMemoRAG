@@ -34,7 +34,8 @@ from .manual_library import clear_pending_after_success, is_active_status, load_
 from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document
+from .ocr import OCRSummary, create_ocr_provider
+from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document, parse_document_with_ocr_summary
 from .rebuild_impact import ManualImpact, RebuildImpactReport, impact_path, make_impact_report, save_rebuild_impact
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
@@ -1138,6 +1139,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         manual_tags_by_id: dict[str, tuple[str, ...]] = {}
         asset_manifest = load_asset_manifest(kb_name, cfg) if cfg.assets.enabled else AssetManifest(kb_name=kb_name)
         asset_summary = AssetExtractionSummary()
+        ocr_provider = create_ocr_provider(cfg)
+        ocr_summary = OCRSummary()
         document_paths = (
             p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
         )
@@ -1149,18 +1152,22 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                     asset_manifest = remove_document_assets(asset_manifest, metadata.manual_id, mark_deleted=True)
                 continue
             manual_tags_by_id[metadata.manual_id] = metadata.tags
-            chunks.extend(
-                parse_document(
-                    path,
-                    cfg.parser.max_chars,
-                    cfg.parser.min_chars,
-                    overlap_chars=cfg.parser.overlap_chars,
-                    root_dir=docs_root,
-                    metadata=manual_node_attrs(metadata),
-                    pdf_profile=cfg.parser.pdf_profile,
-                    pdf_heading_hints=cfg.parser.pdf_heading_hints,
-                )
+            parsed = parse_document_with_ocr_summary(
+                path,
+                cfg.parser.max_chars,
+                cfg.parser.min_chars,
+                overlap_chars=cfg.parser.overlap_chars,
+                root_dir=docs_root,
+                metadata=manual_node_attrs(metadata),
+                pdf_profile=cfg.parser.pdf_profile,
+                pdf_heading_hints=cfg.parser.pdf_heading_hints,
+                ocr_provider=ocr_provider,
+                ocr_enabled=cfg.ocr.enabled,
+                ocr_strict=cfg.ocr.strict_extraction,
+                kb_name=kb_name,
             )
+            chunks.extend(parsed.chunks)
+            ocr_summary = ocr_summary.merge(parsed.ocr_summary)
             if cfg.assets.enabled:
                 document_assets, document_asset_summary = extract_document_assets(path, metadata, kb_name, cfg)
                 asset_manifest = replace_document_assets(asset_manifest, metadata.manual_id, document_assets)
@@ -1215,6 +1222,14 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         }
         if cfg.assets.enabled:
             meta["assets"] = asset_inventory_summary(asset_manifest, asset_summary)
+        if cfg.ocr.enabled or ocr_summary.attempted or ocr_summary.failed:
+            meta["ocr"] = {
+                "enabled": bool(cfg.ocr.enabled),
+                "provider": cfg.ocr.provider,
+                "version": cfg.ocr.version,
+                "trigger": cfg.ocr.trigger,
+                **ocr_summary.to_dict(),
+            }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
         return GraphState(

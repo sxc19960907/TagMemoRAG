@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 from tagmemorag import api
 from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.cache.lru_ttl import LRUTTLCache
-from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, OCRConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.ocr.base import OCRPageResult
 from tagmemorag.document_assets import AssetManifest, DocumentAsset, LocalDocumentAssetStore, save_asset_manifest
 from tagmemorag.state import AppState, build_kb, save_kb
 from tagmemorag.types import Anchor
@@ -194,6 +195,49 @@ def test_api_retrieve_no_results_returns_insufficient_evidence(tmp_path, test_co
     assert body["context_pack"]["items"] == []
     assert body["answerability"]["answerable"] is False
     assert body["answerability"]["fallback_reason"] == "no_results"
+
+
+def test_api_retrieve_can_return_ocr_only_pdf_text(tmp_path, fake_embedder, monkeypatch):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        ocr=OCRConfig(enabled=True, version="fixture.v1"),
+    )
+
+    class FakePdfPage:
+        def extract_text(self, *args, **kwargs):
+            return ""
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [FakePdfPage()]
+
+    class FakeOCRProvider:
+        provider_name = "fixture"
+        version = "fixture.v1"
+
+        def recognize_pdf_page(self, context):
+            return OCRPageResult("Hidden drain pump filter is behind the lower cover.")
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    monkeypatch.setattr("tagmemorag.state.create_ocr_provider", lambda _cfg: FakeOCRProvider())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "washer.pdf").write_bytes(b"%PDF fake")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "Where is the drain pump filter?", "top_k": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answerability"]["answerable"] is True
+    assert "Hidden drain pump filter" in body["context_pack"]["items"][0]["content"]
+    assert body["results"][0]["metadata"]["ocr_provider"] == "fixture"
+    assert body["results"][0]["metadata"]["ocr_version"] == "fixture.v1"
 
 
 def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_config, fake_embedder):

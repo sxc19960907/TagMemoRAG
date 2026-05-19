@@ -81,7 +81,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | `/search` endpoint | ✅ | Compatibility/debug; returns flat text results. |
 | `/answer` endpoint | ✅ | T6 shipped 2026-05-19; optional non-streaming single-turn wrapper over `/retrieve`, default-off generation. |
 | Visual retrieval (encoder + reranker) | 📋 | Phase 7B blueprint (B7B). |
-| OCR | 📋 | Phase 7A blueprint (B7A). |
+| OCR | ✅ | T7 shipped 2026-05-19; default-off missing-text PDF OCR ingestion foundation. |
 | External connectors (DOCX/HTML/Notion/...) | 📋 | Phase 8 blueprint (B8). |
 
 ## Domain Model
@@ -408,21 +408,24 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 
 Phase 7 in the archive design bundled OCR and visual embedding into one large milestone. This document splits it into two independent tracks because their cost, complexity, and value profiles are different.
 
-#### B7A. OCR pipeline  📋 Blueprint
+#### B7A. OCR pipeline  ✅ T7 Kickoff Shipped
 
-**Direction.** Extract text from scanned PDFs, image-based pages, and embedded images. OCR text feeds into the existing text/lexical indexes via the chunk pipeline; OCR is not a parallel retrieval path. Page snapshots produced for OCR can be reused as visual evidence assets (Phase 4–5 already supports asset attachment).
+**Shipped 2026-05-19.** T7 adds a default-off OCR text ingestion foundation for PDF pages where native `pypdf` extraction yields no useful text. OCR text feeds into the existing parser/chunker, text/lexical indexes, `/retrieve`, and `/answer`; OCR is not a parallel retrieval path. Page snapshots remain the visual evidence asset model and are not duplicated by OCR.
 
 OCR is the cheaper, higher-coverage half of visual document understanding. It alone unlocks a large share of "the answer is on page X but the page is a scan" cases.
 
-**Open questions to resolve at task start (≥4).**
+**Contract.**
 
-1. **Layout-aware vs character-only.** Modern OCR is divided between character-level recognition (Tesseract-class) and layout-aware extraction (PP-StructureV3, dots.ocr, Read-class systems). Which class is acceptable for product manuals' typical layouts (tables, double-column, captioned figures)? What is the eval criterion for choosing?
-2. **OCR backend selection criteria.** Latency, cost, accuracy on Chinese/English mixed content, table fidelity, dependency footprint, on-prem vs API. Which axes are non-negotiable?
-3. **Page snapshot reuse.** OCR produces a page image plus extracted text; the same page image is also a visual evidence asset. How are snapshots deduplicated across OCR and Phase 4 evidence pipelines? Same `asset_id`, or two assets with a relation?
-4. **OCR triggering policy.** Run OCR on every PDF, only on pages where `pypdf` text extraction yields nothing, or only on KBs marked as scan-heavy? Triggering interacts with rebuild cost and IndexGeneration triggers.
-5. **OCR-derived chunk lineage.** OCR text re-enters the chunker. The `chunker_version` already exists; do we add `ocr_version` as a separate generation trigger, or fold it under `parser_version`? Decision affects A4 trigger conditions.
+- `Settings.ocr.enabled` defaults to `False`.
+- `OCRProvider` is vendor-neutral. T7 ships only a deterministic fixture provider; production OCR providers are follow-up work.
+- Trigger policy is `missing_text`: OCR runs only for PDF pages where native extraction produces no useful lines.
+- OCR output is page-block text in the MVP. Layout-aware table/region reconstruction is deferred.
+- OCR chunks are normal chunks with `parser_profile="pdf_ocr:<profile>"`, page metadata, and `ocr_provider` / `ocr_version` / `ocr_trigger` / `ocr_source` lineage.
+- OCR provider/version/trigger/source participate in chunk identity, so OCR changes can force new chunk ids and embeddings.
+- OCR failures degrade by default and are summarized with bounded low-cardinality failure reasons. Strict mode can fail rebuild.
+- Rebuild metadata may include `meta["ocr"]` with enabled/provider/version/trigger counts, never raw OCR text.
 
-**Out of scope for this blueprint.** Choosing a specific OCR backend. Building the OCR worker. Adding OCR to the rebuild path while Phase 5 visual evidence is still settling.
+**Deferred.** Production OCR backend selection, image-file OCR, layout-aware tables/regions/bounding boxes, `ocr_layer` asset persistence, async OCR workers, LLM correction, and all visual embedding/reranking work remain follow-up tasks.
 
 #### B7B. Visual retrieval  📋 Blueprint
 

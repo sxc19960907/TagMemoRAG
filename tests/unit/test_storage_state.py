@@ -8,11 +8,12 @@ import threading
 import numpy as np
 import pytest
 
-from tagmemorag.config import Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import OCRConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.graph_builder import build_graph
 from tagmemorag.errors import RebuildInProgressError
 from tagmemorag.qdrant_ops import inspect_qdrant
 from tagmemorag.parser import parse_document
+from tagmemorag.ocr.base import OCRPageResult
 from tagmemorag.state import AppState, build_kb, load_kb, save_kb
 from tagmemorag.storage.atomic import atomic_write
 from tagmemorag.storage.json_anchor import JsonAnchorStore
@@ -555,6 +556,47 @@ def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fak
     assert node["metadata"]["doc_id"] == "fridge"
     assert node["metadata"]["chunk_id"].startswith("chunk:sha256:")
     assert "冷藏室温度" in node["text"]
+
+
+def test_build_kb_includes_ocr_text_for_empty_pdf_pages(monkeypatch, tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        ocr=OCRConfig(enabled=True, version="fixture.v1"),
+    )
+
+    class FakePdfPage:
+        def extract_text(self, *args, **kwargs):
+            return ""
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [FakePdfPage()]
+
+    class FakeOCRProvider:
+        provider_name = "fixture"
+        version = "fixture.v1"
+
+        def recognize_pdf_page(self, context):
+            return OCRPageResult("OCR steam wand instructions.")
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    monkeypatch.setattr("tagmemorag.state.create_ocr_provider", lambda _cfg: FakeOCRProvider())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "coffee.pdf").write_bytes(b"%PDF fake")
+
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+
+    assert state.graph.number_of_nodes() == 1
+    node = state.graph.nodes[0]
+    assert "OCR steam wand" in node["text"]
+    assert node["metadata"]["parser_profile"] == "pdf_ocr:product_manual"
+    assert node["metadata"]["ocr_provider"] == "fixture"
+    assert node["metadata"]["ocr_version"] == "fixture.v1"
+    assert state.meta["ocr"]["attempted"] == 1
+    assert state.meta["ocr"]["created"] == 1
+    assert "OCR steam wand" not in str(state.meta["ocr"])
 
 
 def test_rebuild_keeps_old_state_until_done(tmp_path, test_config, fake_embedder):
