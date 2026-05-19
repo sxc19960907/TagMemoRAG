@@ -615,3 +615,36 @@ Marked T6-T9 as shipped in the architecture follow-up roadmap table, matching th
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: MVP integration acceptance coverage
+
+**Date**: 2026-05-19
+**Task**: MVP integration acceptance coverage
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added deterministic MVP composition tests covering conservative defaults, connector-backed answer/queryplan flow, visual evidence safety, OCR graph search, and connector bundle recovery.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dfeeb50` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
