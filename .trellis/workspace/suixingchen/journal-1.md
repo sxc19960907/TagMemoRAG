@@ -384,3 +384,36 @@ Implemented the T5 offline QueryPlan replay CLI with generation-targeted replay,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: T7 OCR kickoff
+
+**Date**: 2026-05-19
+**Task**: T7 OCR kickoff
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Shipped default-off missing-text PDF OCR ingestion foundation with OCR config, provider protocol, deterministic fixture provider, parser/rebuild integration, safe OCR summary metadata, B7A spec update, and focused/API/unit coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3d28f75` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
