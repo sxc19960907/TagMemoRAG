@@ -465,7 +465,7 @@ These are different responsibilities. The archive design conflated them. A manag
 
 These two principles apply across every section of this document and across every follow-up task that this document spawns.
 
-### C9. Eval-as-driver  🚧
+### C9. Eval-as-driver  ✅
 
 **Principle.** New retrieval-affecting work begins by exercising eval, not by writing implementation. This is a mechanism, not a slogan; the mechanism is grounded in the QueryPlan persistence introduced in A2.
 
@@ -476,7 +476,7 @@ These two principles apply across every section of this document and across ever
 3. New phase tasks must list, in their own PRD, which eval slices (subsets of the persisted plan set, plus any synthetic fixtures) they will exercise. The task is not eligible for `task.py start` until the eval-slice list is filled in.
 4. A4 generation swap is gated on this same replay: a shadow generation is not swapped to active until the replay shows the agreed metric criteria are met.
 
-**Replay tool contract (CLI shape, not implementation).**
+**Replay tool contract.**
 
 ```text
 trellis-rag-eval replay \
@@ -488,7 +488,79 @@ trellis-rag-eval replay \
   [--output-format json|markdown]
 ```
 
-The tool reads QueryPlans from SQLite, replays each against the chosen generation, computes metrics, and prints the deltas vs baseline. Implementation is owned by T5 in the roadmap below.
+The tool reads QueryPlans from SQLite, replays each against the chosen generation, computes metrics, and prints the deltas vs baseline.
+
+**T5 shipped 2026-05-19.** `scripts/trellis_rag_eval.py replay` implements the offline MVP: local generation replay from persisted QueryPlans, optional baseline deltas, JSON/Markdown output, plan filters, and historical rerank summary from `rerank_json`. It does not call external reranker vendors during replay and does not evaluate generated `/answer` output.
+
+#### T5 Replay CLI Implementation Contract
+
+**1. Scope / Trigger.** Applies when adding or changing offline replay of persisted QueryPlans, generation-swap gates, replay metrics, or rerank impact reporting.
+
+**2. Signatures.**
+
+- Command: `python scripts/trellis_rag_eval.py replay --kb <kb_name> --generation <active|shadow|gN|N> [--baseline <active|shadow|gN|N>] [--config <path>] [--filter key=value ...] [--metrics a,b,c] [--limit N] [--output-format json|markdown]`
+- Package entry: `tagmemorag.replay.cli:main(argv: list[str] | None = None) -> int`
+- Loader: `ReplayPlanLoader(kb_name, settings).load(filters=ReplayFilters(), limit=N) -> (list[ReplayPlan], list[SkippedReplayRow])`
+- Generation loader: `load_generation_state(kb_name, settings, generation) -> GraphState`
+
+**3. Contracts.**
+
+- Input store is `{settings.storage.data_dir}/{kb_name}/query_plans.db`, schema version `<= PLAN_LOG_SCHEMA_VERSION`; replay must not create or migrate the DB.
+- Replay query comes from `query_rewrites_masked_json[0]`; raw query text is not separately persisted.
+- Supported filters are `intent`, `created_after`, `created_before`, `cache_status`, and `rerank_vendor`; date filters normalize to UTC `YYYY-MM-DDTHH:MM:SSZ`.
+- Generation selectors support `active`, `shadow`, `gN`, and `N`; `shadow` is replayable only when the shadow slot is ready.
+- Replay uses local NPZ generation artifacts via `KbPaths(kb_name, settings, generation=N)` and a temporary `GraphState`; it must not mutate `AppState`, swap generations, or write plan-log rows.
+- Replay must not call external reranker vendors by default. Rerank impact is summarized from persisted `rerank_json`.
+- JSON report schema version is `replay_report.v1`; Markdown output is operator-facing and must not print raw query text by default.
+
+**4. Validation & Error Matrix.**
+
+- Missing `query_plans.db` -> CLI exit `2` with `{ "error": ... }` in JSON mode.
+- Future plan-log schema version -> exit `2`.
+- Unknown filter key, invalid date, duplicate filter, or non-positive limit -> exit `2`.
+- Missing `index.json`, unknown generation, retired generation, not-ready shadow, or missing generation artifacts -> exit `2`.
+- Qdrant-only replay without local NPZ artifacts -> exit `2` until a separate online-Qdrant replay contract exists.
+- Malformed individual plan rows -> skip row, include `skipped_rows`, continue replay.
+- Per-case replay exception -> record case `error`, exclude it from successful metric denominators, continue replay.
+- Baseline replay with `any_hit_rate_delta < 0` -> exit `3`; other MVP deltas are informational.
+
+**5. Good/Base/Bad Cases.**
+
+- Good: replay `g2` against `g1`, filters select real plan rows, target/baseline metrics and deltas are emitted, and rerank fallback/cache summary is derived from `rerank_json`.
+- Base: target-only replay emits metrics and cases with no baseline or deltas.
+- Bad: replay calls the live reranker dispatcher or external HTTP provider without an explicit future opt-in mode; replay writes new rows into `query_plans.db`; Markdown output includes full query text.
+
+**6. Tests Required.**
+
+- Filter parser: valid filters, invalid keys, duplicate filters, cache status validation, date normalization.
+- Loader: happy path, missing DB, future schema, malformed JSON rows, blank query, SQL filters, rerank vendor filter, limit.
+- Generation: selector resolution, active/shadow semantics, retired/missing artifacts, Qdrant-only rejection.
+- Runner/metrics: local retrieval stack replay, per-case errors, no reranker dispatcher call path, aggregate metrics, deltas, rerank summary.
+- CLI: JSON output, Markdown output, missing artifact exit `2`, baseline regression exit `3`.
+- Compatibility: legacy `scripts/replay_against_generation.py` tests remain green until that T1 script is intentionally retired.
+
+**7. Wrong vs Correct.**
+
+Wrong:
+
+```python
+from tagmemorag.api import app_state
+
+state = app_state.get_current(kb_name)
+rerank_outcome = _rerank_dispatcher().rerank(plan, results, guard)
+```
+
+This replays whichever generation is active in process memory and may call the external reranker path.
+
+Correct:
+
+```python
+state = load_generation_state(kb_name, settings, generation)
+cases = replay_plans(plans=plans, state=state, settings=settings, generation=generation)
+rerank_summary = summarize_rerank(plans)
+```
+
+This targets the requested generation artifacts, keeps replay offline, and derives reranker impact from persisted metadata.
 
 **Eval data lifecycle.** Plans are kept in a rolling window — default 30 days, configurable per KB. Plans older than the window are pruned. Plans from KBs marked private/sensitive are never persisted (A2 rule 4). Manually curated fixtures (added by a human reviewing failures via Phase 3.5 admin inspect) are kept indefinitely until explicitly retired; they are stored separately from the rolling window.
 
@@ -564,7 +636,7 @@ The following tasks are the work this document creates. They are NOT pre-created
 | T3 | Reranker first-class component + initial vendor integration | T2 | P1 | A3; defines Reranker Protocol, dispatcher, calibration step, fallback chain; first vendor concrete in Appendix A |
 | T4 | WAVE repositioning + documentation honesty patch | — | P3 | A5 + C10; small task; updates operator-facing docs and code-level doc strings to match this architecture |
 | T1.5 | IndexGeneration derivatives isolation | T1 | P3 | Generation-isolate EPA basis / tag co-occurrence / tag intrinsic residuals / tag embeddings; closes the gap left by T1 D11 between A4 storage layout and current `_global/` placement |
-| T5 | eval-as-driver replay tool | T2 | P2 | C9; CLI tool, metric set, plan-filter language |
+| T5 | eval-as-driver replay tool | T2 | P2 | ✅ Shipped 2026-05-19; CLI tool, metric set, plan-filter language |
 | T6 | Phase 6 `/answer` kickoff | T2, T3 | P2 | B6 (independent brainstorm; this task only enters after T2+T3 land) |
 | T7 | Phase 7A OCR kickoff | T1 | P2 | B7A (independent brainstorm) |
 | T8 | Phase 7B visual retrieval kickoff | T1, T7 | P3 | B7B (independent brainstorm) |
@@ -576,7 +648,7 @@ T1, T2, T3 form a strict chain: T1 unlocks safe rebuilds; T2 unlocks request-lev
 
 T4 is independent — it is documentation discipline catching up to reality and can land at any time.
 
-T5 is the eval-as-driver enabler. It is P2 rather than P1 because the persisted plan set takes time to fill the rolling window after T2 ships; running the replay tool earlier would produce thin eval slices.
+T5 shipped the eval-as-driver MVP. It remains P2 in the roadmap history because the persisted plan set takes time to fill the rolling window after T2 ships; running replay too early can still produce thin eval slices.
 
 T7 OCR is broadly useful and is the cheaper half of Phase 7; it can ship before T8 visual retrieval and is the recommended path.
 
