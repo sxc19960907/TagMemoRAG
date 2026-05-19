@@ -549,3 +549,36 @@ Repositioned WAVE Phase 0/1 docs and code-level descriptions as experimental/def
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Production deployment operations guide
+
+**Date**: 2026-05-19
+**Task**: Production deployment operations guide
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added the production deployment and operations guide covering Docker Compose, config/secrets, persistence and backups, Qdrant/S3/registry/blob operations, bundles, observability, rollback playbooks, and current multi-replica limits. Linked it from README and updated the workspace roadmap.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1df6f04` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
