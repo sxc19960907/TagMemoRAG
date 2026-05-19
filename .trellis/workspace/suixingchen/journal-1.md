@@ -714,3 +714,36 @@ Added example deployment config profiles and tagmemorag config validate for stat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Provider live probe command
+
+**Date**: 2026-05-19
+**Task**: Provider live probe command
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added explicit provider live probes for embedding, answer, reranker, Qdrant, and S3 with safe JSON output, no default network tests, and docs distinguishing config validate, provider probe, readiness smoke, and /ready.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b3ba3f7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
