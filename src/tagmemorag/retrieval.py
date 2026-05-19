@@ -6,6 +6,7 @@ from typing import Any, Sequence
 
 from .document_assets import AssetManifest, DocumentAsset
 from .types import Result
+from .visual_retrieval.base import VisualCandidate, VisualCandidateProvider, VisualQueryContext, VisualReranker
 
 RETRIEVE_SCHEMA_VERSION = "retrieve.v1"
 CONTEXT_PACK_VERSION = "context_pack.v1"
@@ -22,6 +23,19 @@ class VisualEvidenceResolver:
     asset_base_path: str = "/assets"
 
 
+@dataclass(frozen=True)
+class VisualRetrievalResolver:
+    kb_name: str
+    manifest: AssetManifest | None
+    provider: VisualCandidateProvider | None
+    reranker: VisualReranker | None
+    enabled: bool = False
+    max_candidates: int = 4
+    min_score: float = 0.1
+    trigger: str = "visual_intent"
+    asset_base_path: str = "/assets"
+
+
 def build_retrieve_response(
     *,
     results: Sequence[Result],
@@ -33,13 +47,34 @@ def build_retrieve_response(
     token_budget: int = DEFAULT_TOKEN_BUDGET,
     search_time_ms: float = 0.0,
     visual_resolver: VisualEvidenceResolver | None = None,
+    visual_retrieval_resolver: VisualRetrievalResolver | None = None,
     query_text: str = "",
 ) -> dict[str, Any]:
     visual_intent = detect_visual_intent(query_text)
     evidence = [_evidence_from_result(result, index, visual_resolver=visual_resolver) for index, result in enumerate(results, 1)]
+    visual_summary: dict[str, Any] = {}
+    visual_candidates: tuple[VisualCandidate, ...] = ()
+    if visual_retrieval_resolver is not None:
+        visual_candidates, visual_summary = _visual_retrieval_candidates(
+            query_text=query_text,
+            visual_intent=visual_intent,
+            existing_evidence=evidence,
+            resolver=visual_retrieval_resolver,
+        )
+        evidence.extend(
+            _visual_evidence_from_candidate(
+                candidate,
+                len(evidence) + index,
+                resolver=visual_retrieval_resolver,
+            )
+            for index, candidate in enumerate(visual_candidates, 1)
+        )
     citations = [_citation_from_evidence(item) for item in evidence]
     context_pack, context_warning = _context_pack(evidence, token_budget=max(0, int(token_budget)))
     answerability = _answerability(evidence, context_pack, context_warning)
+    visual_evidence = _visual_summary(evidence, visual_intent=visual_intent, manifest_present=visual_resolver is not None and visual_resolver.manifest is not None)
+    if visual_summary:
+        visual_evidence["retrieval"] = visual_summary
     return {
         "schema_version": RETRIEVE_SCHEMA_VERSION,
         "build_id": build_id,
@@ -52,7 +87,7 @@ def build_retrieve_response(
         "citations": citations,
         "context_pack": context_pack,
         "answerability": answerability,
-        "visual_evidence": _visual_summary(evidence, visual_intent=visual_intent, manifest_present=visual_resolver is not None and visual_resolver.manifest is not None),
+        "visual_evidence": visual_evidence,
         "search_time_ms": round(float(search_time_ms), 3),
     }
 
@@ -157,7 +192,7 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int) -> tuple
             break
         context_item = {
             "context_item_id": f"ctx_{index:03d}",
-            "content_type": "text",
+            "content_type": item.get("content_type", "text"),
             "content": content,
             "source": {
                 "doc_id": item["doc_id"],
@@ -261,6 +296,120 @@ def _reason(result: Result, section_path: list[str], page_range: list[int]) -> s
     if result.source_file:
         return "Matched text chunk from source file."
     return "Matched text chunk."
+
+
+def _visual_retrieval_candidates(
+    *,
+    query_text: str,
+    visual_intent: str,
+    existing_evidence: list[dict[str, Any]],
+    resolver: VisualRetrievalResolver,
+) -> tuple[tuple[VisualCandidate, ...], dict[str, Any]]:
+    summary = {
+        "enabled": bool(resolver.enabled),
+        "attempted": 0,
+        "candidate_count": 0,
+        "attached_count": 0,
+        "skipped": 0,
+        "omitted": {},
+    }
+    if not resolver.enabled:
+        summary["skipped"] = 1
+        summary["omitted"] = {"visual_retrieval_disabled": 1}
+        return (), summary
+    if resolver.trigger == "visual_intent" and visual_intent != "visual_reference":
+        summary["skipped"] = 1
+        summary["omitted"] = {"visual_intent_not_detected": 1}
+        return (), summary
+    if resolver.manifest is None:
+        summary["attempted"] = 1
+        summary["omitted"] = {"asset_manifest_missing": 1}
+        return (), summary
+    if resolver.provider is None:
+        summary["attempted"] = 1
+        summary["omitted"] = {"visual_provider_missing": 1}
+        return (), summary
+    summary["attempted"] = 1
+    candidates = resolver.provider.candidates(
+        VisualQueryContext(
+            query_text=query_text,
+            visual_intent=visual_intent,
+            kb_name=resolver.kb_name,
+            manifest=resolver.manifest,
+            max_candidates=resolver.max_candidates,
+            min_score=resolver.min_score,
+        )
+    )
+    if resolver.reranker is not None:
+        candidates = resolver.reranker.rerank(query_text, candidates)
+    candidates = _dedupe_visual_candidates(candidates, existing_evidence)
+    summary["candidate_count"] = len(candidates)
+    summary["attached_count"] = len(candidates)
+    if not candidates:
+        summary["omitted"] = {"no_visual_candidates": 1}
+    return candidates, summary
+
+
+def _dedupe_visual_candidates(
+    candidates: tuple[VisualCandidate, ...],
+    existing_evidence: list[dict[str, Any]],
+) -> tuple[VisualCandidate, ...]:
+    existing_asset_ids = {
+        str(asset.get("asset_id") or "")
+        for item in existing_evidence
+        for asset in item.get("assets", [])
+        if str(asset.get("asset_id") or "")
+    }
+    if not existing_asset_ids:
+        return candidates
+    return tuple(candidate for candidate in candidates if candidate.asset_id not in existing_asset_ids)
+
+
+def _visual_evidence_from_candidate(
+    candidate: VisualCandidate,
+    index: int,
+    *,
+    resolver: VisualRetrievalResolver,
+) -> dict[str, Any]:
+    citation_id = f"cit_{index:03d}"
+    evidence_id = f"ev_{index:03d}"
+    asset = resolver.manifest.assets.get(candidate.asset_id) if resolver.manifest is not None else None
+    assets = []
+    if asset is not None:
+        assets = [
+            _asset_descriptor(
+                asset,
+                kb_name=resolver.kb_name,
+                citation_id=citation_id,
+                asset_base_path=resolver.asset_base_path,
+            )
+        ]
+    page_range = [candidate.page_number, candidate.page_number] if candidate.page_number is not None else []
+    return {
+        "evidence_id": evidence_id,
+        "citation_id": citation_id,
+        "chunk_id": "",
+        "doc_id": candidate.doc_id,
+        "node_id": -1,
+        "source_file": candidate.source_file,
+        "page_range": page_range,
+        "section_path": [],
+        "text": candidate.matched_text or f"Visual asset {candidate.asset_id}",
+        "content_type": "visual_asset",
+        "score": float(candidate.score),
+        "confidence": _confidence(candidate.score),
+        "reason": candidate.reason,
+        "matched_chunk_ids": [],
+        "assets": assets,
+        "asset_warnings": [] if assets else ["visual_asset_missing"],
+        "visual_candidate": {
+            "asset_id": candidate.asset_id,
+            "provider": candidate.provider,
+            "provider_version": candidate.provider_version,
+            "score": float(candidate.score),
+            "reason": candidate.reason,
+        },
+    }
 
 
 def detect_visual_intent(query_text: str) -> str:

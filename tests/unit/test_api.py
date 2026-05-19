@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from tagmemorag import api
 from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.cache.lru_ttl import LRUTTLCache
-from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, OCRConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, OCRConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig, VisualRetrievalConfig
 from tagmemorag.ocr.base import OCRPageResult
 from tagmemorag.document_assets import AssetManifest, DocumentAsset, LocalDocumentAssetStore, save_asset_manifest
 from tagmemorag.state import AppState, build_kb, save_kb
@@ -122,6 +122,55 @@ def test_api_retrieve_attaches_visual_assets_from_manifest(tmp_path, fake_embedd
     serialized = str(body)
     assert "storage_key" not in serialized
     assert "hidden-checksum" not in serialized
+
+
+def test_api_retrieve_visual_retrieval_can_return_visual_only_asset(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        visual_retrieval=VisualRetrievalConfig(enabled=True, max_candidates=2),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n普通文本。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    store = LocalDocumentAssetStore(cfg.assets.root_dir)
+    ref = store.put("default", "manual", "page_snapshot", "asset:sha256:visual", b"png", "image/png")
+    asset = DocumentAsset(
+        asset_id="asset:sha256:visual",
+        kb_name="default",
+        doc_id="manual",
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type=ref.mime_type,
+        storage_backend=ref.backend,
+        storage_key=ref.storage_key,
+        checksum=ref.checksum,
+        page_number=1,
+        width=640,
+        height=480,
+        caption="Reset button diagram",
+        nearby_text="Hold reset button for three seconds.",
+        status="ready",
+    )
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "show reset button", "filters": {"manual_id": "missing"}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"][0]["content_type"] == "visual_asset"
+    assert body["evidence"][0]["assets"][0]["asset_id"] == "asset:sha256:visual"
+    assert body["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:visual"]
+    assert body["visual_evidence"]["retrieval"]["candidate_count"] == 1
+    serialized = str(body)
+    assert ref.storage_key not in serialized
+    assert ref.checksum not in serialized
 
 
 def test_api_retrieve_debug_includes_safe_inspect_payload(tmp_path, test_config, fake_embedder):

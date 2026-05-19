@@ -59,6 +59,7 @@ from .observability.tracing import configure_tracing, set_span_attributes, start
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
 from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
+from .retrieval import VisualRetrievalResolver
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -77,6 +78,7 @@ from .wave_tag_spike import GhostTag
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
+from .visual_retrieval import create_visual_components
 from .tag_governance import (
     commit_tag_rewrite,
     load_tag_policy,
@@ -1274,6 +1276,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
     trace_id = str(getattr(http_request.state, "trace_id", ""))
     search_id = _compute_search_id(request, state, trace_id)
     asset_manifest = load_asset_manifest(state.kb_name, settings) if settings.assets.enabled else None
+    visual_provider, visual_reranker = create_visual_components(settings)
     payload = build_retrieve_response(
         results=candidates_used,
         build_id=state.build_id,
@@ -1284,6 +1287,16 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
         token_budget=request.token_budget,
         search_time_ms=search_time_ms,
         visual_resolver=VisualEvidenceResolver(kb_name=state.kb_name, manifest=asset_manifest) if settings.assets.enabled else None,
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name=state.kb_name,
+            manifest=asset_manifest,
+            provider=visual_provider,
+            reranker=visual_reranker,
+            enabled=settings.visual_retrieval.enabled,
+            max_candidates=settings.visual_retrieval.max_candidates,
+            min_score=settings.visual_retrieval.min_score,
+            trigger=settings.visual_retrieval.trigger,
+        ),
         query_text=request.question,
     )
     if search_debug_enabled(request.debug, settings):

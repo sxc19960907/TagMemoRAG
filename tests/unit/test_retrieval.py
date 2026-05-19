@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from tagmemorag.document_assets import AssetManifest, DocumentAsset
-from tagmemorag.retrieval import VisualEvidenceResolver, build_retrieve_response, detect_visual_intent, retrieve_inspect_payload
+from tagmemorag.retrieval import VisualEvidenceResolver, VisualRetrievalResolver, build_retrieve_response, detect_visual_intent, retrieve_inspect_payload
+from tagmemorag.visual_retrieval.provider import DeterministicVisualCandidateProvider, NoopVisualReranker
 from tagmemorag.types import Result
 
 
@@ -27,7 +28,16 @@ def _result(**metadata):
     )
 
 
-def _asset(asset_id="asset:sha256:p12", *, kb_name="default", doc_id="doc-1", page_number=12, status="ready"):
+def _asset(
+    asset_id="asset:sha256:p12",
+    *,
+    kb_name="default",
+    doc_id="doc-1",
+    page_number=12,
+    status="ready",
+    caption="",
+    nearby_text="",
+):
     return DocumentAsset(
         asset_id=asset_id,
         kb_name=kb_name,
@@ -42,6 +52,8 @@ def _asset(asset_id="asset:sha256:p12", *, kb_name="default", doc_id="doc-1", pa
         page_number=page_number,
         width=100,
         height=200,
+        caption=caption,
+        nearby_text=nearby_text,
         status=status,
     )
 
@@ -255,3 +267,112 @@ def test_detect_visual_intent_rules_are_non_ranking_metadata():
     assert detect_visual_intent("给我看按钮在哪") == "visual_reference"
     assert detect_visual_intent("Where is the reset button?") == "visual_reference"
     assert detect_visual_intent("蒸汽很小怎么办") == "text_answer"
+
+
+def test_visual_retrieval_disabled_keeps_no_visual_candidates():
+    manifest = AssetManifest(kb_name="default", assets={"asset:sha256:p12": _asset(caption="Reset button diagram")})
+
+    payload = build_retrieve_response(
+        results=[],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name="default",
+            manifest=manifest,
+            provider=DeterministicVisualCandidateProvider(),
+            reranker=NoopVisualReranker(),
+            enabled=False,
+        ),
+        query_text="show reset button",
+    )
+
+    assert payload["evidence"] == []
+    assert payload["visual_evidence"]["retrieval"]["omitted"] == {"visual_retrieval_disabled": 1}
+
+
+def test_visual_retrieval_adds_visual_only_evidence_for_visual_intent():
+    manifest = AssetManifest(kb_name="default", assets={"asset:sha256:p12": _asset(caption="Reset button diagram", nearby_text="Hold the reset button for three seconds.")})
+
+    payload = build_retrieve_response(
+        results=[],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name="default",
+            manifest=manifest,
+            provider=DeterministicVisualCandidateProvider(),
+            reranker=NoopVisualReranker(),
+            enabled=True,
+            max_candidates=2,
+            min_score=0.1,
+        ),
+        query_text="show reset button",
+    )
+
+    evidence = payload["evidence"][0]
+    assert evidence["content_type"] == "visual_asset"
+    assert evidence["visual_candidate"]["asset_id"] == "asset:sha256:p12"
+    assert evidence["assets"][0]["asset_id"] == "asset:sha256:p12"
+    assert payload["context_pack"]["items"][0]["content_type"] == "visual_asset"
+    assert payload["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:p12"]
+    assert payload["answerability"]["answerable"] is True
+    assert payload["visual_evidence"]["retrieval"]["candidate_count"] == 1
+    serialized = str(payload)
+    assert "hidden/storage/key" not in serialized
+    assert "secret-checksum" not in serialized
+
+
+def test_visual_retrieval_skips_non_visual_intent():
+    manifest = AssetManifest(kb_name="default", assets={"asset:sha256:p12": _asset(caption="Reset button diagram")})
+
+    payload = build_retrieve_response(
+        results=[],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name="default",
+            manifest=manifest,
+            provider=DeterministicVisualCandidateProvider(),
+            reranker=NoopVisualReranker(),
+            enabled=True,
+        ),
+        query_text="how to clean filter",
+    )
+
+    assert payload["evidence"] == []
+    assert payload["visual_evidence"]["retrieval"]["omitted"] == {"visual_intent_not_detected": 1}
+
+
+def test_visual_retrieval_dedupes_assets_already_attached_to_text_evidence():
+    manifest = AssetManifest(kb_name="default", assets={"asset:sha256:p12": _asset(caption="Reset button diagram")})
+
+    payload = build_retrieve_response(
+        results=[_result()],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_resolver=VisualEvidenceResolver(kb_name="default", manifest=manifest),
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name="default",
+            manifest=manifest,
+            provider=DeterministicVisualCandidateProvider(),
+            reranker=NoopVisualReranker(),
+            enabled=True,
+        ),
+        query_text="show reset button",
+    )
+
+    assert len(payload["evidence"]) == 1
+    assert payload["evidence"][0]["assets"][0]["asset_id"] == "asset:sha256:p12"
+    assert payload["visual_evidence"]["retrieval"]["omitted"] == {"no_visual_candidates": 1}

@@ -80,7 +80,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | `/retrieve` endpoint | ✅ | Schema-versioned, evidence-aware. |
 | `/search` endpoint | ✅ | Compatibility/debug; returns flat text results. |
 | `/answer` endpoint | ✅ | T6 shipped 2026-05-19; optional non-streaming single-turn wrapper over `/retrieve`, default-off generation. |
-| Visual retrieval (encoder + reranker) | 📋 | Phase 7B blueprint (B7B). |
+| Visual retrieval (encoder + reranker) | ✅ | T8 shipped 2026-05-19; default-off deterministic visual candidate foundation. |
 | OCR | ✅ | T7 shipped 2026-05-19; default-off missing-text PDF OCR ingestion foundation. |
 | External connectors (DOCX/HTML/Notion/...) | 📋 | Phase 8 blueprint (B8). |
 
@@ -427,24 +427,28 @@ OCR is the cheaper, higher-coverage half of visual document understanding. It al
 
 **Deferred.** Production OCR backend selection, image-file OCR, layout-aware tables/regions/bounding boxes, `ocr_layer` asset persistence, async OCR workers, LLM correction, and all visual embedding/reranking work remain follow-up tasks.
 
-#### B7B. Visual retrieval  📋 Blueprint
+#### B7B. Visual retrieval  ✅ T8 Kickoff Shipped
 
-**Direction.** Add a visual retrieval path for queries where the user's intent is visually grounded ("show the diagram", "where is the button", "find the part labeled X"). Crucially, this is a **two-component** path:
+**Shipped 2026-05-19.** T8 adds a default-off visual retrieval foundation for queries where the user's intent is visually grounded ("show the diagram", "where is the button", "find the part labeled X"). The MVP is deterministic and manifest-backed; it proves candidate generation, rerank boundary, fusion, and safe response shape without adding production visual model dependencies.
+
+Crucially, the visual path remains a **two-component** path:
 
 - A visual **encoder** indexes pages or page regions into a visual vector space at index time.
 - A visual **reranker** scores `(query, candidate_visual)` pairs at query time.
 
 These are different responsibilities. The archive design conflated them. A managed visual reranker (e.g. an external multimodal API) does not remove the need for an encoder on the indexing side; without an encoder there is nothing to rerank.
 
-**Open questions to resolve at task start (≥4).**
+**Contract.**
 
-1. **Encoder vs reranker separation.** What is the exact handoff between encoder-produced candidates and the reranker? Top-K from visual encoder feeds into the reranker, but what K, and how does the reranker's output combine with text-retrieval scores?
-2. **Encoder selection.** Late-interaction style (ColPali / ColQwen2.5-VL) vs single-vector embedding (CLIP-class / DSE / jina-clip-v2) vs none-yet (rely on caption-of-image as text). The choice has large memory/storage implications and a moving target — defer until eval data and 2026 model landscape support a decision.
-3. **Train/finetune vs API-only.** Visual retrieval quality depends heavily on domain adaptation. Do we tolerate API-only deployment indefinitely, or budget for finetune capacity from day one?
-4. **Score fusion with text path.** Visual scores need calibration against text scores before fusion (same principle as A3). Same calibration step? Different per-modality calibrations followed by a meta-fusion?
-5. **Storage and rebuild cost.** Visual indexes are large. Generation upgrades (A4) may double the storage burden during the build window. What is the operational ceiling per KB?
+- `Settings.visual_retrieval.enabled` defaults to `False`.
+- `VisualCandidateProvider` produces candidates over existing `DocumentAsset`s. The T8 provider is deterministic and scores manifest text fields (`caption`, `nearby_text`, `ocr_text`, source file, and safe metadata) by token overlap.
+- `VisualReranker` receives candidate assets and may adjust order/scores, but cannot invent assets. T8 ships a noop reranker.
+- Visual candidates are considered only when visual intent is detected by default.
+- Fusion appends visual-only evidence after text evidence, deduping assets already attached to text evidence. This preserves text result order and avoids destabilizing existing retrieval quality.
+- Public payloads use existing asset descriptors and must not expose storage keys, checksums, vectors, local paths, raw bytes, or secrets.
+- `visual_evidence.retrieval` contains bounded counts/reasons for diagnostics.
 
-**Out of scope for this blueprint.** Choosing an encoder. Choosing a reranker vendor. Building any visual indexing while QueryPlan / Reranker / IndexGeneration / OCR are still incomplete (T8 depends on T1 and T7).
+**Deferred.** Production visual encoder selection, production visual reranker selection, vector/late-interaction storage, training or finetuning, automatic region detection/cropping, UI image galleries, and visual answer generation remain follow-up work.
 
 ### B8. Phase 8 — External Connectors  📋 Blueprint
 
