@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and project rules."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Authoritative deployment/config boundaries and production honesty posture."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module placement and dependency direction for CLI/config helper code."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Config tests, CLI tests, and forbidden patterns."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Safe structured validation failure behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Avoid secret/raw data leakage in operator output."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking-guide index."}
