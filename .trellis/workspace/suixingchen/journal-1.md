@@ -417,3 +417,36 @@ Shipped default-off missing-text PDF OCR ingestion foundation with OCR config, p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: T8 visual retrieval kickoff
+
+**Date**: 2026-05-19
+**Task**: T8 visual retrieval kickoff
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Shipped default-off deterministic visual retrieval foundation with visual candidate/reranker protocols, manifest-backed candidate provider, retrieve fusion for visual-only evidence, API wiring, B7B spec update, and focused/full unit coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5b38fb7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
