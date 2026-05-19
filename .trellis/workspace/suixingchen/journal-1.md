@@ -747,3 +747,36 @@ Added explicit provider live probes for embedding, answer, reranker, Qdrant, and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Production pilot runbook
+
+**Date**: 2026-05-19
+**Task**: Production pilot runbook
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added tagmemorag pilot run with sanitized JSON/Markdown reports, production pilot runbook docs, focused tests, and backend spec guidance for pilot report privacy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6d23214` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
