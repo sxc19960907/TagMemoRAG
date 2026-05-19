@@ -648,3 +648,36 @@ Added deterministic MVP composition tests covering conservative defaults, connec
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Readiness smoke command
+
+**Date**: 2026-05-19
+**Task**: Readiness smoke command
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added tagmemorag readiness smoke to run deterministic local build, retrieve/answer, QueryPlan persistence, and bundle round-trip checks, with docs and CLI tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dd4830` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
