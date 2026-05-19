@@ -99,6 +99,46 @@ manual_library:
     assert "TMR_ABSENT_FOR_CLI_TEST" in json.dumps(body)
 
 
+def test_cli_provider_probe_all_skipped_for_local_profile(capsys):
+    exit_code = cli.main(["provider", "probe", "--config", "examples/config/local-hashing-npz.yaml", "--all"])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "provider_probe.v1"
+    assert body["status"] == "skipped"
+    assert {probe["status"] for probe in body["probes"]} == {"skipped"}
+
+
+def test_cli_provider_probe_failed_returns_one(tmp_path, capsys):
+    config = tmp_path / "answer.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: model
+  api_key_env: TMR_ABSENT_PROVIDER_PROBE_KEY
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["provider", "probe", "--config", str(config), "--answer"])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert body["probes"][0]["detail"]["env"] == "TMR_ABSENT_PROVIDER_PROBE_KEY"
+
+
 def test_cli_readiness_smoke_succeeds_and_keeps_workdir(tmp_path, capsys):
     workdir = tmp_path / "smoke"
 

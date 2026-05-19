@@ -22,6 +22,7 @@ from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
+from .provider_probe import run_provider_probe
 from .qdrant_ops import inspect_qdrant
 from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
@@ -217,6 +218,19 @@ def main(argv: list[str] | None = None) -> int:
     qdrant_inspect = qdrant_sub.add_parser("inspect")
     qdrant_inspect.add_argument("--kb", default="default")
     qdrant_inspect.add_argument("--config", default="config.yaml")
+
+    provider = sub.add_parser("provider")
+    provider_sub = provider.add_subparsers(dest="provider_command", required=True)
+    provider_probe = provider_sub.add_parser("probe")
+    provider_probe.add_argument("--config", default="config.yaml")
+    provider_probe.add_argument("--kb", default="default")
+    provider_probe.add_argument("--format", choices=["json"], default="json")
+    provider_probe.add_argument("--all", action="store_true", default=False)
+    provider_probe.add_argument("--embedding", action="store_true", default=False)
+    provider_probe.add_argument("--answer", action="store_true", default=False)
+    provider_probe.add_argument("--reranker", action="store_true", default=False)
+    provider_probe.add_argument("--qdrant", action="store_true", default=False)
+    provider_probe.add_argument("--s3", action="store_true", default=False)
 
     readiness = sub.add_parser("readiness")
     readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
@@ -622,6 +636,16 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(cfg.logging.level, cfg.logging.format)
         print(json.dumps(inspect_qdrant(args.kb, cfg), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "provider" and args.provider_command == "probe":
+        selected = []
+        if args.all:
+            selected.append("all")
+        for name in ("embedding", "answer", "reranker", "qdrant", "s3"):
+            if getattr(args, name):
+                selected.append(name)
+        report = run_provider_probe(args.config, selected=selected or ["all"], kb_name=args.kb)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if report.status == "failed" else 0
     if args.command == "readiness" and args.readiness_command == "smoke":
         report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))

@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from tagmemorag.config import ParserConfig
 from tagmemorag.config import load_config
 from tagmemorag.config_validation import validate_config
+from tagmemorag.provider_probe import run_provider_probe
 
 
 def test_env_overrides_yaml(tmp_path, monkeypatch):
@@ -42,6 +43,160 @@ manual_library:
     assert body["schema_version"] == "config_validation.v1"
     assert body["profile"]["model_provider"] == "hashing"
     assert all(check["status"] == "passed" for check in body["checks"])
+
+
+def test_provider_probe_all_skips_unconfigured_local_profile():
+    report = run_provider_probe("examples/config/local-hashing-npz.yaml", selected=["all"])
+
+    body = report.to_dict()
+    assert body["status"] == "skipped"
+    assert {probe["status"] for probe in body["probes"]} == {"skipped"}
+
+
+def test_provider_probe_embedding_fake_passes(tmp_path, monkeypatch):
+    import numpy as np
+    from tagmemorag import provider_probe
+
+    class FakeEmbedder:
+        def encode_batch(self, texts):
+            assert texts == ["readiness probe"]
+            return np.ones((1, 3), dtype=np.float32)
+
+    def fake_create_embedder(*_args, **_kwargs):
+        return FakeEmbedder()
+
+    monkeypatch.setenv("TMR_EMBEDDING_KEY", "secret-value-not-in-output")
+    monkeypatch.setattr(provider_probe, "create_embedder", fake_create_embedder)
+    config = tmp_path / "http.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: http
+  name: remote-embedding
+  dim: 3
+  api_key_env: TMR_EMBEDDING_KEY
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    report = run_provider_probe(str(config), selected=["embedding"])
+
+    body = report.to_dict()
+    assert body["status"] == "passed"
+    assert body["probes"][0]["detail"]["dimensions"] == 3
+    assert "secret-value-not-in-output" not in str(body)
+
+
+def test_provider_probe_explicit_missing_env_fails(tmp_path, monkeypatch):
+    monkeypatch.delenv("TMR_MISSING_PROVIDER_KEY", raising=False)
+    config = tmp_path / "answer.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: model
+  api_key_env: TMR_MISSING_PROVIDER_KEY
+""",
+        encoding="utf-8",
+    )
+
+    report = run_provider_probe(str(config), selected=["answer"])
+
+    body = report.to_dict()
+    assert body["status"] == "failed"
+    assert body["probes"][0]["detail"]["env"] == "TMR_MISSING_PROVIDER_KEY"
+    assert body["probes"][0]["error"]["reason"] == "required_env_var_missing"
+
+
+def test_provider_probe_qdrant_fake_passes(tmp_path, monkeypatch):
+    from tagmemorag import provider_probe
+
+    def fake_inspect_qdrant(kb_name, cfg):
+        return {
+            "collection_name": f"{cfg.vector_store.collection_prefix}_{kb_name}",
+            "collection_exists": True,
+            "graph_loaded": False,
+        }
+
+    monkeypatch.setattr(provider_probe, "inspect_qdrant", fake_inspect_qdrant)
+    config = tmp_path / "qdrant.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+vector_store:
+  provider: qdrant
+  collection_prefix: tmr
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    report = run_provider_probe(str(config), selected=["qdrant"], kb_name="kb-a")
+
+    assert report.status == "passed"
+    assert report.to_dict()["probes"][0]["detail"]["collection_name"] == "tmr_kb-a"
+
+
+def test_provider_probe_s3_fake_passes(tmp_path, monkeypatch):
+    from tagmemorag import provider_probe
+
+    class FakeS3:
+        def head_bucket(self, *, Bucket):
+            assert Bucket == "tagmemorag-manuals"
+
+    monkeypatch.setenv("TMR_S3_ACCESS", "access-secret")
+    monkeypatch.setenv("TMR_S3_SECRET", "secret-secret")
+    monkeypatch.setattr(provider_probe, "_create_s3_client", lambda _cfg: FakeS3())
+    config = tmp_path / "s3.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  registry_backend: sqlite
+  registry_path: {tmp_path / "registry.sqlite3"}
+  blob_backend: s3
+  s3_bucket: tagmemorag-manuals
+  s3_access_key_env: TMR_S3_ACCESS
+  s3_secret_key_env: TMR_S3_SECRET
+""",
+        encoding="utf-8",
+    )
+
+    report = run_provider_probe(str(config), selected=["s3"])
+
+    body = report.to_dict()
+    assert body["status"] == "passed"
+    assert body["probes"][0]["detail"]["bucket_configured"] is True
+    assert "access-secret" not in str(body)
+    assert "secret-secret" not in str(body)
 
 
 def test_config_validate_missing_remote_env_fails(tmp_path, monkeypatch):

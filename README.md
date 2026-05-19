@@ -746,11 +746,22 @@ python -m tagmemorag config validate --config examples/config/local-hashing-npz.
 
 `config validate` is static and local: it loads the config with normal env precedence, checks local writable paths, checks required env var names for configured remote providers, and warns when optional extras such as `qdrant-client` or `boto3` are not importable. It does not call Qdrant, S3, embedding, reranker, answer, OCR, or visual providers.
 
-Use the three checks for different questions:
+Live provider probes are explicit because they can call external services:
+
+```bash
+python -m tagmemorag provider probe --config examples/config/answer-openai-compatible.yaml --answer
+python -m tagmemorag provider probe --config examples/config/qdrant.yaml --qdrant
+python -m tagmemorag provider probe --config config.yaml --all
+```
+
+Probe output is JSON and bounded: it reports provider status, env var names, dependency/provider names, and high-level error types, but not secrets, Authorization headers, raw responses, generated answer text, vectors, or document text.
+
+Use the checks for different questions:
 
 | Check | Answers |
 | --- | --- |
 | `config validate` | Is this config coherent and locally satisfiable? |
+| `provider probe` | Do explicitly selected remote providers respond with the configured credentials/endpoints? |
 | `readiness smoke` | Do the deterministic MVP build/retrieve/answer/queryplan/bundle paths compose in this checkout? |
 | `/ready` | Is this running process ready to serve its loaded KB? |
 
