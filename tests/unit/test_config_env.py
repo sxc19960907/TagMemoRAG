@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from tagmemorag.config import ParserConfig
 from tagmemorag.config import load_config
+from tagmemorag.config_validation import validate_config
 
 
 def test_env_overrides_yaml(tmp_path, monkeypatch):
@@ -13,6 +14,147 @@ def test_env_overrides_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv("TAGMEMORAG__SERVER__PORT", "9000")
 
     assert load_config(config).server.port == 9000
+
+
+def test_config_validate_local_profile_passes(tmp_path):
+    config = tmp_path / "local.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  registry_backend: file
+  blob_backend: local
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+
+    assert report.status == "passed"
+    body = report.to_dict()
+    assert body["schema_version"] == "config_validation.v1"
+    assert body["profile"]["model_provider"] == "hashing"
+    assert all(check["status"] == "passed" for check in body["checks"])
+
+
+def test_config_validate_missing_remote_env_fails(tmp_path, monkeypatch):
+    monkeypatch.delenv("TMR_MISSING_EMBEDDING_KEY", raising=False)
+    config = tmp_path / "http.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: http
+  name: remote-embedding
+  dim: 64
+  api_key_env: TMR_MISSING_EMBEDDING_KEY
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+
+    assert report.status == "failed"
+    env_checks = [check for check in report.to_dict()["checks"] if check["name"] == "env_var"]
+    assert env_checks[0]["detail"]["env"] == "TMR_MISSING_EMBEDDING_KEY"
+    assert env_checks[0]["detail"]["present"] is False
+    assert "secret" not in str(report.to_dict()).lower()
+
+
+def test_config_validate_qdrant_missing_extra_warns(tmp_path, monkeypatch):
+    import importlib.util
+
+    original_find_spec = importlib.util.find_spec
+
+    def fake_find_spec(name):
+        if name == "qdrant_client":
+            return None
+        return original_find_spec(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    config = tmp_path / "qdrant.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+vector_store:
+  provider: qdrant
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+
+    assert report.status == "warning"
+    dependency = [check for check in report.to_dict()["checks"] if check["name"] == "dependency"][0]
+    assert dependency["status"] == "warning"
+    assert dependency["detail"]["dependency"] == "qdrant-client"
+
+
+def test_config_validate_s3_missing_bucket_fails(tmp_path):
+    config = tmp_path / "s3.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  registry_backend: sqlite
+  registry_path: {tmp_path / "registry.sqlite3"}
+  blob_backend: s3
+  s3_bucket: ""
+  s3_access_key_env: ""
+  s3_secret_key_env: ""
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+
+    assert report.status == "failed"
+    s3_check = [check for check in report.to_dict()["checks"] if check["name"] == "s3_config"][0]
+    assert s3_check["status"] == "failed"
+    assert s3_check["detail"]["field"] == "manual_library.s3_bucket"
+
+
+def test_example_config_profiles_load():
+    profiles = [
+        "examples/config/local-hashing-npz.yaml",
+        "examples/config/local-sqlite-registry.yaml",
+        "examples/config/qdrant.yaml",
+        "examples/config/s3-blob.yaml",
+        "examples/config/answer-openai-compatible.yaml",
+    ]
+
+    loaded = [load_config(path) for path in profiles]
+
+    assert loaded[0].model.provider == "hashing"
+    assert loaded[1].manual_library.registry_backend == "sqlite"
+    assert loaded[2].vector_store.provider == "qdrant"
+    assert loaded[3].manual_library.blob_backend == "s3"
+    assert loaded[4].answer.provider == "openai_compatible"
 
 
 def test_env_overrides_defaults(tmp_path, monkeypatch):

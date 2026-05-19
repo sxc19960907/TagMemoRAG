@@ -109,6 +109,30 @@ auth:
 
 Use API keys with the narrowest practical scopes. `search` can query; `rebuild` can mutate managed-library state and rebuild; `admin` is required for destructive or operator-review actions such as hard delete and feedback review.
 
+Example profiles are available under `examples/config/`:
+
+- `local-hashing-npz.yaml`
+- `local-sqlite-registry.yaml`
+- `qdrant.yaml`
+- `s3-blob.yaml`
+- `answer-openai-compatible.yaml`
+
+Validate a profile before starting the process:
+
+```bash
+python -m tagmemorag config validate --config examples/config/local-hashing-npz.yaml
+```
+
+`config validate` checks static/local prerequisites: config parsing, local writable paths, required env var names for configured remote providers, optional Python extras, and auth/metrics posture. It does not contact Qdrant, S3, embedding, reranker, answer, OCR, or visual providers, and it reports env var names only, never secret values.
+
+Use these readiness layers together:
+
+| Layer | What it proves |
+| --- | --- |
+| `config validate` | Config coherence and local prerequisites. |
+| `readiness smoke` | Deterministic local build/retrieve/answer/queryplan/bundle composition. |
+| `/ready` | The running process has warmed up and loaded a KB for traffic. |
+
 ## Persistence Matrix
 
 Back up these stores according to the profile you run:
@@ -144,12 +168,13 @@ Bundles include safe manifests, checksums, metadata records, and source bytes. T
 ## First Run Checklist
 
 1. Configure storage root and model/provider settings.
-2. Start the service.
+2. Run `python -m tagmemorag config validate --config config.yaml`.
 3. Run `python -m tagmemorag readiness smoke` locally for MVP composition.
-4. Confirm `/health` and `/ready`.
-5. Build or restore a KB.
-6. Run a smoke search.
-7. Check graph info and diagnostics.
+4. Start the service.
+5. Confirm `/health` and `/ready`.
+6. Build or restore a KB.
+7. Run a smoke search.
+8. Check graph info and diagnostics.
 
 Useful commands:
 

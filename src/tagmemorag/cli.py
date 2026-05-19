@@ -12,6 +12,7 @@ import uvicorn
 
 from .config import load_config
 from .auth.config_store import ConfigAuthStore
+from .config_validation import validate_config
 from .embedder import create_embedder
 from .epa_basis import retrain_if_needed, basis_path, load_epa_basis
 from .eval.dataset import EvalSuiteError, EvalThresholds
@@ -87,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--config", default="config.yaml")
+
+    config_cmd = sub.add_parser("config")
+    config_sub = config_cmd.add_subparsers(dest="config_command", required=True)
+    config_validate = config_sub.add_parser("validate")
+    config_validate.add_argument("--config", default="config.yaml")
+    config_validate.add_argument("--format", choices=["json"], default="json")
 
     residuals = sub.add_parser("retrain-residuals")
     residuals.add_argument("--kb", default="default")
@@ -323,6 +330,10 @@ def main(argv: list[str] | None = None) -> int:
         api.settings = cfg
         uvicorn.run(api.app, host=args.host or cfg.server.host, port=args.port or cfg.server.port)
         return 0
+    if args.command == "config" and args.config_command == "validate":
+        report = validate_config(args.config)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if report.status == "failed" else 0
     if args.command == "retrain-residuals":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

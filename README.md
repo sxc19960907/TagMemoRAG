@@ -728,6 +728,32 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 | `TAGMEMORAG__OBSERVABILITY__TRACING__ENABLED` | `true` |
 | `TAGMEMORAG__OBSERVABILITY__TRACING__OTLP_ENDPOINT` | `http://otel-collector:4317` |
 
+### Config Profiles And Validation
+
+Example profiles live under `examples/config/`:
+
+- `local-hashing-npz.yaml`
+- `local-sqlite-registry.yaml`
+- `qdrant.yaml`
+- `s3-blob.yaml`
+- `answer-openai-compatible.yaml`
+
+Validate a profile before starting the service:
+
+```bash
+python -m tagmemorag config validate --config examples/config/local-hashing-npz.yaml
+```
+
+`config validate` is static and local: it loads the config with normal env precedence, checks local writable paths, checks required env var names for configured remote providers, and warns when optional extras such as `qdrant-client` or `boto3` are not importable. It does not call Qdrant, S3, embedding, reranker, answer, OCR, or visual providers.
+
+Use the three checks for different questions:
+
+| Check | Answers |
+| --- | --- |
+| `config validate` | Is this config coherent and locally satisfiable? |
+| `readiness smoke` | Do the deterministic MVP build/retrieve/answer/queryplan/bundle paths compose in this checkout? |
+| `/ready` | Is this running process ready to serve its loaded KB? |
+
 ### Qdrant Vector Backend
 
 The default vector backend is local NPZ at `data/{kb_name}/vectors.npz`. Qdrant is optional: it persists vectors externally while graph topology, anchors, chunk identity, rebuild impact, and build metadata remain local under `data/{kb_name}/`.

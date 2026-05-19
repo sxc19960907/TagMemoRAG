@@ -1,0 +1,17 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-sqlite/data
+vector_store:
+  provider: npz
+manual_library:
+  root_dir: .tmp/tagmemorag-sqlite/manuals
+  registry_backend: sqlite
+  registry_path: .tmp/tagmemorag-sqlite/manual_registry.sqlite3
+  blob_backend: local
+  blob_root_dir: .tmp/tagmemorag-sqlite/blobs
+logging:
+  level: INFO
+  format: json

@@ -47,6 +47,58 @@ storage:
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
 
 
+def test_cli_config_validate_outputs_json_and_exit_code(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["config", "validate", "--config", str(config)])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "config_validation.v1"
+    assert body["status"] == "passed"
+    assert body["config_path"] == str(config)
+
+
+def test_cli_config_validate_failed_report_returns_one(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: http
+  name: remote
+  dim: 64
+  api_key_env: TMR_ABSENT_FOR_CLI_TEST
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["config", "validate", "--config", str(config)])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert "TMR_ABSENT_FOR_CLI_TEST" in json.dumps(body)
+
+
 def test_cli_readiness_smoke_succeeds_and_keeps_workdir(tmp_path, capsys):
     workdir = tmp_path / "smoke"
 
