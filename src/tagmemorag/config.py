@@ -257,6 +257,15 @@ class VisualRetrievalConfig(BaseModel):
     reranker_version: str = "visual_reranker.noop.v1"
 
 
+class ConnectorsConfig(BaseModel):
+    """T9: Settings block for optional connector materialization."""
+
+    enabled: bool = False
+    provider: Literal["fixture"] = "fixture"
+    materialized_root_dir: str = "data/connectors"
+    strict_sync: bool = False
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -415,6 +424,7 @@ class Settings(BaseSettings):
     answer: AnswerConfig = Field(default_factory=AnswerConfig)
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     visual_retrieval: VisualRetrievalConfig = Field(default_factory=VisualRetrievalConfig)
+    connectors: ConnectorsConfig = Field(default_factory=ConnectorsConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

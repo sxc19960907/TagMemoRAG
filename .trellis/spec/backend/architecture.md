@@ -82,7 +82,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | `/answer` endpoint | ✅ | T6 shipped 2026-05-19; optional non-streaming single-turn wrapper over `/retrieve`, default-off generation. |
 | Visual retrieval (encoder + reranker) | ✅ | T8 shipped 2026-05-19; default-off deterministic visual candidate foundation. |
 | OCR | ✅ | T7 shipped 2026-05-19; default-off missing-text PDF OCR ingestion foundation. |
-| External connectors (DOCX/HTML/Notion/...) | 📋 | Phase 8 blueprint (B8). |
+| External connectors (DOCX/HTML/Notion/...) | ✅ | T9 shipped 2026-05-19; connector materialization foundation. |
 
 ## Domain Model
 
@@ -450,21 +450,21 @@ These are different responsibilities. The archive design conflated them. A manag
 
 **Deferred.** Production visual encoder selection, production visual reranker selection, vector/late-interaction storage, training or finetuning, automatic region detection/cropping, UI image galleries, and visual answer generation remain follow-up work.
 
-### B8. Phase 8 — External Connectors  📋 Blueprint
+### B8. Phase 8 — External Connectors  ✅ T9 Kickoff Shipped
 
-**Direction.** Add ingestion connectors for non-file sources: DOCX, HTML, spreadsheets, and SaaS systems (Notion, Confluence, SharePoint, web exports). Connectors must produce `DocumentElement[]` and `DocumentAsset[]` directly, sharing the existing chunker / indexer / retrieval pipeline. The chunker boundary is preserved — connectors are additional parsers, not parallel pipelines.
+**Shipped 2026-05-19.** T9 adds the connector materialization foundation for non-file or generated sources. Connectors normalize records into supported local document files plus `.metadata.json` sidecars, then reuse the existing parser/chunker/indexer/retrieval pipeline. The chunker boundary is preserved — connectors are additional source adapters, not parallel retrieval pipelines.
 
-**Open questions to resolve at task start (≥5).**
+**Contract.**
 
-1. **Connector output contract.** Connectors emit `DocumentElement` / `DocumentAsset`, not pre-chunked content. Is the contract identical to current internal parsers, or does the connector layer need its own normalization (timezone, encoding, language tags)?
-2. **Soft-delete semantics.** When the remote source removes a document, what is the local behavior — physical delete, tombstone with retention window, archive to cold storage? Does the answer differ by connector?
-3. **ACL adapter.** Notion, Confluence, and SharePoint have incompatible permission models. There is no single abstraction that survives all of them. The architecture position: each connector ships its own ACL adapter that maps remote permissions onto our `doc_acl` (when introduced; not in scope here). Which permission predicates must we support uniformly?
-4. **Schema drift.** Remote sources evolve (a Notion page gains a new property type). What is the connector's behavior when it encounters an unknown structure — drop, log-and-skip, log-and-store-as-opaque-metadata?
-5. **Webhook vs polling.** Sync model per connector. Webhooks are cheaper but require public ingress; polling is more deployable but lossy. Default? Configurable per KB?
-6. **Connector-specific eval fixtures.** Each connector ships representative fixtures before it goes to production. What is the minimum coverage bar?
-7. **Credential rotation and rate limiting.** Connectors hold third-party credentials. Where do they live? How are they rotated? What is the failure mode when a connector hits a rate limit during a sync?
+- `Settings.connectors.enabled` defaults to `False`.
+- `ConnectorProvider.sync(kb_name)` returns a bounded snapshot of `ConnectorRecord`s.
+- T9 ships a fixture provider only; production connectors are follow-up tasks.
+- Materialization writes supported documents (`.md`, `.txt`, `.pdf`) and metadata sidecars under `{connectors.materialized_root_dir}/{kb_name}`.
+- Existing `build_kb()` remains authoritative after materialization.
+- Soft deletes materialize tombstone sidecars with `status="deleted"`; physical deletion is deferred.
+- Sync summaries are low-cardinality counts/reasons and must not include raw document text, secrets, remote credential material, or absolute local paths.
 
-**Out of scope for this blueprint.** Choosing which connector to build first. Defining the SaaS-specific authentication flows. Implementing connectors before QueryPlan / IndexGeneration are in place (T9 depends on T1).
+**Deferred.** Real SaaS connectors, authentication and credential rotation, webhooks, ACL enforcement, connector-specific rate limiting, binary conversion beyond supported suffixes, and connector management UI remain follow-up work.
 
 ## C. Cross-cutting Principles
 
