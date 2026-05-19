@@ -780,3 +780,36 @@ Added tagmemorag pilot run with sanitized JSON/Markdown reports, production pilo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Production embedder eval reauthoring diagnosis
+
+**Date**: 2026-05-19
+**Task**: Production embedder eval reauthoring diagnosis
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added an offline eval reauthoring diagnostic script that compares hashing and SiliconFlow baselines, ranks suites by severity, emits JSON/Markdown reports, and documents the review workflow without changing fixture ground truth.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f446656` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
