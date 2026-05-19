@@ -41,6 +41,23 @@ git diff -- tests/fixtures/eval/baselines/siliconflow.json
 
 The shell script wraps `build_eval_baseline.py --embedder siliconflow` with the env-var check.
 
+## Diagnosing production-embedder reauthoring
+
+Before editing any fixture JSONL, generate the offline reauthoring diagnosis:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py --format markdown
+```
+
+The diagnostic compares `baselines/hashing.json` with `baselines/siliconflow.json`, sorts suites by severity, and recommends `ok`, `monitor`, `reauthor`, or `investigate`. It is intentionally offline: it reads only committed aggregate baseline metrics and does not call SiliconFlow, refresh baselines, rewrite fixtures, or promote SiliconFlow to a CI gate.
+
+Use the report as the queue for human fixture review:
+
+- `investigate`: production metrics are too low or suite coverage is missing; inspect retrieval/model behavior before changing expected answers.
+- `reauthor`: production aggregate deltas are large enough to justify case-level inspection and possible fixture edits.
+- `monitor`: divergence exists but should not trigger fixture edits without case-level evidence.
+- `ok`: no immediate fixture reauthoring is indicated.
+
 ## Reading a baseline diff
 
 Every commit that touches a baseline must include a one-line rationale in the commit message. Example shapes:

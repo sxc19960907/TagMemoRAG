@@ -1092,6 +1092,14 @@ uv run python scripts/build_eval_baseline.py \
 
 `tests/fixtures/eval/baselines/siliconflow.json` is **informational only** — it captures the production embedder's measurements but is **not** a CI quality gate. Today's eval fixtures' case-level thresholds were authored against hashing-embedder-recall, so siliconflow rankings often miss the same case-level cuts; `run_eval_ci.py --baseline siliconflow.json --embedder siliconflow --no-default-thresholds` is the closest you get to a self-pass run, but case-level fixture thresholds are not bypassable. Diagnosing or reauthoring the fixture suite to match the production embedder is a separate readiness task.
 
+Generate the offline reauthoring queue before editing fixture expectations:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py --format markdown
+```
+
+The report compares hashing vs SiliconFlow aggregate baselines and marks suites as `ok`, `monitor`, `reauthor`, or `investigate`. It does not call external providers, rewrite JSONL fixtures, or make SiliconFlow a CI gate.
+
 ## Tag Data Model
 
 TagMemoRAG persists `manual.metadata.tags` into a structured, position-aware SQLite layer alongside the existing `manual_records` table, plus a global EPA basis file. Search behavior is unchanged at this layer — these tables are populated for downstream analytics and ranking experiments.

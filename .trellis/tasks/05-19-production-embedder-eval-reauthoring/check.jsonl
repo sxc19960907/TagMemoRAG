@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify bounded output and focused tests."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Verify docs remain honest about SiliconFlow being informational only."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify report fields match documented reviewer workflow."}
