@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-05-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~452 | Active |
+| `journal-1.md` | ~485 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-05-19 | T9 connectors kickoff | `e2065f5` | `feat/wave-phase1-cooccurrence-spike` |
 | 11 | 2026-05-19 | T8 visual retrieval kickoff | `5b38fb7` | `feat/wave-phase1-cooccurrence-spike` |
 | 10 | 2026-05-19 | T7 OCR kickoff | `3d28f75` | `feat/wave-phase1-cooccurrence-spike` |
 | 9 | 2026-05-19 | T5 replay and rerank impact analysis | `7ed195c`, `a3c3f0b`, `77d8126` | `feat/wave-phase1-cooccurrence-spike` |

@@ -450,3 +450,36 @@ Shipped default-off deterministic visual retrieval foundation with visual candid
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: T9 connectors kickoff
+
+**Date**: 2026-05-19
+**Task**: T9 connectors kickoff
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Shipped default-off connector materialization foundation with connector contracts, fixture provider, safe document and metadata sidecar materializer, tombstone handling, B8 spec update, and focused/full unit coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e2065f5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
