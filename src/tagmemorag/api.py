@@ -23,6 +23,9 @@ import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from .anchor import AnchorSystem
+from .answer import create_answer_generator
+from .answer.base import AnswerGenerationError, AnswerGenerator, AnswerRequestContext
+from .answer.prompt import build_answer_prompt, validate_generation_citations
 from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
@@ -240,6 +243,11 @@ class BudgetSpec(BaseModel):
 
 class RetrieveRequest(SearchRequest):
     token_budget: int = Field(default=DEFAULT_TOKEN_BUDGET, ge=0, le=128000)
+
+
+class AnswerRequest(RetrieveRequest):
+    answer_token_budget: int | None = Field(default=None, ge=1, le=128000)
+    include_retrieve: bool = True
 
 
 class SearchFilters(BaseModel):
@@ -812,6 +820,39 @@ def retrieve(
         raise
 
 
+@app.post("/answer")
+def answer(
+    request: AnswerRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    state = app_state.get_current(request.kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.answer", **span_attrs):
+            retrieve_payload = _retrieve_impl(request, http_request, state, t0)
+            return _build_answer_response(request, retrieve_payload)
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=request.kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
     plan, plan_log = _build_and_log_plan(request, state)
     warnings: list[str] = []
@@ -1010,6 +1051,110 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         "warnings": list(warnings),
     })
     return payload
+
+
+def _build_answer_response(request: AnswerRequest, retrieve_payload: dict) -> dict:
+    warnings = list(retrieve_payload.get("warnings") or [])
+    answerability = dict(retrieve_payload.get("answerability") or {})
+    if not bool(answerability.get("answerable")):
+        reason = str(answerability.get("fallback_reason") or "insufficient_evidence")
+        answer_obj = _answer_error_obj(
+            kind="refusal",
+            reason=reason,
+            warning=f"answer_refused:{reason}",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[reason],
+        )
+        warnings.append(f"answer_refused:{reason}")
+        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+    if not settings.answer.enabled:
+        answer_obj = _answer_error_obj(
+            kind="error",
+            reason="generation_disabled",
+            warning="answer_generation_disabled",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[],
+        )
+        warnings.append("answer_generation_disabled")
+        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+    prompt = build_answer_prompt(
+        question=request.question,
+        retrieve_payload=retrieve_payload,
+        prompt_version=settings.answer.prompt_version,
+    )
+    context = AnswerRequestContext(
+        question=request.question,
+        retrieve_payload=retrieve_payload,
+        prompt=prompt,
+        max_output_tokens=int(request.answer_token_budget or settings.answer.max_output_tokens),
+    )
+    try:
+        generation = _answer_generator().generate(context)
+        cleaned = validate_generation_citations(generation, prompt.allowed_citation_ids)
+        answer_obj = cleaned.to_answer_dict(confidence=float(answerability.get("confidence") or 0.0))
+        warnings.extend(cleaned.warnings)
+    except (AnswerGenerationError, ServiceError, ValueError) as exc:
+        reason = type(exc).__name__
+        answer_obj = _answer_error_obj(
+            kind="error",
+            reason="generation_failed",
+            warning=f"answer_generation_failed:{reason}",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[],
+        )
+        warnings.append(f"answer_generation_failed:{reason}")
+    return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+
+def _answer_error_obj(
+    *,
+    kind: str,
+    reason: str,
+    warning: str,
+    confidence: float,
+    missing_evidence_hints: list[str],
+) -> dict:
+    return {
+        "kind": kind,
+        "text": "",
+        "confidence": confidence,
+        "citations": [],
+        "refusal_reason": reason,
+        "missing_evidence_hints": missing_evidence_hints,
+        "model_id": settings.answer.model_id or settings.answer.provider,
+        "model_version": settings.answer.model_version,
+        "prompt_version": settings.answer.prompt_version,
+        "warnings": [warning],
+    }
+
+
+def _answer_response_payload(request: AnswerRequest, retrieve_payload: dict, answer_obj: dict, warnings: list[str]) -> dict:
+    payload = {
+        "schema_version": "answer.v1",
+        "build_id": retrieve_payload.get("build_id", ""),
+        "kb_name": retrieve_payload.get("kb_name", request.kb_name),
+        "trace_id": retrieve_payload.get("trace_id", ""),
+        "plan_id": retrieve_payload.get("plan_id", ""),
+        "answer": answer_obj,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+    if request.include_retrieve:
+        payload["retrieve"] = retrieve_payload
+    return payload
+
+
+_ANSWER_GENERATOR_CACHE: dict[int, AnswerGenerator] = {}
+
+
+def _answer_generator() -> AnswerGenerator:
+    key = id(settings)
+    cached = _ANSWER_GENERATOR_CACHE.get(key)
+    if cached is None:
+        cached = create_answer_generator(settings)
+        _ANSWER_GENERATOR_CACHE[key] = cached
+    return cached
 
 
 def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):

@@ -218,6 +218,22 @@ class RerankerConfig(BaseModel):
     base_url: str = "https://api.siliconflow.cn/v1"
 
 
+class AnswerConfig(BaseModel):
+    """T6: Settings block for the optional /answer generation layer."""
+
+    enabled: bool = False
+    provider: Literal["noop", "openai_compatible"] = "noop"
+    model_id: str = ""
+    model_version: str = "v1"
+    prompt_version: str = "answer_prompt.v1"
+    base_url: str = "https://api.openai.com/v1"
+    chat_completions_url: str | None = None
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_seconds: float = Field(default=30.0, gt=0.0)
+    max_output_tokens: int = Field(default=512, ge=1)
+    temperature: float = Field(default=0.0, ge=0.0)
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -373,6 +389,7 @@ class Settings(BaseSettings):
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
     queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
+    answer: AnswerConfig = Field(default_factory=AnswerConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
     wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

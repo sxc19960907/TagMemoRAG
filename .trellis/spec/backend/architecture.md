@@ -79,7 +79,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | Agent Context Builder | ✅ | Token-budgeted `context_pack` with citations. |
 | `/retrieve` endpoint | ✅ | Schema-versioned, evidence-aware. |
 | `/search` endpoint | ✅ | Compatibility/debug; returns flat text results. |
-| `/answer` endpoint | 📋 | Phase 6 blueprint (B6). |
+| `/answer` endpoint | ✅ | T6 shipped 2026-05-19; optional non-streaming single-turn wrapper over `/retrieve`, default-off generation. |
 | Visual retrieval (encoder + reranker) | 📋 | Phase 7B blueprint (B7B). |
 | OCR | 📋 | Phase 7A blueprint (B7A). |
 | External connectors (DOCX/HTML/Notion/...) | 📋 | Phase 8 blueprint (B8). |
@@ -385,26 +385,24 @@ This document does not delete or deprecate WAVE code. It re-labels the feature.
 
 This section is direction-level, not contract-level. Each phase below is **not yet implemented** and the design decisions inside each phase are deliberately deferred to the kickoff brainstorm of the corresponding follow-up task. The reason: predictions made too early grow stale before they are executed. What is fixed here is direction and the questions that must be answered before implementation starts.
 
-### B6. Phase 6 — `/answer` endpoint  📋 Blueprint
+### B6. Phase 6 — `/answer` endpoint  ✅ T6 Kickoff Shipped
 
-**Direction.** Add an optional `/answer` endpoint that internally calls `/retrieve`, then passes the resulting `context_pack` to a configured LLM, returning a generated answer with citations. `/retrieve` remains the primary external contract and is independently usable; `/answer` is a convenience for clients that prefer a managed answer endpoint over composing their own LLM call.
+**Shipped 2026-05-19.** T6 adds an optional non-streaming, single-turn `/answer` endpoint that internally reuses `/retrieve`, then passes the resulting `context_pack` to a configured generation provider. `/retrieve` remains the primary external contract and is independently usable; `/answer` is a convenience for clients that prefer a managed answer endpoint over composing their own LLM call.
 
-The endpoint must reuse `/retrieve`'s evidence and citation policy. It must degrade — when generation fails, it returns the retrieval context so the caller still has actionable output. Streaming is added at this phase, both for `/answer` token output and (opportunistically) for `/retrieve` evidence.
+The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-band: insufficient retrieval returns `answer.kind="refusal"`, disabled generation returns `answer.kind="error"` with `refusal_reason="generation_disabled"`, and provider failure returns `answer.kind="error"` with `refusal_reason="generation_failed"`. All paths use HTTP 200 and preserve the retrieval payload by default so callers still have actionable output.
 
-**Why now.** Phase 0–5 stabilized the retrieval/evidence contract. With QueryPlan (A2), Reranker (A3), and IndexGeneration (A4) defined, the retrieval foundation is stable enough that a generation layer on top will not destabilize it.
+**Contract.**
 
-**Open questions to resolve at task start (≥6).**
+- Request: `AnswerRequest` extends `RetrieveRequest` with `answer_token_budget` and `include_retrieve`.
+- Response: `schema_version="answer.v1"`, stable `trace_id`/`plan_id`, top-level `warnings`, and an `answer` object with `kind`, `text`, `confidence`, `citations`, `refusal_reason`, `missing_evidence_hints`, `model_id`, `model_version`, `prompt_version`, and answer-local `warnings`.
+- Generation is disabled by default via `Settings.answer.enabled=False`.
+- Providers implement the vendor-neutral `AnswerGenerator` protocol. T6 ships a deterministic noop provider and an OpenAI-compatible chat-completions HTTP provider.
+- Prompt-injection defense is role separation plus structured, quoted retrieval context. Retrieved manual text is always untrusted source data and may not override system instructions.
+- Citation validation drops generated citations that are not present in the retrieved citation set and adds `answer_dropped_invalid_citations`.
 
-1. **Refusal contract.** What is the wire-level shape of "insufficient evidence to answer"? Fields needed: `confidence`, `reason`, `partial_answer`, `missing_evidence_hints`. Is refusal a distinct response code, an `answer: null` with a `refusal_reason`, or a structured `answer.kind: "refusal"`?
-2. **Faithfulness eval methodology.** LLM-as-judge has known limitations (positional bias, vendor coupling). Which faithfulness metric will we adopt — verifiable claim decomposition, citation-coverage scoring, retrieval-grounded NLI, or a hybrid? Until this is decided, `/answer` quality cannot be regression-gated.
-3. **Multi-turn state.** Are sessions stateful at the API level (session_id + previous QueryPlan reference) or stateless with the client carrying history? If stateful, where does state live (in-memory cache, SQLite, or KB-scoped storage)?
-4. **Generation cache.** Cache key candidate: `(prompt_version, context_pack_hash, model_version)`. Eviction policy? Cache scope (global / per-KB)? Privacy interaction with the QueryPlan persistence rules in A2?
-5. **Streaming schema.** SSE? Plain chunked HTTP? Structured token stream with embedded citations? How do partial responses interact with budget exhaustion?
-6. **Prompt-injection handling.** Retrieved content must be treated as data, never as system/developer instructions. What is the concrete defense: content tagging, role separation, prompt template guards? How is this validated by tests?
-7. **Tool-calling boundary.** Does `/answer` expose LLM tool-calling capability, or is it strictly text-in / text-out? If tool-calling is exposed, the endpoint stops being a thin wrapper and becomes part of the Agent runtime.
-8. **Model/prompt versioning policy.** How are prompt and model upgrades rolled out? Generation-style shadow with eval gate, or unversioned hot-swap?
+**Eval stance.** T6 uses deterministic unit/API contract tests and citation coverage checks. It deliberately does not use LLM-as-judge for regression gating.
 
-**Out of scope for this blueprint.** Selecting an LLM vendor. Defining prompt templates. Implementing tool-calling. Building any portion of `/answer` while QueryPlan / Reranker / IndexGeneration are still incomplete (T6 depends on T2 and T3).
+**Deferred.** Streaming, multi-turn state, generation cache, tool-calling, prompt/model rollout policy, and faithfulness metrics beyond deterministic citation checks remain follow-up work.
 
 ### B7. Phase 7 — Visual Track  📋 Blueprint
 

@@ -41,6 +41,43 @@ Phase 1 ships the per-KB directed cooccurrence matrix builder and V6 LIF spike p
 - None - task complete
 
 
+## Session 10: T6 answer endpoint kickoff
+
+**Date**: 2026-05-19
+**Task**: T6 Phase 6 answer endpoint kickoff
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Shipped the Phase 6 `/answer` foundation as an optional, default-off,
+non-streaming single-turn endpoint that wraps `/retrieve`, returns structured
+answer/refusal/error payloads, and preserves retrieval output by default.
+
+### Main Changes
+
+- Added `Settings.answer`, the `tagmemorag.answer` provider boundary, noop
+  generator, OpenAI-compatible chat-completions generator, role-separated prompt
+  builder, and citation validation.
+- Added `/answer` with `search` auth scope, retrieval reuse, `include_retrieve`,
+  answer token budget, fail-soft disabled/refusal/provider-error paths, and
+  deduped warnings.
+- Updated architecture B6 from blueprint to shipped kickoff contract.
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_api.py tests/unit/test_answer_config.py tests/unit/test_answer_prompt.py tests/unit/test_answer_generator.py tests/unit/test_answer_api.py -q` (36 passed)
+- [OK] `uv run pytest tests/unit -q` (844 passed)
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Commit the T6 implementation and task artifacts when ready.
+
+
 ## Session 2: Wave Phase 2b: ResidualPyramid + V6 external modulators
 
 **Date**: 2026-05-16
