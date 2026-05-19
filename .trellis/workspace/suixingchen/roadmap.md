@@ -5,7 +5,7 @@
 TagMemoRAG has now completed the Qdrant stabilization and retrieval-quality wave through M23:
 
 - M15: point-level incremental Qdrant sync for managed-library rebuilds.
-- M16: Qdrant ANN preselection as candidate generation for local WAVE-RAG ranking.
+- M16: Qdrant ANN preselection as candidate generation before local deterministic ranking.
 - M17: combined incremental rebuild plus ANN regression coverage.
 - M18: batched Qdrant payload refresh for reused points with safe per-point fallback.
 - M19: opt-in search diagnostics and operator debug metadata.
@@ -224,13 +224,13 @@ M25 closed the first hybrid lexical retrieval gap. The next development wave sho
    - Import bundles into local or object-storage-backed deployments.
    - Support disaster recovery and environment migration.
 
-6. **M31 Production Deployment Guide**
-   - Document Docker Compose, Qdrant backup/restore, object storage backup, registry backup, metrics/tracing, and multi-replica topology.
-   - Include rollback playbooks for registry migration, blob-store outage, and rebuild queue failure.
+6. **Ops Guide Production Deployment Guide - completed**
+   - Documents Docker Compose, Qdrant backup/restore, object storage backup, registry backup, metrics/tracing, current multi-replica limits, and rollback playbooks.
+   - Kept as "Ops Guide" instead of M31 because M31 is now used by the tag data model milestone in README.
 
 ### Current Active Planning Task
 
-- `.trellis/tasks/05-14-m26-manual-registry-blob-storage/`
+- None. M26-M30 and the production deployment operations guide are complete.
 
 ### Sequencing Notes
 

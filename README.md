@@ -77,6 +77,8 @@ curl http://127.0.0.1:8000/health  # 200 ok when the process is alive
 curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 ```
 
+For deployment profiles, backup/restore, Qdrant/S3 operations, diagnostics, and rollback playbooks, see [`docs/production-deployment-operations.md`](docs/production-deployment-operations.md).
+
 ## API Reference
 
 ### `POST /search`
@@ -1305,4 +1307,5 @@ min_geo_samples, prints hit-count histogram, applies a PASS gate of
 | **M29** ✅ | Admin diagnostics for dirty state, registry, blobs, audit, and queue jobs |
 | **M30** ✅ | Portable managed-library import/export bundles |
 | **M31** ✅ | Tag data model: position-aware tag links, embeddings, and global EPA basis |
+| **Ops Guide** ✅ | Production deployment and operations guide for Docker, backups, Qdrant, S3, diagnostics, and rollback |
 | **Parking lot** | Payload-filtered ANN, HA multi-replica, streaming bundle API, bundle encryption/signing |
