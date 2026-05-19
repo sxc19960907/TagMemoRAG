@@ -516,3 +516,36 @@ Shipped compatibility-first generation-aware derivative path overrides for EPA b
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: T4 WAVE repositioning documentation honesty patch
+
+**Date**: 2026-05-19
+**Task**: T4 WAVE repositioning documentation honesty patch
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Repositioned WAVE Phase 0/1 docs and code-level descriptions as experimental/default-off, removed README production-grade self-labeling, aligned backend specs with deterministic local ranking language, and archived the T4 task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `50e28ef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
