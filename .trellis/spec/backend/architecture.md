@@ -644,10 +644,10 @@ The following tasks are the work this document creates. They are NOT pre-created
 | T4 | WAVE repositioning + documentation honesty patch | — | P3 | ✅ Shipped 2026-05-19; README/operator docs and code-level WAVE descriptions now label WAVE as experimental/default-off |
 | T1.5 | IndexGeneration derivatives isolation | T1 | P3 | ✅ Shipped 2026-05-19; generation-aware derivative path overrides with legacy `_global` compatibility |
 | T5 | eval-as-driver replay tool | T2 | P2 | ✅ Shipped 2026-05-19; CLI tool, metric set, plan-filter language |
-| T6 | Phase 6 `/answer` kickoff | T2, T3 | P2 | B6 (independent brainstorm; this task only enters after T2+T3 land) |
-| T7 | Phase 7A OCR kickoff | T1 | P2 | B7A (independent brainstorm) |
-| T8 | Phase 7B visual retrieval kickoff | T1, T7 | P3 | B7B (independent brainstorm) |
-| T9 | Phase 8 connectors kickoff | T1 | P3 | B8 (independent brainstorm; connector-by-connector tasks beneath this one) |
+| T6 | Phase 6 `/answer` kickoff | T2, T3 | P2 | ✅ Shipped 2026-05-19; optional non-streaming single-turn `/answer` wrapper over `/retrieve` |
+| T7 | Phase 7A OCR kickoff | T1 | P2 | ✅ Shipped 2026-05-19; default-off missing-text PDF OCR ingestion foundation |
+| T8 | Phase 7B visual retrieval kickoff | T1, T7 | P3 | ✅ Shipped 2026-05-19; default-off deterministic visual retrieval foundation |
+| T9 | Phase 8 connectors kickoff | T1 | P3 | ✅ Shipped 2026-05-19; connector materialization foundation with fixture provider |
 
 Priority key: P1 = must precede further surface-area expansion; P2 = high-value next steps; P3 = scoped to maturation, not blocking.
 
