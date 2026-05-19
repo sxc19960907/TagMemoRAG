@@ -142,7 +142,10 @@ Use these readiness layers together:
 | `config validate` | Config coherence and local prerequisites. |
 | `provider probe` | Explicit live connectivity for selected remote providers. |
 | `readiness smoke` | Deterministic local build/retrieve/answer/queryplan/bundle composition. |
+| `pilot run` | One retained pre-pilot report over config validation, provider probes, readiness smoke, and a sanitized eval fixture summary. |
 | `/ready` | The running process has warmed up and loaded a KB for traffic. |
+
+For the operator sequence and report retention guidance, see [Production Pilot Runbook](production-pilot-runbook.md).
 
 ## Persistence Matrix
 
@@ -181,11 +184,12 @@ Bundles include safe manifests, checksums, metadata records, and source bytes. T
 1. Configure storage root and model/provider settings.
 2. Run `python -m tagmemorag config validate --config config.yaml`.
 3. Run `python -m tagmemorag readiness smoke` locally for MVP composition.
-4. Start the service.
-5. Confirm `/health` and `/ready`.
-6. Build or restore a KB.
-7. Run a smoke search.
-8. Check graph info and diagnostics.
+4. Run `python -m tagmemorag pilot run --config config.yaml --suite tests/fixtures/eval/coffee.jsonl --docs tests/fixtures --output .tmp/production-pilot/report.json` and retain the report.
+5. Start the service.
+6. Confirm `/health` and `/ready`.
+7. Build or restore a KB.
+8. Run a smoke search.
+9. Check graph info and diagnostics.
 
 Useful commands:
 

@@ -184,6 +184,56 @@ def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
     assert "checksum" not in serialized
 
 
+def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    def _fake_pilot(**_kwargs):
+        return ProductionPilotReport(
+            status="passed",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir=str(tmp_path / "pilot"),
+            stages=[PilotStage("eval", "passed", {"cases": 1})],
+            next_steps=["Retain the pilot report."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    output = tmp_path / "pilot.json"
+
+    exit_code = cli.main(["pilot", "run", "--output", str(output)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == ""
+    body = json.loads(output.read_text(encoding="utf-8"))
+    assert body["schema_version"] == "production_pilot.v1"
+    assert body["status"] == "passed"
+
+
+def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    def _fake_pilot(**_kwargs):
+        return ProductionPilotReport(
+            status="failed",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir="/tmp/pilot",
+            stages=[PilotStage("eval", "failed", {"cases": 1}, {"type": "EvalThreshold", "reason": "low recall"})],
+            next_steps=["Investigate failed stage(s): eval."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+
+    exit_code = cli.main(["pilot", "run", "--format", "markdown"])
+
+    assert exit_code == 1
+    output = capsys.readouterr().out
+    assert "# TagMemoRAG Production Pilot Report" in output
+    assert "`failed`" in output
+
+
 def test_readiness_smoke_retains_auto_workdir_on_failure(monkeypatch):
     monkeypatch.setattr(readiness, "build_kb", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
 

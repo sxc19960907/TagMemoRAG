@@ -763,7 +763,19 @@ Use the checks for different questions:
 | `config validate` | Is this config coherent and locally satisfiable? |
 | `provider probe` | Do explicitly selected remote providers respond with the configured credentials/endpoints? |
 | `readiness smoke` | Do the deterministic MVP build/retrieve/answer/queryplan/bundle paths compose in this checkout? |
+| `pilot run` | Do the local config/probe/readiness/eval pilot checks compose into one retained rollout report? |
 | `/ready` | Is this running process ready to serve its loaded KB? |
+
+For a bounded pre-pilot gate and retained JSON/Markdown report, see [Production Pilot Runbook](docs/production-pilot-runbook.md):
+
+```bash
+python -m tagmemorag pilot run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --workdir .tmp/production-pilot \
+  --output .tmp/production-pilot/report.json
+```
 
 ### Qdrant Vector Backend
 

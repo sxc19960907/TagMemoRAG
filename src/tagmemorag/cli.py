@@ -44,6 +44,14 @@ from .tag_governance import (
     preview_tag_rewrite,
 )
 from .manual_registry import create_registry
+from .production_pilot import (
+    DEFAULT_PILOT_CONFIG,
+    DEFAULT_PILOT_DOCS,
+    DEFAULT_PILOT_SUITE,
+    DEFAULT_PILOT_THRESHOLDS,
+    run_production_pilot,
+    write_pilot_report,
+)
 from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
 from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 
@@ -237,6 +245,21 @@ def main(argv: list[str] | None = None) -> int:
     readiness_smoke = readiness_sub.add_parser("smoke")
     readiness_smoke.add_argument("--workdir", default=None)
     readiness_smoke.add_argument("--keep-workdir", action="store_true", default=False)
+
+    pilot = sub.add_parser("pilot")
+    pilot_sub = pilot.add_subparsers(dest="pilot_command", required=True)
+    pilot_run = pilot_sub.add_parser("run")
+    pilot_run.add_argument("--config", default=DEFAULT_PILOT_CONFIG)
+    pilot_run.add_argument("--suite", default=DEFAULT_PILOT_SUITE)
+    pilot_run.add_argument("--docs", default=DEFAULT_PILOT_DOCS)
+    pilot_run.add_argument("--workdir", default=None)
+    pilot_run.add_argument("--output", default=None)
+    pilot_run.add_argument("--format", choices=["json", "markdown"], default="json")
+    pilot_run.add_argument("--top-k", type=int, default=None)
+    pilot_run.add_argument("--source-k", type=int, default=None)
+    pilot_run.add_argument("--min-recall-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_recall_at_k)
+    pilot_run.add_argument("--min-mrr", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_mrr)
+    pilot_run.add_argument("--min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
 
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
@@ -650,6 +673,33 @@ def main(argv: list[str] | None = None) -> int:
         report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
         return 0 if report.status == "passed" else 1
+    if args.command == "pilot" and args.pilot_command == "run":
+        thresholds = EvalThresholds(
+            min_recall_at_k=args.min_recall_at_k,
+            min_mrr=args.min_mrr,
+            min_hit_at_k=args.min_hit_at_k,
+        )
+        try:
+            report = run_production_pilot(
+                config_path=args.config,
+                suite_path=args.suite,
+                docs_path=args.docs,
+                workdir=args.workdir,
+                top_k=args.top_k,
+                source_k=args.source_k,
+                thresholds=thresholds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        if args.output:
+            write_pilot_report(report, args.output, fmt=args.format)
+        else:
+            if args.format == "markdown":
+                print(report.to_markdown(), end="")
+            else:
+                print(report.to_json())
+        return 1 if report.status == "failed" else 0
     if args.command == "epa" and args.epa_command == "rebuild":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)
