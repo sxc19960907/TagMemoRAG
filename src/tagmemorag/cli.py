@@ -22,6 +22,7 @@ from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bu
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .qdrant_ops import inspect_qdrant
+from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
 from .retrieval_feedback import (
     create_feedback,
@@ -209,6 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     qdrant_inspect = qdrant_sub.add_parser("inspect")
     qdrant_inspect.add_argument("--kb", default="default")
     qdrant_inspect.add_argument("--config", default="config.yaml")
+
+    readiness = sub.add_parser("readiness")
+    readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
+    readiness_smoke = readiness_sub.add_parser("smoke")
+    readiness_smoke.add_argument("--workdir", default=None)
+    readiness_smoke.add_argument("--keep-workdir", action="store_true", default=False)
 
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
@@ -604,6 +611,10 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(cfg.logging.level, cfg.logging.format)
         print(json.dumps(inspect_qdrant(args.kb, cfg), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "readiness" and args.readiness_command == "smoke":
+        report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.status == "passed" else 1
     if args.command == "epa" and args.epa_command == "rebuild":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

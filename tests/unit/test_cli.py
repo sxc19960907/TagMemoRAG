@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import readiness
 
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
@@ -44,6 +45,63 @@ storage:
     assert body["results"]
     assert "debug" not in body
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
+
+
+def test_cli_readiness_smoke_succeeds_and_keeps_workdir(tmp_path, capsys):
+    workdir = tmp_path / "smoke"
+
+    exit_code = cli.main(["readiness", "smoke", "--workdir", str(workdir), "--keep-workdir"])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "readiness_smoke.v1"
+    assert body["status"] == "passed"
+    assert body["workdir"] == str(workdir.resolve())
+    checks = {check["name"]: check for check in body["checks"]}
+    assert checks["build"]["detail"]["chunks"] >= 1
+    assert checks["retrieve_answer"]["detail"]["evidence_count"] >= 1
+    assert checks["queryplan"]["detail"]["rows"] == 1
+    assert checks["bundle_roundtrip"]["detail"]["imported_manuals"] == 1
+    assert (workdir / "data").exists()
+
+
+def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
+    def _failed_smoke(*, workdir=None, keep_workdir=False):
+        return readiness.SmokeReport(
+            status="failed",
+            checks=[
+                readiness.SmokeCheck(
+                    "build",
+                    "failed",
+                    error={"type": "ReadinessSmokeError", "reason": "no_chunks_built"},
+                )
+            ],
+            workdir="/tmp/tagmemorag-readiness-test",
+        )
+
+    monkeypatch.setattr(cli, "run_readiness_smoke", _failed_smoke)
+
+    exit_code = cli.main(["readiness", "smoke"])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert body["checks"][0]["error"]["reason"] == "no_chunks_built"
+    serialized = json.dumps(body)
+    assert "storage_key" not in serialized
+    assert "checksum" not in serialized
+
+
+def test_readiness_smoke_retains_auto_workdir_on_failure(monkeypatch):
+    monkeypatch.setattr(readiness, "build_kb", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    report = readiness.run_readiness_smoke()
+
+    assert report.status == "failed"
+    assert report.workdir is not None
+    assert report.checks[0].name == "unexpected"
+    assert report.checks[0].error["type"] == "RuntimeError"
+    assert (readiness.Path(report.workdir) / "docs").exists()
 
 
 def test_cli_retrain_residuals_reports_rows(tmp_path):

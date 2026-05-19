@@ -44,6 +44,15 @@ curl -s http://127.0.0.1:8000/metrics | head
 
 `/health` only proves the process can answer. `/ready` is the traffic gate: it returns success only after model warm-up and KB load. A first boot with no built KB can be healthy but not ready.
 
+Run the local MVP smoke check before deploys or after upgrades:
+
+```bash
+python -m tagmemorag readiness smoke
+python -m tagmemorag readiness smoke --keep-workdir
+```
+
+This command creates an isolated temporary workspace, uses deterministic local providers, builds a tiny KB, exercises retrieve plus noop answer generation, verifies QueryPlan persistence, and round-trips a managed-library bundle. Treat it as a local composition check. It does not prove live API reachability, remote embedding/reranker/LLM provider health, Qdrant/S3 availability, production data quality, or multi-replica write safety.
+
 The Compose file also has a `sqlite` tools profile for inspecting `data/manual_registry.sqlite3`:
 
 ```bash
@@ -136,10 +145,11 @@ Bundles include safe manifests, checksums, metadata records, and source bytes. T
 
 1. Configure storage root and model/provider settings.
 2. Start the service.
-3. Confirm `/health` and `/ready`.
-4. Build or restore a KB.
-5. Run a smoke search.
-6. Check graph info and diagnostics.
+3. Run `python -m tagmemorag readiness smoke` locally for MVP composition.
+4. Confirm `/health` and `/ready`.
+5. Build or restore a KB.
+6. Run a smoke search.
+7. Check graph info and diagnostics.
 
 Useful commands:
 

@@ -77,6 +77,15 @@ curl http://127.0.0.1:8000/health  # 200 ok when the process is alive
 curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 ```
 
+Local readiness smoke check:
+
+```bash
+python -m tagmemorag readiness smoke
+python -m tagmemorag readiness smoke --keep-workdir
+```
+
+The smoke command builds an isolated temporary KB with the offline hashing embedder, runs retrieve plus noop answer generation, verifies QueryPlan persistence, and round-trips a managed-library bundle. It is a local MVP composition check; it does not validate live traffic, Qdrant, S3, remote model providers, or multi-replica coordination.
+
 For deployment profiles, backup/restore, Qdrant/S3 operations, diagnostics, and rollback playbooks, see [`docs/production-deployment-operations.md`](docs/production-deployment-operations.md).
 
 ## API Reference
