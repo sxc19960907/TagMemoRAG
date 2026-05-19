@@ -483,3 +483,36 @@ Shipped default-off connector materialization foundation with connector contract
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: T1.5 IndexGeneration derivatives isolation
+
+**Date**: 2026-05-19
+**Task**: T1.5 IndexGeneration derivatives isolation
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Shipped compatibility-first generation-aware derivative path overrides for EPA basis and tag cooccurrence/intrinsic residual rebuilds, preserving legacy _global behavior while allowing KbPaths generation routing, with focused and full unit coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6b6ce4a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
