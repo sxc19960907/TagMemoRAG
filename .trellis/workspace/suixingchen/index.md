@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-05-17
+- **Total Sessions**: 9
+- **Last Active**: 2026-05-19
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~314 | Active |
+| `journal-1.md` | ~349 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-05-19 | T5 replay and rerank impact analysis | `7ed195c`, `a3c3f0b`, `77d8126` | `feat/wave-phase1-cooccurrence-spike` |
 | 8 | 2026-05-17 | 回归 VCP 原则：移除 pyramid_post_scale=4.0 等过拟合常数 | `7ca24fc` | `feat/wave-phase1-cooccurrence-spike` |
 | 7 | 2026-05-17 | wave-readiness-flags: 3 flag 全 KEEP_OFF 实证 | `ab4c0f8` | `feat/wave-phase1-cooccurrence-spike` |
 | 6 | 2026-05-17 | fixture-rewrite Phase B: stress-test 分类 + informational gating | `58bceb5` | `feat/wave-phase1-cooccurrence-spike` |

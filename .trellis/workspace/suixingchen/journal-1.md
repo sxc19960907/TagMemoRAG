@@ -312,3 +312,38 @@ Port V8 geodesicRerank as wave 主线最后一块。10 stage 闭环：4 个新 s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: T5 replay and rerank impact analysis
+
+**Date**: 2026-05-19
+**Task**: T5 replay and rerank impact analysis
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Implemented the T5 offline QueryPlan replay CLI with generation-targeted replay, baseline deltas, JSON/Markdown reports, rerank log summaries, focused tests, and architecture C9 contract updates.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7ed195c` | (see git log) |
+| `a3c3f0b` | (see git log) |
+| `77d8126` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
