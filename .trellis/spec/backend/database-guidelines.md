@@ -51,7 +51,7 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 - `VectorStore.search(query_vec, k)` is the abstraction boundary for future Faiss/Qdrant/pgvector backends.
 - Keep search inputs explicit. Do not hide query embedding, graph lookup, or anchor lookup inside the vector store.
 - Search result ordering should be deterministic for equal scores by using a stable tie-breaker such as node id.
-- When query-time ANN preselection is enabled for Qdrant, treat it as candidate generation only. Final search ranking must remain local WAVE-RAG over the loaded graph and vectors unless a future task explicitly changes the ranking contract.
+- When query-time ANN preselection is enabled for Qdrant, treat it as candidate generation only. Final search ranking must remain local and deterministic over the loaded graph and vectors unless a future task explicitly changes the ranking contract.
 
 ---
 

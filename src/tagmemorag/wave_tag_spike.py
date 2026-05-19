@@ -930,7 +930,7 @@ def apply_tag_boost(
     core_tags: Sequence[str] = (),
     ghost_tags: Sequence[GhostTag] = (),
 ) -> tuple[np.ndarray, TagBoostInfo]:
-    """Apply Phase 1 query-vector enhancement.
+    """Apply the experimental Phase 1 query-vector enhancement.
 
     Returns `(boosted_vec, info)`. When the boost cannot be applied (kill switch off,
     matrix missing, no seeds, degenerate context, etc.), returns `(query_vec, info)`

@@ -1,6 +1,8 @@
-"""Phase 4: V8 geodesicRerank — tag-energy reranking on wave_search candidates.
+"""Experimental Phase 4: V8 geodesicRerank on wave_search candidates.
 
 Source: VCPToolBox TagMemoEngine.geodesicRerank (TagMemoEngine.js:537-640).
+Default status: off. The 2026-05-17 WAVE readiness check kept this flag off
+because fixture results were mixed; promotion requires explicit eval evidence.
 
 Algorithm overview
 ------------------

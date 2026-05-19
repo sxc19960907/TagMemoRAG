@@ -1,6 +1,6 @@
 # TagMemoRAG
 
-A production-grade semantic retrieval engine for product manuals, built on the **WAVE-RAG** algorithm: knowledge chunks are organized into a semantic topology graph, and user queries propagate as waves along graph edges — interference peaks become the top-K results.
+A semantic retrieval engine for product manuals. The default path combines local vector scoring, metadata-aware filtering/boosting, bounded lexical recovery, optional Qdrant ANN candidate generation, and deterministic in-memory graph ranking. WAVE Phase 0/1 features remain available as experimental, default-off extensions; they are not part of the critical retrieval path unless explicitly enabled.
 
 `kb_name` selects an isolated knowledge base under `data/{kb_name}/`. API keys can be scoped to one or more KBs.
 
@@ -53,7 +53,7 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
 When a query contains a known exact model, category alias, or brand, search can infer metadata narrowing before ranking. For example, `NRK6192 温度怎么调` hard-filters to chunks from the matching model when that model exists in the loaded KB. Explicit CLI/API filters always win over inferred filters, and empty inferred candidate sets fall back safely.
 
-Filtered search narrows retrieval before WAVE propagation:
+Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
 ```bash
 python -m tagmemorag search "冰箱温度怎么调" \
@@ -807,11 +807,11 @@ Troubleshooting guide:
 | Dirty state remains pending after rebuild failure | `manual-library dirty --format json` | Fix Qdrant reachability, retry incremental, or full rebuild |
 | Qdrant outage blocks startup/load | provider config | Temporarily switch to `npz` and rebuild from managed sources |
 
-TagMemoRAG also adds a lightweight local lexical signal before WAVE-RAG ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
+TagMemoRAG also adds a lightweight local lexical signal before final ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation when enabled, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
 
 Metadata narrowing runs just before filtering and ranking. It builds a local index from loaded graph metadata, detects high-confidence product-manual identity signals, and resolves them into hard filters or boost-only filters according to config. Exact model matches hard-filter by default, category aliases such as `冰箱`/`refrigerator` hard-filter in product-manual KBs, and brand-only matches boost unless the KB contains a single brand or policy says otherwise. Disable with `search.metadata_narrowing_enabled=false` for A/B checks or broad exploratory retrieval.
 
-Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
+Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local ranking runs. This does not replace local ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and applies deterministic in-memory graph propagation according to the active config, so ANN only narrows the candidate set and does not become the final ranker.
 
 The ANN path is intentionally conservative:
 
@@ -1088,9 +1088,9 @@ rm -rf data/_global/
 
 The next rebuild recreates everything; `execute_search` output is byte-identical regardless of whether the data is present.
 
-### Wave Phase 1 — co-occurrence + spike propagation
+### Experimental WAVE Phase 1 — co-occurrence + spike propagation
 
-Phase 1 turns tag data into a query-vector enhancement. Each rebuild now also writes a directed co-occurrence matrix at `data/_global/tag_cooccurrence/{kb}.npz`, and an opt-in spike walk over that matrix can fuse a "tag context vector" into the query before vector search runs. **Defaults to off** so existing deployments keep current behaviour.
+Phase 1 turns tag data into a query-vector enhancement. Each rebuild now also writes a directed co-occurrence matrix at `data/_global/tag_cooccurrence/{kb}.npz`, and an opt-in spike walk over that matrix can fuse a "tag context vector" into the query before vector search runs. **This is experimental and defaults to off** so existing deployments keep current behaviour.
 
 ```yaml
 wave_phase1:
@@ -1136,7 +1136,7 @@ set `pyramid_use_handshake_features: false` to disable the handshake submodule
 without removing pyramid (degenerates `tag_memo_activation` to 0, equivalent to
 `act_mult = act_min`).
 
-Full design and tuning notes live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
+Full design, tuning notes, and the 2026-05-17 KEEP_OFF readiness result live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
 
 #### External modulators (Phase 2b-2)
 
@@ -1246,9 +1246,9 @@ crosses the threshold:
 Phase 3.5 will train real `tag_intrinsic_residuals` and feed them into the
 ResidualPyramid as a prior; Phase 4 covers V8 `geodesicRerank`.
 
-#### Geodesic rerank (Phase 4)
+#### Experimental geodesic rerank (Phase 4)
 
-Phase 4 ports V8 `TagMemoEngine.geodesicRerank`. After Phase 1 spike
+Phase 4 ports V8 `TagMemoEngine.geodesicRerank` as an experimental, default-off WAVE extension. After Phase 1 spike
 propagation publishes a tag-energy field (`accumulated_energy`), V8 reranks
 the wave_search candidates by mean tag energy per chunk:
 
@@ -1261,7 +1261,7 @@ wave_phase1:
   geodesic_min_geo_samples: 2         # source default 4; lowered for ~3 tags/chunk
 ```
 
-Default off keeps existing baselines byte-stable. When on, V8 silently
+Default off keeps existing baselines byte-stable. The 2026-05-17 readiness check kept this flag OFF after mixed eval results. When on, V8 silently
 no-ops if any precondition fails (spike disabled, matrix missing, energy
 field empty, etc.) and records the reason via
 `tagmemorag_geodesic_rerank_skipped_total{reason}` for ops dashboards.
@@ -1290,7 +1290,7 @@ min_geo_samples, prints hit-count histogram, applies a PASS gate of
 | **M13** ✅ | Incremental manual rebuild/update path |
 | **M14** ✅ | Incremental rebuild strategy and impact reporting |
 | **M15** ✅ | Point-level incremental Qdrant updates |
-| **M16** ✅ | Qdrant ANN preselection as candidate generation for local WAVE-RAG ranking |
+| **M16** ✅ | Qdrant ANN preselection as candidate generation before local deterministic ranking |
 | **M17** ✅ | Incremental rebuild plus ANN integration regression coverage |
 | **M18** ✅ | Batched Qdrant payload refresh with safe per-point fallback |
 | **M19** ✅ | Opt-in search diagnostics and operator debug metadata |

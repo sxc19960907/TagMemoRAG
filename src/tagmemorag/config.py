@@ -351,9 +351,10 @@ class WavePhase1Config(BaseModel):
     intrinsic_residuals_enabled: bool = False
     intrinsic_residual_top_n: int | None = Field(default=None, ge=1, le=100)
 
-    # Phase 4: V8 geodesicRerank — reranks wave_search candidates by tag energy
-    # field accumulated during spike propagation. Default off; when enabled and
-    # spike_enabled is true, execute_search oversamples wave_search candidates
+    # Experimental Phase 4: V8 geodesicRerank — reranks wave_search candidates
+    # by tag energy field accumulated during spike propagation. Default off and
+    # kept off by the 2026-05-17 WAVE readiness check. When explicitly enabled
+    # with spike_enabled=true, execute_search oversamples wave_search candidates
     # (top_k * geodesic_oversample_factor), reranks via tag-energy mean per
     # chunk, then truncates to top_k. minGeoSamples differs from source default
     # (4) because this repo's manuals carry ~3 tags/chunk on average.

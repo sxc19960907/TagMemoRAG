@@ -1,6 +1,7 @@
-# Wave Phase 1: Co-occurrence Matrix + V6 Spike Propagation
+# Experimental Wave Phase 1: Co-occurrence Matrix + V6 Spike Propagation
 
-> Status: shipped behind `wave_phase1.spike_enabled` (default **false**).
+> Status: experimental; shipped behind `wave_phase1.spike_enabled` (default **false**).
+> The 2026-05-17 readiness evaluation kept the Phase 3 / 3.5 / 4 flags OFF.
 > Source algorithm reference: VCPToolBox `TagMemoEngine.applyTagBoost` /
 > `buildDirectedCooccurrenceMatrix`.
 
@@ -8,7 +9,7 @@
 
 Phase 0 wrote tag data into SQLite (`tags` / `manual_tags(position)` /
 `tag_intrinsic_residuals`) but search did not consume any of it. Phase 1 is
-the first time the search path reads tag data.
+the first time the experimental WAVE search path reads tag data.
 
 It adds **two artefacts** to the system:
 
@@ -420,7 +421,7 @@ collapses to its midpoint and only hits ghost / completion paths under
 
 - Replace `resonance = 0` stub with real `detectCrossDomainResonance` (uses
   EPA basis cross-axis mass). **Implemented** — see "Cross-domain resonance"
-  below; default off pending production rollout.
+  below; default off pending promotion by eval evidence.
 - Add explicit `worldview gating` if real-deployment data shows a single
   langPenalty multiplier is too coarse (currently V6 only uses `queryWorld`
   to gate langPenalty, not as an independent projection filter).
