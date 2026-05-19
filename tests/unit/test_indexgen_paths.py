@@ -30,7 +30,7 @@ def test_legacy_mode_paths_match_existing_layout(tmp_path: Path):
     assert paths.anchors_dir == expected_root / "anchors"
     assert paths.epa_basis == expected_root / "epa_basis.npz"
     assert paths.tag_embeddings == expected_root / "tag_embeddings.npz"
-    assert paths.tag_cooccurrence == expected_root / "tag_cooccurrence.json"
+    assert paths.tag_cooccurrence == expected_root / "tag_cooccurrence.npz"
     assert paths.tag_intrinsic_residuals == expected_root / "tag_intrinsic_residuals.npz"
     assert paths.rebuild_impact == expected_root / "rebuild_impact.json"
     assert paths.meta == expected_root / "meta.json"
@@ -50,6 +50,8 @@ def test_generation_mode_routes_under_g_n(tmp_path: Path):
     assert paths.anchors == expected_gen_root / "anchors.json"
     assert paths.epa_basis == expected_gen_root / "epa_basis.npz"
     assert paths.tag_embeddings == expected_gen_root / "tag_embeddings.npz"
+    assert paths.tag_cooccurrence == expected_gen_root / "tag_cooccurrence.npz"
+    assert paths.tag_intrinsic_residuals == expected_gen_root / "tag_intrinsic_residuals.npz"
     assert paths.meta == expected_gen_root / "meta.json"
     assert paths.assets_root == expected_gen_root / "assets"
 

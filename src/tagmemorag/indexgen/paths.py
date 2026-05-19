@@ -85,7 +85,7 @@ class KbPaths:
 
     @property
     def tag_cooccurrence(self) -> Path:
-        return self.generation_root / "tag_cooccurrence.json"
+        return self.generation_root / "tag_cooccurrence.npz"
 
     @property
     def tag_intrinsic_residuals(self) -> Path:

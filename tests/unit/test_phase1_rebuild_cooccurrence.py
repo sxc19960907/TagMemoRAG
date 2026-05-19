@@ -6,12 +6,14 @@ import pytest
 
 from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig, WavePhase1Config
 from tagmemorag.manual_library import library_root, upsert_manual
+from tagmemorag.indexgen import KbPaths
 from tagmemorag.state import build_kb
 from tagmemorag.tag_cooccurrence import (
     cooccurrence_path,
     load_cooccurrence,
 )
 from tagmemorag import tag_rebuild as tag_rebuild_mod
+from tagmemorag.tag_rebuild import sync_rebuild_tags
 
 
 def _cfg(tmp_path: Path, *, cooccurrence_enabled: bool = True) -> Settings:
@@ -53,6 +55,24 @@ def test_full_build_writes_cooccurrence_npz(tmp_path: Path, fake_embedder):
     assert state.meta["tag_cooccurrence_error"] == ""
     assert state.meta["tag_intrinsic_residual_rows"] > 0
     assert state.meta["tag_intrinsic_residual_error"] == ""
+
+
+def test_sync_rebuild_tags_can_write_generation_scoped_cooccurrence(tmp_path: Path, fake_embedder):
+    cfg = _cfg(tmp_path)
+    paths = KbPaths("default", cfg, generation=7)
+
+    report = sync_rebuild_tags(
+        "default",
+        cfg,
+        manual_tags_by_id={"m1": ("Steam", "Wand"), "m2": ("Steam", "Wand")},
+        embedder=fake_embedder,
+        paths=paths,
+    )
+
+    assert report.tag_cooccurrence_edges > 0
+    assert paths.tag_cooccurrence.exists()
+    assert load_cooccurrence(paths.tag_cooccurrence) is not None
+    assert not cooccurrence_path(cfg, "default").exists()
 
 
 def test_intrinsic_residual_failure_does_not_break_rebuild(tmp_path: Path, fake_embedder, monkeypatch):
