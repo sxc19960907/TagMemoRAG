@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-05-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~584 | Active |
+| `journal-1.md` | ~617 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-05-19 | Roadmap shipped status sync | `df9a735` | `feat/wave-phase1-cooccurrence-spike` |
 | 15 | 2026-05-19 | Production deployment operations guide | `1df6f04` | `feat/wave-phase1-cooccurrence-spike` |
 | 14 | 2026-05-19 | T4 WAVE repositioning documentation honesty patch | `50e28ef` | `feat/wave-phase1-cooccurrence-spike` |
 | 13 | 2026-05-19 | T1.5 IndexGeneration derivatives isolation | `6b6ce4a` | `feat/wave-phase1-cooccurrence-spike` |

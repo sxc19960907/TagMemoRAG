@@ -582,3 +582,36 @@ Added the production deployment and operations guide covering Docker Compose, co
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Roadmap shipped status sync
+
+**Date**: 2026-05-19
+**Task**: Roadmap shipped status sync
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Marked T6-T9 as shipped in the architecture follow-up roadmap table, matching the already-shipped B6/B7/B8 sections and archived task history.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `df9a735` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
