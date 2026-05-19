@@ -681,3 +681,36 @@ Added tagmemorag readiness smoke to run deterministic local build, retrieve/answ
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: Deployment profiles and config validation
+
+**Date**: 2026-05-19
+**Task**: Deployment profiles and config validation
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added example deployment config profiles and tagmemorag config validate for static/local config checks, with safe JSON reports, CLI tests, and docs explaining validate vs readiness smoke vs /ready.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41d6330` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

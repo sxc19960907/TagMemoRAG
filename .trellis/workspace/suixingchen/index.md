@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
+- **Total Sessions**: 19
 - **Last Active**: 2026-05-19
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~683 | Active |
+| `journal-1.md` | ~716 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-05-19 | Deployment profiles and config validation | `41d6330` | `feat/wave-phase1-cooccurrence-spike` |
 | 18 | 2026-05-19 | Readiness smoke command | `1dd4830` | `feat/wave-phase1-cooccurrence-spike` |
 | 17 | 2026-05-19 | MVP integration acceptance coverage | `dfeeb50` | `feat/wave-phase1-cooccurrence-spike` |
 | 16 | 2026-05-19 | Roadmap shipped status sync | `df9a735` | `feat/wave-phase1-cooccurrence-spike` |
