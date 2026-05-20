@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
+- **Total Sessions**: 37
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1277 | Active |
+| `journal-1.md` | ~1461 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-05-20 | Verify production provider smoke runner live path | `c78010f` | `codex/production-provider-smoke-runner-live-verification` |
 | 36 | 2026-05-20 | DeepSeek citation live verification | `0303024` | `codex/deepseek-citation-live-verification` |
 | 35 | 2026-05-20 | DeepSeek answer budget citation compliance | `f6f960c` | `codex/deepseek-answer-budget-citation-compliance` |
 | 34 | 2026-05-20 | DeepSeek real PDF answer rerun | `075a722` | `codex/deepseek-real-pdf-answer-rerun` |

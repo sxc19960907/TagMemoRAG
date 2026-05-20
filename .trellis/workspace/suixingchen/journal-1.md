@@ -1426,3 +1426,36 @@ Verified the merged DeepSeek budget and citation extraction changes on the real 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: Verify production provider smoke runner live path
+
+**Date**: 2026-05-20
+**Task**: Verify production provider smoke runner live path
+**Branch**: `codex/production-provider-smoke-runner-live-verification`
+
+### Summary
+
+Ran the one-command production-provider smoke runner against local Docker Qdrant/MinIO and live SiliconFlow/DeepSeek providers; recorded sanitized evidence showing runner checks passed, Qdrant point parity at 185/185, missing vectors 0, and DeepSeek answer smoke with citations.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c78010f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
