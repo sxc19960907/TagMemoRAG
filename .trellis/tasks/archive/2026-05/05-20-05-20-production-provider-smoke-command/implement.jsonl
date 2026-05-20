@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and architecture source of truth."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and privacy constraints for reports and provider paths."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Sanitized structured failure details for smoke stages."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Placement and dependency direction for CLI orchestration module."}

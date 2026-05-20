@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate: focused unit tests plus unit/e2e suite without perf tests."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Checked smoke failures stay sanitized and structured."}
