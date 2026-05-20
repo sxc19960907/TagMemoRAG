@@ -1242,3 +1242,36 @@ Raised the production-provider DeepSeek answer budget to 1024, strengthened answ
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: DeepSeek citation live verification
+
+**Date**: 2026-05-20
+**Task**: DeepSeek citation live verification
+**Branch**: `codex/deepseek-citation-live-verification`
+
+### Summary
+
+Verified the merged DeepSeek budget and citation extraction changes on the real ASKO/HISENSE PDF answer path. Default profile budget produced a non-empty DeepSeek answer with 7 validated citations, SiliconFlow reranker ran tier1, and Qdrant/retrieve remained healthy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0303024` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

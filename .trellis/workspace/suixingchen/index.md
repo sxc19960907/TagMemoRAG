@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 35
+- **Total Sessions**: 36
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1244 | Active |
+| `journal-1.md` | ~1277 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 36 | 2026-05-20 | DeepSeek citation live verification | `0303024` | `codex/deepseek-citation-live-verification` |
 | 35 | 2026-05-20 | DeepSeek answer budget citation compliance | `f6f960c` | `codex/deepseek-answer-budget-citation-compliance` |
 | 34 | 2026-05-20 | DeepSeek real PDF answer rerun | `075a722` | `codex/deepseek-real-pdf-answer-rerun` |
 | 33 | 2026-05-20 | Production provider real PDF rerun | `dac262b` | `codex/production-provider-real-pdf-rerun` |
