@@ -124,18 +124,39 @@ def _probe_answer(cfg: Settings, *, explicit: bool) -> ProviderProbeResult:
     generation = generator.generate(
         AnswerRequestContext(
             question="readiness probe",
-            retrieve_payload={"context_pack": {"items": []}, "citations": []},
+            retrieve_payload={
+                "context_pack": {
+                    "items": [
+                        {
+                            "citation_id": "cit_probe",
+                            "content": "Readiness probe evidence.",
+                            "source": {"title": "readiness_probe"},
+                        }
+                    ]
+                },
+                "citations": [{"citation_id": "cit_probe"}],
+            },
             prompt=AnswerPrompt(
                 messages=(
-                    {"role": "system", "content": "Return a short readiness response."},
-                    {"role": "user", "content": "readiness probe"},
+                    {"role": "system", "content": "Return one short readiness sentence and cite [cit_probe]."},
+                    {"role": "user", "content": "Use the provided evidence to confirm readiness. Evidence: [cit_probe] Readiness probe evidence."},
                 ),
                 prompt_version=cfg.answer.prompt_version,
+                allowed_citation_ids=frozenset({"cit_probe"}),
             ),
-            max_output_tokens=16,
+            max_output_tokens=256,
         )
     )
-    return ProviderProbeResult("answer", "passed", {"provider": cfg.answer.provider, "model": generation.model_id or cfg.answer.model_id})
+    return ProviderProbeResult(
+        "answer",
+        "passed",
+        {
+            "provider": cfg.answer.provider,
+            "model": generation.model_id or cfg.answer.model_id,
+            "text_length": len(generation.text),
+            "citation_count": len(generation.citations),
+        },
+    )
 
 
 def _probe_reranker(cfg: Settings, *, explicit: bool) -> ProviderProbeResult:

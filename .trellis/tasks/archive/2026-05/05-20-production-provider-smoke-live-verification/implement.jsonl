@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Live provider verification must not leak snippets, vectors, provider bodies, or secrets."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Failures should be documented as sanitized stage errors."}

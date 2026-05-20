@@ -79,6 +79,46 @@ Implemented `tagmemorag production-provider smoke` as a repeatable local product
 - Run the new smoke command against local Qdrant/MinIO plus real SiliconFlow/DeepSeek env once operator credentials are loaded.
 
 
+## Session 38: Production provider smoke live verification
+
+**Date**: 2026-05-20
+**Task**: Production Provider Smoke Live Verification
+**Branch**: `codex/production-provider-smoke-live-verification`
+
+### Summary
+
+Ran the merged `production-provider smoke` command against local Docker Qdrant/MinIO plus live SiliconFlow embedding/reranker and DeepSeek answer generation. The first run exposed a DeepSeek readiness-probe false negative caused by a too-small answer probe token budget; after fixing the probe, the full smoke command passed end-to-end.
+
+### Main Changes
+
+- Increased `provider_probe.answer` to use a minimal cited readiness context and a 256-token budget.
+- Added unit coverage for answer probe context/citation behavior.
+- Added a sanitized live verification report at `docs/production-provider-smoke-live-verification.md`.
+- Ignored `.tmp/` runtime artifacts to avoid committing generated local smoke data.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1afcdbb` | chore(task): archive 05-20-production-provider-smoke-live-verification |
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_config_env.py tests/unit/test_cli.py tests/unit/test_production_provider_smoke.py`
+- [OK] live `provider probe --answer` with DeepSeek
+- [OK] live `production-provider smoke` with ASKO W6564 PDF, Qdrant, MinIO, SiliconFlow, and DeepSeek
+- [OK] `uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Commit code/doc changes and open PR.
+- Consider a later operator cleanup task for resetting the verification Qdrant collection before smoke runs.
+
+
 ## Session 10: T6 answer endpoint kickoff
 
 **Date**: 2026-05-19
