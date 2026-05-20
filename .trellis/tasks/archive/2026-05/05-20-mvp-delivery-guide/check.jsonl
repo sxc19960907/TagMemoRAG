@@ -1,0 +1,1 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Delivery docs must remain sanitized and avoid raw credentials/provider payloads."}
