@@ -20,6 +20,7 @@ from .provider_probe import run_provider_probe
 from .qdrant_ops import inspect_qdrant
 from .queryplan.plan_log import PLAN_LOG_FILENAME
 from .state import AppState, load_kb, start_library_rebuild
+from .storage.qdrant_vector import collection_name
 
 PROVIDER_SMOKE_SCHEMA_VERSION = "production_provider_smoke.v1"
 DEFAULT_PROVIDER_SMOKE_CONFIG = "examples/config/production-provider-verification.yaml"
@@ -104,6 +105,7 @@ def run_production_provider_smoke(
     rebuild_mode: str = "full",
     answer_top_k: int = 6,
     answer_source_k: int = 6,
+    reset_qdrant_collection: bool = False,
 ) -> ProductionProviderSmokeReport:
     smoke_workdir = _smoke_workdir(workdir)
     manual_list = [Path(path).expanduser().resolve() for path in (manual_paths or [])]
@@ -134,6 +136,7 @@ def run_production_provider_smoke(
     )
 
     cfg = load_config(config_path)
+    stages.append(_qdrant_reset_stage(kb_name, cfg, reset=reset_qdrant_collection))
 
     if manual_list:
         try:
@@ -242,6 +245,46 @@ def _metadata_for_manuals(
 
 def _sidecar_path(path: Path) -> Path:
     return path.with_name(f"{path.stem}.metadata.json")
+
+
+def _qdrant_reset_stage(kb_name: str, cfg, *, reset: bool) -> ProviderSmokeStage:
+    target = collection_name(cfg.vector_store.collection_prefix, kb_name)
+    detail = {
+        "provider": cfg.vector_store.provider,
+        "collection_name": target,
+        "requested": bool(reset),
+    }
+    if not reset:
+        return ProviderSmokeStage("qdrant_reset", "skipped", detail | {"reason": "not_requested"})
+    if cfg.vector_store.provider != "qdrant":
+        return ProviderSmokeStage("qdrant_reset", "skipped", detail | {"reason": "vector_store_not_qdrant"})
+    try:
+        client = _qdrant_client(cfg)
+        if not _qdrant_collection_exists(client, target):
+            return ProviderSmokeStage("qdrant_reset", "passed", detail | {"action": "absent"})
+        client.delete_collection(collection_name=target)
+        return ProviderSmokeStage("qdrant_reset", "passed", detail | {"action": "deleted"})
+    except Exception as exc:  # noqa: BLE001
+        return ProviderSmokeStage("qdrant_reset", "failed", detail, _safe_error(exc))
+
+
+def _qdrant_client(cfg):
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError as exc:
+        raise RuntimeError("qdrant-client is required to reset Qdrant collections") from exc
+    return QdrantClient(url=cfg.vector_store.qdrant_url, timeout=cfg.vector_store.timeout_seconds)
+
+
+def _qdrant_collection_exists(client, target: str) -> bool:
+    collection_exists = getattr(client, "collection_exists", None)
+    if callable(collection_exists):
+        return bool(collection_exists(target))
+    try:
+        client.get_collection(collection_name=target)
+        return True
+    except Exception:
+        return False
 
 
 def _blob_stage(kb_name: str, cfg) -> ProviderSmokeStage:

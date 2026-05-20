@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Operator report must stay sanitized and tests should avoid live network by default."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Reset failures should surface as structured smoke stage errors."}
