@@ -238,12 +238,15 @@ def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
         "siliconflow.json",
         "--informational-suites",
         "fault_codes.jsonl, cross_kb_negatives.jsonl",
+        "--accepted-suites",
+        "product_manuals.jsonl, mixed_language.jsonl",
     ])
 
     assert exit_code == 0
     assert seen["hashing_baseline_path"] == "hashing.json"
     assert seen["production_baseline_path"] == "siliconflow.json"
     assert seen["informational_suites"] == ["fault_codes.jsonl", "cross_kb_negatives.jsonl"]
+    assert seen["accepted_suites"] == ["product_manuals.jsonl", "mixed_language.jsonl"]
 
 
 def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):

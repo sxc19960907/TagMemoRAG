@@ -24,10 +24,13 @@ python -m tagmemorag pilot run \
   --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
   --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
   --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl \
+  --accepted-suites product_manuals.jsonl,mixed_language.jsonl,tag_rerank_edge.jsonl \
   --workdir .tmp/production-pilot
 ```
 
-When the diagnosis stage finds `monitor`, `reauthor`, or `investigate` suites, non-informational suites make the pilot status `warning`, not `failed`. Treat that as a review gate: decide whether the affected suites are acceptable for the pilot profile or need case-level inspection first. The known stress-test suites above stay visible in the diagnosis, but they do not make the stage warning when explicitly listed as informational.
+When the diagnosis stage finds `monitor`, `reauthor`, or `investigate` suites, non-informational and non-accepted suites make the pilot status `warning`, not `failed`. Treat that as a review gate: decide whether the affected suites are acceptable for the pilot profile or need case-level inspection first. The known stress-test suites above stay visible in the diagnosis, but they do not make the stage warning when explicitly listed as informational. The accepted list records Phase B's review decision that `product_manuals`, `mixed_language`, and `tag_rerank_edge` are good enough for the production-embedder baseline even when lower than hashing.
+
+Keep `coffee.jsonl` out of the accepted list unless the pilot owner explicitly signs off its current monitor-level divergence.
 
 To retain a reviewable report:
 
@@ -49,7 +52,7 @@ The command runs:
 | `provider_probe` | Probe configured remote providers through the existing explicit live-probe contract. | `failed` fails the pilot; all-skipped is acceptable for local/offline profiles. |
 | `readiness_smoke` | Build/retrieve/answer/queryplan/bundle composition with deterministic local data. | Must pass. |
 | `eval` | Retrieval fixture run with sanitized summary metrics. | Must pass the pilot thresholds. |
-| `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Non-informational warnings require reviewer signoff; explicitly informational suites are retained in detail but do not gate the stage. Invalid baseline input fails. |
+| `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Non-informational, non-accepted warnings require reviewer signoff; informational and accepted suites are retained in detail but do not gate the stage. Invalid baseline input fails. |
 
 ## Thresholds
 

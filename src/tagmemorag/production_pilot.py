@@ -102,6 +102,7 @@ def run_production_pilot(
     hashing_baseline_path: str | Path | None = None,
     production_baseline_path: str | Path | None = None,
     informational_suites: Iterable[str] | None = None,
+    accepted_suites: Iterable[str] | None = None,
 ) -> ProductionPilotReport:
     pilot_workdir = _pilot_workdir(workdir)
     stages: list[PilotStage] = []
@@ -150,6 +151,7 @@ def run_production_pilot(
         hashing_baseline_path=hashing_baseline_path,
         production_baseline_path=production_baseline_path,
         informational_suites=informational_suites,
+        accepted_suites=accepted_suites,
     )
     if diagnosis_stage is not None:
         stages.append(diagnosis_stage)
@@ -244,6 +246,7 @@ def _optional_diagnosis_stage(
     hashing_baseline_path: str | Path | None,
     production_baseline_path: str | Path | None,
     informational_suites: Iterable[str] | None,
+    accepted_suites: Iterable[str] | None,
 ) -> PilotStage | None:
     if hashing_baseline_path is None and production_baseline_path is None:
         return None
@@ -262,6 +265,7 @@ def _optional_diagnosis_stage(
             hashing_baseline_path,
             production_baseline_path,
             informational_suites=informational_suites,
+            accepted_suites=accepted_suites,
         )
     except DiagnosisInputError as exc:
         return PilotStage(

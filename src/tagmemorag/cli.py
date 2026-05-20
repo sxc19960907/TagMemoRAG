@@ -267,6 +267,11 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Comma-separated eval suite filenames whose diagnosis is informational and not blocking.",
     )
+    pilot_run.add_argument(
+        "--accepted-suites",
+        default="",
+        help="Comma-separated eval suite filenames whose diagnosis has been reviewed and accepted as non-blocking.",
+    )
 
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
@@ -698,6 +703,7 @@ def main(argv: list[str] | None = None) -> int:
                 hashing_baseline_path=args.hashing_baseline,
                 production_baseline_path=args.production_baseline,
                 informational_suites=_split_csv(args.informational_suites),
+                accepted_suites=_split_csv(args.accepted_suites),
             )
         except Exception as exc:  # noqa: BLE001
             print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)

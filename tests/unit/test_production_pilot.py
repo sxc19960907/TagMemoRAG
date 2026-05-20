@@ -91,13 +91,15 @@ def test_production_pilot_includes_eval_reauthoring_warning_stage(tmp_path):
 
 def test_production_pilot_informational_diagnosis_can_pass_stage(tmp_path):
     informational_suites = [
-        "coffee.jsonl",
         "cross_kb_negatives.jsonl",
         "fault_codes.jsonl",
-        "mixed_language.jsonl",
         "model_numbers.jsonl",
-        "product_manuals.jsonl",
         "tag_cooccurrence.jsonl",
+    ]
+    accepted_suites = [
+        "coffee.jsonl",
+        "mixed_language.jsonl",
+        "product_manuals.jsonl",
         "tag_rerank_edge.jsonl",
     ]
 
@@ -110,6 +112,7 @@ def test_production_pilot_informational_diagnosis_can_pass_stage(tmp_path):
         hashing_baseline_path="tests/fixtures/eval/baselines/hashing.json",
         production_baseline_path="tests/fixtures/eval/baselines/siliconflow.json",
         informational_suites=informational_suites,
+        accepted_suites=accepted_suites,
     )
 
     assert report.status == "passed"
@@ -118,7 +121,8 @@ def test_production_pilot_informational_diagnosis_can_pass_stage(tmp_path):
     assert stage.detail["highest_severity"] == 3
     assert stage.detail["highest_blocking_severity"] == 0
     assert stage.detail["informational_count"] == len(informational_suites)
-    assert all(suite["informational"] for suite in stage.detail["top_suites"])
+    assert stage.detail["accepted_count"] == len(accepted_suites)
+    assert all(suite["informational"] or suite["accepted"] for suite in stage.detail["top_suites"])
 
 
 def test_production_pilot_requires_both_baselines_for_diagnosis(tmp_path):

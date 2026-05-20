@@ -89,10 +89,10 @@ def test_diagnose_reauthoring_outputs_sorted_json_and_markdown(tmp_path):
     assert body["summary"]["status_counts"] == {"investigate": 1, "ok": 1}
     assert [suite["suite"] for suite in body["suites"]] == ["bad.jsonl", "ok.jsonl"]
     markdown = report.to_markdown()
-    assert "| `bad.jsonl` | `investigate` | 3 | no |" in markdown
+    assert "| `bad.jsonl` | `investigate` | 3 | no | no |" in markdown
 
 
-def test_diagnose_reauthoring_marks_informational_without_hiding_status(tmp_path):
+def test_diagnose_reauthoring_marks_policies_without_hiding_status(tmp_path):
     hashing = tmp_path / "hashing.json"
     production = tmp_path / "siliconflow.json"
     _write_baseline(
@@ -101,6 +101,7 @@ def test_diagnose_reauthoring_marks_informational_without_hiding_status(tmp_path
         {
             "bad.jsonl": {"precision_at_k": 0.5, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
             "ok.jsonl": {"precision_at_k": 0.5, "recall_at_k": 0.9, "mrr": 0.9, "hit_at_k": 1.0},
+            "reviewed.jsonl": {"precision_at_k": 0.5, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
         },
     )
     _write_baseline(
@@ -109,20 +110,32 @@ def test_diagnose_reauthoring_marks_informational_without_hiding_status(tmp_path
         {
             "bad.jsonl": {"precision_at_k": 0.1, "recall_at_k": 0.3, "mrr": 0.2, "hit_at_k": 0.3},
             "ok.jsonl": {"precision_at_k": 0.5, "recall_at_k": 0.88, "mrr": 0.88, "hit_at_k": 1.0},
+            "reviewed.jsonl": {"precision_at_k": 0.2, "recall_at_k": 0.7, "mrr": 0.7, "hit_at_k": 1.0},
         },
     )
 
-    report = der.diagnose_reauthoring(hashing, production, informational_suites=["bad.jsonl"])
+    report = der.diagnose_reauthoring(
+        hashing,
+        production,
+        informational_suites=["bad.jsonl"],
+        accepted_suites=["reviewed.jsonl"],
+    )
     body = report.to_dict()
     bad = next(suite for suite in body["suites"] if suite["suite"] == "bad.jsonl")
+    reviewed = next(suite for suite in body["suites"] if suite["suite"] == "reviewed.jsonl")
 
     assert bad["status"] == "investigate"
     assert bad["severity"] == 3
     assert bad["informational"] is True
+    assert bad["accepted"] is False
+    assert reviewed["status"] == "reauthor"
+    assert reviewed["severity"] == 2
+    assert reviewed["accepted"] is True
     assert body["summary"]["highest_severity"] == 3
     assert body["summary"]["highest_blocking_severity"] == 0
     assert body["summary"]["blocking_status_counts"] == {"ok": 1}
     assert body["summary"]["informational_suites"] == ["bad.jsonl"]
+    assert body["summary"]["accepted_suites"] == ["reviewed.jsonl"]
     assert report.to_stage_detail()["highest_blocking_severity"] == 0
 
 
@@ -141,6 +154,8 @@ def test_cli_writes_markdown_file(tmp_path, capsys):
         str(production),
         "--informational-suites",
         "suite.jsonl",
+        "--accepted-suites",
+        "suite.jsonl",
         "--format",
         "markdown",
         "--output",
@@ -151,7 +166,7 @@ def test_cli_writes_markdown_file(tmp_path, capsys):
     assert capsys.readouterr().out == ""
     rendered = output.read_text(encoding="utf-8")
     assert rendered.startswith("# Eval Reauthoring Diagnosis")
-    assert "| `suite.jsonl` | `ok` | 0 | yes |" in rendered
+    assert "| `suite.jsonl` | `ok` | 0 | yes | yes |" in rendered
 
 
 def test_cli_returns_two_for_invalid_input(tmp_path, capsys):

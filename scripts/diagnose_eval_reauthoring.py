@@ -35,11 +35,13 @@ def diagnose_reauthoring(
     production_baseline: str | Path = DEFAULT_PRODUCTION_BASELINE,
     *,
     informational_suites: Iterable[str] | None = None,
+    accepted_suites: Iterable[str] | None = None,
 ) -> DiagnosisReport:
     return _diagnose_reauthoring(
         hashing_baseline,
         production_baseline,
         informational_suites=informational_suites,
+        accepted_suites=accepted_suites,
     )
 
 
@@ -66,6 +68,11 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Comma-separated suite filenames whose diagnosis is informational and does not count as blocking.",
     )
+    parser.add_argument(
+        "--accepted-suites",
+        default="",
+        help="Comma-separated suite filenames whose diagnosis has been reviewed and accepted as non-blocking.",
+    )
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -75,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             args.hashing_baseline,
             args.production_baseline,
             informational_suites=_split_csv(args.informational_suites),
+            accepted_suites=_split_csv(args.accepted_suites),
         )
         rendered = render_report(report, fmt=args.format)
         if args.output is not None:

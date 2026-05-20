@@ -20,6 +20,7 @@ class SuiteDiagnosis:
     recommendation: str = ""
     reasons: list[str] = field(default_factory=list)
     informational: bool = False
+    accepted: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,6 +28,7 @@ class SuiteDiagnosis:
             "status": self.status,
             "severity": self.severity,
             "informational": self.informational,
+            "accepted": self.accepted,
             "hashing": dict(self.hashing),
             "production": dict(self.production),
             "delta": dict(self.delta),
@@ -40,6 +42,7 @@ class SuiteDiagnosis:
             "status": self.status,
             "severity": self.severity,
             "informational": self.informational,
+            "accepted": self.accepted,
             "recommendation": self.recommendation,
             "reasons": list(self.reasons),
         }
@@ -58,11 +61,14 @@ class DiagnosisReport:
         counts: dict[str, int] = {}
         blocking_counts: dict[str, int] = {}
         informational_suites: list[str] = []
+        accepted_suites: list[str] = []
         for suite in self.suites:
             counts[suite.status] = counts.get(suite.status, 0) + 1
             if suite.informational:
                 informational_suites.append(suite.suite)
-            else:
+            if suite.accepted:
+                accepted_suites.append(suite.suite)
+            if not suite.informational and not suite.accepted:
                 blocking_counts[suite.status] = blocking_counts.get(suite.status, 0) + 1
         return {
             "suite_count": len(self.suites),
@@ -70,11 +76,13 @@ class DiagnosisReport:
             "highest_severity": max((suite.severity for suite in self.suites), default=0),
             "blocking_status_counts": blocking_counts,
             "highest_blocking_severity": max(
-                (suite.severity for suite in self.suites if not suite.informational),
+                (suite.severity for suite in self.suites if not suite.informational and not suite.accepted),
                 default=0,
             ),
             "informational_count": len(informational_suites),
             "informational_suites": informational_suites,
+            "accepted_count": len(accepted_suites),
+            "accepted_suites": accepted_suites,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,6 +109,8 @@ class DiagnosisReport:
             "highest_blocking_severity": summary["highest_blocking_severity"],
             "informational_count": summary["informational_count"],
             "informational_suites": list(summary["informational_suites"]),
+            "accepted_count": summary["accepted_count"],
+            "accepted_suites": list(summary["accepted_suites"]),
             "top_suites": [suite.to_summary_dict() for suite in self.suites[:limit]],
         }
 
@@ -115,8 +125,8 @@ class DiagnosisReport:
             f"- Production baseline: `{self.production_baseline}`",
             f"- Embedder comparison: `{self.production_embedder}` minus `{self.hashing_embedder}`",
             "",
-            "| Suite | Status | Severity | Informational | Recall Δ | MRR Δ | Hit Δ | Recommendation |",
-            "| --- | --- | ---: | --- | ---: | ---: | ---: | --- |",
+            "| Suite | Status | Severity | Informational | Accepted | Recall Δ | MRR Δ | Hit Δ | Recommendation |",
+            "| --- | --- | ---: | --- | --- | ---: | ---: | ---: | --- |",
         ]
         for suite in self.suites:
             lines.append(
@@ -125,6 +135,7 @@ class DiagnosisReport:
                 f"`{suite.status}` | "
                 f"{suite.severity} | "
                 f"{'yes' if suite.informational else 'no'} | "
+                f"{'yes' if suite.accepted else 'no'} | "
                 f"{_format_delta(suite.delta.get('recall_at_k'))} | "
                 f"{_format_delta(suite.delta.get('mrr'))} | "
                 f"{_format_delta(suite.delta.get('hit_at_k'))} | "
@@ -142,6 +153,7 @@ def diagnose_reauthoring(
     production_baseline: str | Path,
     *,
     informational_suites: Iterable[str] | None = None,
+    accepted_suites: Iterable[str] | None = None,
 ) -> DiagnosisReport:
     hashing_path = Path(hashing_baseline)
     production_path = Path(production_baseline)
@@ -159,8 +171,16 @@ def diagnose_reauthoring(
         for suite in suite_names
     ]
     informational = _normalize_suite_names(informational_suites)
-    if informational:
-        diagnoses = [replace(diagnosis, informational=diagnosis.suite in informational) for diagnosis in diagnoses]
+    accepted = _normalize_suite_names(accepted_suites)
+    if informational or accepted:
+        diagnoses = [
+            replace(
+                diagnosis,
+                informational=diagnosis.suite in informational,
+                accepted=diagnosis.suite in accepted,
+            )
+            for diagnosis in diagnoses
+        ]
     diagnoses.sort(key=lambda item: (-item.severity, item.suite))
     return DiagnosisReport(
         hashing_baseline=str(hashing_path),

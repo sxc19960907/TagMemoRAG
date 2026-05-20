@@ -54,8 +54,11 @@ Use `--informational-suites` when you want the report to keep known stress-test 
 ```bash
 uv run python scripts/diagnose_eval_reauthoring.py \
   --format markdown \
-  --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl
+  --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl \
+  --accepted-suites product_manuals.jsonl,mixed_language.jsonl,tag_rerank_edge.jsonl
 ```
+
+Use `--accepted-suites` only for suites that already had human review and are good enough for the current pilot. It does not rewrite the diagnosis to `ok`; it only removes accepted divergence from blocking summaries.
 
 The diagnostic compares `baselines/hashing.json` with `baselines/siliconflow.json`, sorts suites by severity, and recommends `ok`, `monitor`, `reauthor`, or `investigate`. It is intentionally offline: it reads only committed aggregate baseline metrics and does not call SiliconFlow, refresh baselines, rewrite fixtures, or promote SiliconFlow to a CI gate.
 
