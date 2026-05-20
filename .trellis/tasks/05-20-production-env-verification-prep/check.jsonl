@@ -1,0 +1,3 @@
+{"file": "docs/production-environment-verification.md", "reason": "New checklist must be complete, safe, and accurate."}
+{"file": "docs/production-deployment-operations.md", "reason": "Guide link must point to the new checklist."}
+{"file": "README.md", "reason": "Top-level documentation link should mention the new verification guide."}

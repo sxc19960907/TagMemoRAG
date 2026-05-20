@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Production pilot and safe report constraints."}
+{"file": "docs/production-deployment-operations.md", "reason": "Main operator guide to link and align with verification checklist."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Pilot report command and eval diagnosis policy."}
+{"file": "README.md", "reason": "Top-level docs index and deployment section."}
