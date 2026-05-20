@@ -846,3 +846,36 @@ Added an offline eval case-review summarizer that converts full eval JSON report
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Pilot eval gate diagnosis
+
+**Date**: 2026-05-20
+**Task**: Pilot eval gate diagnosis
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added optional hashing-vs-production baseline diagnosis to pilot reports, shared eval reauthoring diagnosis code between scripts and pilot, CLI baseline flags, bounded warning-stage output, docs, and focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `856f09e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
