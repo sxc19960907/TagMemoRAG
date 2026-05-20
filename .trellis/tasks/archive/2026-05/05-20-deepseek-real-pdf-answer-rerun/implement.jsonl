@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Provider integration, Qdrant, and report sanitization contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Answer failures should be structured and safe."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Live-provider validation must not log or commit secrets/raw text."}
