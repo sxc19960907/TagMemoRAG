@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 26
+- **Total Sessions**: 27
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~947 | Active |
+| `journal-1.md` | ~980 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 27 | 2026-05-20 | Final integration verification | `b21c2b6` | `feat/wave-phase1-cooccurrence-spike` |
 | 26 | 2026-05-20 | Pilot eval accepted suite policy | `4f648a8` | `feat/wave-phase1-cooccurrence-spike` |
 | 25 | 2026-05-20 | Pilot eval informational policy | `0d86391` | `feat/wave-phase1-cooccurrence-spike` |
 | 24 | 2026-05-20 | Pilot eval gate diagnosis | `856f09e` | `feat/wave-phase1-cooccurrence-spike` |

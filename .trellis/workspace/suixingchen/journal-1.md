@@ -945,3 +945,36 @@ Added accepted-suite policy to eval reauthoring diagnosis and pilot reports, exp
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: Final integration verification
+
+**Date**: 2026-05-20
+**Task**: Final integration verification
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Ran the repository CI-equivalent unit/e2e pytest suite after pilot and eval policy work, confirmed 934 tests passed, ran git diff --check, and recorded final handoff status.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b21c2b6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
