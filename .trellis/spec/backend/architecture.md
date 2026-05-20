@@ -287,6 +287,7 @@ class Reranker(Protocol):
 - `/retrieve` integration: when reranker active, `execute_search` top_k expanded to `rerank_candidates_n`; dispatcher reorders; `build_retrieve_response` truncates to user's `token_budget`. `/search` (legacy) unchanged.
 - T2 plan log `rerank_json` column populated with `vendor_used / calibrator / latency_ms / cache_status / top_n_returned / truncated_count / warnings`.
 - Feature flag `Settings.reranker.enabled=False` keeps T3 dormant on production until ops flips it. Cleanly reverts to T2 behavior.
+- Production pilot note (2026-05-20): `QueryPlan` persists only `query_hash`, so API/retrieval code must pass the runtime raw question to `RerankerDispatcher.rerank(..., query_text=...)` in memory. Do not add raw query text to `QueryPlan` or plan-log storage to satisfy vendor rerank calls.
 
 ### A4. IndexGeneration  🚧
 
@@ -401,6 +402,7 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 - Providers implement the vendor-neutral `AnswerGenerator` protocol. T6 ships a deterministic noop provider and an OpenAI-compatible chat-completions HTTP provider.
 - Prompt-injection defense is role separation plus structured, quoted retrieval context. Retrieved manual text is always untrusted source data and may not override system instructions.
 - Citation validation drops generated citations that are not present in the retrieved citation set and adds `answer_dropped_invalid_citations`.
+- Production pilot note (2026-05-20): OpenAI-compatible providers must treat HTTP 200 responses with empty `message.content` as generation failures. Reasoning-style models may spend low output budgets on hidden/reasoning content; profile defaults should allocate enough `answer_token_budget` for non-empty final content.
 
 **Eval stance.** T6 uses deterministic unit/API contract tests and citation coverage checks. It deliberately does not use LLM-as-judge for regression gating.
 
