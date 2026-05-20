@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Answer citation compliance and provider validation contracts."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Live-provider verification must avoid raw answer text and secrets."}
