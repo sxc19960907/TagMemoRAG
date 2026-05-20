@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Production pilot report contract and sanitization constraints."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Policy flows from CLI to shared diagnosis summary to pilot aggregation."}
+{"file": ".trellis/tasks/archive/2026-05/05-17-eval-fixture-rewrite-phase-b/research/phase-b-decision-summary.md", "reason": "Source evidence for which suites are stress-test informational vs reviewed/accepted."}
+{"file": ".trellis/tasks/archive/2026-05/05-20-pilot-eval-informational-policy/design.md", "reason": "Preceding policy extension that introduced informational suite semantics."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Operator-facing pilot command docs need the new policy example."}
