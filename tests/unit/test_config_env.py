@@ -123,6 +123,60 @@ answer:
     assert body["probes"][0]["error"]["reason"] == "required_env_var_missing"
 
 
+def test_provider_probe_answer_uses_cited_readiness_context(tmp_path, monkeypatch):
+    from tagmemorag import provider_probe
+    from tagmemorag.answer.base import AnswerCitation, AnswerGeneration
+
+    captured = {}
+
+    class FakeGenerator:
+        def __init__(self, cfg):
+            captured["model_id"] = cfg.answer.model_id
+
+        def generate(self, context):
+            captured["context"] = context
+            return AnswerGeneration(
+                text="Ready [cit_probe].",
+                citations=(AnswerCitation("cit_probe"),),
+                model_id="answer-model",
+            )
+
+    monkeypatch.setenv("TMR_ANSWER_KEY", "secret-value-not-in-output")
+    monkeypatch.setattr(provider_probe, "OpenAICompatibleAnswerGenerator", FakeGenerator)
+    config = tmp_path / "answer.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: answer-model
+  api_key_env: TMR_ANSWER_KEY
+""",
+        encoding="utf-8",
+    )
+
+    report = run_provider_probe(str(config), selected=["answer"])
+
+    body = report.to_dict()
+    assert body["status"] == "passed"
+    assert body["probes"][0]["detail"]["text_length"] == len("Ready [cit_probe].")
+    assert body["probes"][0]["detail"]["citation_count"] == 1
+    context = captured["context"]
+    assert context.prompt.allowed_citation_ids == frozenset({"cit_probe"})
+    assert context.retrieve_payload["citations"] == [{"citation_id": "cit_probe"}]
+    assert context.max_output_tokens == 256
+    assert "secret-value-not-in-output" not in str(body)
+
+
 def test_provider_probe_qdrant_fake_passes(tmp_path, monkeypatch):
     from tagmemorag import provider_probe
 
