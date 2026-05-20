@@ -12,6 +12,16 @@ if str(SCRIPTS_ROOT) not in sys.path:
 import run_production_provider_smoke as runner  # noqa: E402
 
 
+def _clear_provider_env(monkeypatch):
+    for name in (
+        "TAGMEMORAG__MODEL__PROVIDER",
+        "TAGMEMORAG__RERANKER__ENABLED",
+        "TAGMEMORAG__ANSWER__ENABLED",
+        "TAGMEMORAG__MANUAL_LIBRARY__BLOB_BACKEND",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _env() -> dict[str, str]:
     return {
         "SILICONFLOW_API_KEY": "sf-secret",
@@ -21,7 +31,8 @@ def _env() -> dict[str, str]:
     }
 
 
-def test_required_env_failure_is_sanitized():
+def test_required_env_failure_is_sanitized(monkeypatch):
+    _clear_provider_env(monkeypatch)
     result = runner.run_operator_smoke(
         config_path="examples/config/production-provider-verification.yaml",
         env={},
@@ -45,7 +56,8 @@ def test_required_env_failure_is_sanitized():
     assert "tagmemorag-secret" not in serialized
 
 
-def test_check_only_skips_docker_and_bucket_when_requested():
+def test_check_only_skips_docker_and_bucket_when_requested(monkeypatch):
+    _clear_provider_env(monkeypatch)
     result = runner.run_operator_smoke(
         config_path="examples/config/production-provider-verification.yaml",
         env=_env(),
@@ -64,6 +76,7 @@ def test_check_only_skips_docker_and_bucket_when_requested():
 
 
 def test_runner_builds_reset_smoke_command(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
     calls = []
 
     class Completed:

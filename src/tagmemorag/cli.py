@@ -58,6 +58,14 @@ from .production_provider_smoke import (
     run_production_provider_smoke,
     write_provider_smoke_report,
 )
+from .production_provider_verify import (
+    DEFAULT_VERIFY_MANUAL,
+    DEFAULT_VERIFY_OUTPUT,
+    DEFAULT_VERIFY_QUESTION,
+    DEFAULT_VERIFY_WORKDIR,
+    run_production_provider_verify,
+    write_verify_report,
+)
 from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
 from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 
@@ -262,6 +270,37 @@ def main(argv: list[str] | None = None) -> int:
     production_provider_smoke.add_argument("--answer-top-k", type=int, default=6)
     production_provider_smoke.add_argument("--answer-source-k", type=int, default=6)
     production_provider_smoke.add_argument("--reset-qdrant-collection", action="store_true", default=False)
+    production_provider_verify = production_provider_sub.add_parser("verify")
+    production_provider_verify.add_argument("--level", choices=["smoke", "pilot"], default="smoke")
+    production_provider_verify.add_argument("--config", default=DEFAULT_PROVIDER_SMOKE_CONFIG)
+    production_provider_verify.add_argument("--kb", default="default")
+    production_provider_verify.add_argument("--manual", action="append", default=[], help="Manual source document path. Repeat for many files.")
+    production_provider_verify.add_argument("--metadata", default=None)
+    production_provider_verify.add_argument("--metadata-format", choices=["json", "jsonl", "csv"], default="json")
+    production_provider_verify.add_argument("--workdir", default=DEFAULT_VERIFY_WORKDIR)
+    production_provider_verify.add_argument("--output", default=DEFAULT_VERIFY_OUTPUT)
+    production_provider_verify.add_argument("--format", choices=["json", "markdown"], default="json")
+    production_provider_verify.add_argument("--verify-output", default=None)
+    production_provider_verify.add_argument("--verify-format", choices=["json", "markdown"], default="json")
+    production_provider_verify.add_argument("--question", default=DEFAULT_VERIFY_QUESTION)
+    production_provider_verify.add_argument("--skip-docker", action="store_true", default=False)
+    production_provider_verify.add_argument("--skip-bucket", action="store_true", default=False)
+    production_provider_verify.add_argument("--no-reset-qdrant", action="store_true", default=False)
+    production_provider_verify.add_argument("--check-only", action="store_true", default=False)
+    production_provider_verify.add_argument("--pilot-suite", default=DEFAULT_PILOT_SUITE)
+    production_provider_verify.add_argument("--pilot-docs", default=DEFAULT_PILOT_DOCS)
+    production_provider_verify.add_argument("--pilot-workdir", default=None)
+    production_provider_verify.add_argument("--pilot-output", default=None)
+    production_provider_verify.add_argument("--pilot-format", choices=["json", "markdown"], default="json")
+    production_provider_verify.add_argument("--pilot-top-k", type=int, default=None)
+    production_provider_verify.add_argument("--pilot-source-k", type=int, default=None)
+    production_provider_verify.add_argument("--pilot-min-recall-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_recall_at_k)
+    production_provider_verify.add_argument("--pilot-min-mrr", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_mrr)
+    production_provider_verify.add_argument("--pilot-min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
+    production_provider_verify.add_argument("--pilot-hashing-baseline", default=None)
+    production_provider_verify.add_argument("--pilot-production-baseline", default=None)
+    production_provider_verify.add_argument("--pilot-informational-suites", default="")
+    production_provider_verify.add_argument("--pilot-accepted-suites", default="")
 
     readiness = sub.add_parser("readiness")
     readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
@@ -726,6 +765,52 @@ def main(argv: list[str] | None = None) -> int:
             write_provider_smoke_report(report, args.output, fmt=args.format)
         else:
             if args.format == "markdown":
+                print(report.to_markdown(), end="")
+            else:
+                print(report.to_json())
+        return 1 if report.status == "failed" else 0
+    if args.command == "production-provider" and args.production_provider_command == "verify":
+        thresholds = EvalThresholds(
+            min_recall_at_k=args.pilot_min_recall_at_k,
+            min_mrr=args.pilot_min_mrr,
+            min_hit_at_k=args.pilot_min_hit_at_k,
+        )
+        try:
+            report = run_production_provider_verify(
+                level=args.level,
+                config_path=args.config,
+                kb_name=args.kb,
+                manual_paths=args.manual or [DEFAULT_VERIFY_MANUAL],
+                metadata_path=args.metadata,
+                metadata_format=args.metadata_format,
+                workdir=args.workdir,
+                output_path=args.output,
+                output_format=args.format,
+                question=args.question,
+                start_docker=not args.skip_docker,
+                ensure_bucket=not args.skip_bucket,
+                reset_qdrant=not args.no_reset_qdrant,
+                check_only=args.check_only,
+                pilot_suite_path=args.pilot_suite,
+                pilot_docs_path=args.pilot_docs,
+                pilot_workdir=args.pilot_workdir,
+                pilot_output_path=args.pilot_output,
+                pilot_output_format=args.pilot_format,
+                pilot_top_k=args.pilot_top_k,
+                pilot_source_k=args.pilot_source_k,
+                pilot_thresholds=thresholds,
+                pilot_hashing_baseline_path=args.pilot_hashing_baseline,
+                pilot_production_baseline_path=args.pilot_production_baseline,
+                pilot_informational_suites=_split_csv(args.pilot_informational_suites),
+                pilot_accepted_suites=_split_csv(args.pilot_accepted_suites),
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"production-provider verify error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        if args.verify_output:
+            write_verify_report(report, args.verify_output, fmt=args.verify_format)
+        if not args.verify_output:
+            if args.verify_format == "markdown":
                 print(report.to_markdown(), end="")
             else:
                 print(report.to_json())

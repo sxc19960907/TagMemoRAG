@@ -1459,3 +1459,36 @@ Ran the one-command production-provider smoke runner against local Docker Qdrant
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: Add production-provider unified verify CLI
+
+**Date**: 2026-05-20
+**Task**: Add production-provider unified verify CLI
+**Branch**: `codex/production-provider-unified-verify-cli`
+
+### Summary
+
+Added the canonical production-provider verify command with smoke and pilot levels, shared sanitized operator orchestration, compatibility delegation for the legacy smoke script, runbook updates, and focused tests. Full quality command passed: uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7b49833` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
