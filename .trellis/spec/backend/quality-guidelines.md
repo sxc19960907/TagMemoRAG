@@ -199,6 +199,58 @@ detail = {
 }
 ```
 
+## Scenario: Qdrant Large Vector Upsert Hardening
+
+### 1. Scope / Trigger
+
+- Trigger: Qdrant-backed rebuilds can exceed the server HTTP JSON payload limit when one upsert contains hundreds of high-dimensional vectors.
+
+### 2. Signatures
+
+- `QdrantVectorStore.update(ids: np.ndarray, vecs: np.ndarray, payloads: list[dict[str, Any]] | None = None) -> None`
+- `QdrantVectorStore.add(ids: np.ndarray, vecs: np.ndarray, payloads: list[dict[str, Any]] | None = None) -> None`
+
+### 3. Contracts
+
+- Qdrant vector writes must be split into bounded upsert calls while preserving node id order and payload alignment.
+- Dimension checks, id/vector count checks, and payload count checks run before any upsert batch is sent.
+- Payloads must continue through `_safe_payload`; raw chunk text and vectors must not be stored as Qdrant payload fields.
+- Batch sizing is an implementation limit, not user-facing config, unless a future task proves operators need a setting.
+
+### 4. Validation & Error Matrix
+
+- Oversized vector set -> multiple upsert calls; rebuild can continue if all batches succeed.
+- Any batch failure -> `STORAGE_LOAD_FAILED` with collection and safe provider error detail; active graph remains unchanged.
+- Payload count mismatch -> `STORAGE_SCHEMA_MISMATCH` before writing.
+- Vector dimension mismatch -> `STORAGE_SCHEMA_MISMATCH` before writing.
+
+### 5. Good/Base/Bad Cases
+
+- Good: 423 vectors with 4096 dimensions are written as several smaller Qdrant upserts.
+- Base: small vector sets still write successfully; callers do not need to know batching occurred.
+- Bad: increasing Qdrant server request limits is the only fix, or storing fewer payload safety fields to squeeze under the limit.
+
+### 6. Tests Required
+
+- Unit test proves a large `QdrantVectorStore.update` call is split into ordered upsert batches.
+- Existing Qdrant save/load, inspect, and incremental sync tests remain green.
+- Real-provider pilot should inspect Qdrant point count and missing-vector count after rebuild.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+client.upsert(collection_name=collection, points=all_points)
+```
+
+#### Correct
+
+```python
+for batch in batches:
+    client.upsert(collection_name=collection, points=batch)
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger

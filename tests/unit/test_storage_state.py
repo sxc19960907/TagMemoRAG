@@ -527,6 +527,28 @@ def test_build_save_load_kb_with_qdrant_vectors(monkeypatch, tmp_path, fake_embe
     np.testing.assert_array_equal(loaded.vectors, state.vectors)
 
 
+def test_qdrant_vector_store_splits_large_upserts():
+    FakeQdrantClient.reset()
+    store = QdrantVectorStore(
+        kb_name="default",
+        dim=4,
+        url="http://localhost:6333",
+        collection_prefix="test",
+        client=FakeQdrantClient(),
+    )
+    ids = np.arange(260, dtype=np.int64)
+    vecs = np.ones((260, 4), dtype=np.float32)
+
+    store.update(ids, vecs)
+
+    assert [call[1] for call in FakeQdrantClient.upsert_calls] == [
+        list(range(128)),
+        list(range(128, 256)),
+        list(range(256, 260)),
+    ]
+    assert sorted(FakeQdrantClient.collections["test_default"]) == list(range(260))
+
+
 def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fake_embedder):
     class FakePdfPage:
         def extract_text(self):
