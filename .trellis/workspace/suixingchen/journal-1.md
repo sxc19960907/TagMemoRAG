@@ -1558,3 +1558,36 @@ Added the primary MVP handoff guide covering status, prerequisites, live-provide
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: Clean environment delivery verification
+
+**Date**: 2026-05-20
+**Task**: Clean environment delivery verification
+**Branch**: `codex/clean-env-delivery-verification`
+
+### Summary
+
+Verified the MVP delivery guide from isolated .tmp/clean-env-delivery runtime paths. Local readiness smoke passed, command help paths rendered, and unified live-provider smoke passed with Qdrant parity 185/185, missing vectors 0, and DeepSeek answer smoke with 5 citations. Recorded sanitized evidence and noted remaining Docker diagnostics/live pilot follow-ups.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `20eaab9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

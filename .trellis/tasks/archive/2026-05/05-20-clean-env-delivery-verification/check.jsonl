@@ -1,0 +1,1 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Clean-run report must stay sanitized and omit sensitive values plus runtime payload content."}
