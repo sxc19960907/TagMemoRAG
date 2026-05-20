@@ -1,0 +1,2 @@
+{"file": "docs/production-provider-smoke-runbook.md", "reason": "Operator runner prerequisites and command behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Live reports must stay sanitized and avoid committing runtime artifacts."}
