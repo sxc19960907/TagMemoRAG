@@ -978,3 +978,36 @@ Ran the repository CI-equivalent unit/e2e pytest suite after pilot and eval poli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: Production environment verification prep
+
+**Date**: 2026-05-20
+**Task**: Production environment verification prep
+**Branch**: `codex/production-env-verification-prep`
+
+### Summary
+
+Added a production environment verification checklist covering safe evidence retention, env-var-only secrets, static config validation, explicit live provider probes, readiness smoke, pilot reports, service checks, and backend inspections.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d14e23e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
