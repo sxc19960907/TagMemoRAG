@@ -813,3 +813,36 @@ Added an offline eval reauthoring diagnostic script that compares hashing and Si
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: Eval case review summary
+
+**Date**: 2026-05-20
+**Task**: Eval case review summary
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added an offline eval case-review summarizer that converts full eval JSON reports into bounded JSON/Markdown review queues, redacts queries by default, documents the aggregate-to-case workflow, and covers the script with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fcf493b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
