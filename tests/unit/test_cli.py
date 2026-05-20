@@ -210,6 +210,39 @@ def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):
     assert body["status"] == "passed"
 
 
+def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    seen = {}
+
+    def _fake_pilot(**kwargs):
+        seen.update(kwargs)
+        return ProductionPilotReport(
+            status="warning",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir=str(tmp_path / "pilot"),
+            stages=[PilotStage("eval_reauthoring_diagnosis", "warning", {"highest_severity": 3})],
+            next_steps=["Review warning stages."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+
+    exit_code = cli.main([
+        "pilot",
+        "run",
+        "--hashing-baseline",
+        "hashing.json",
+        "--production-baseline",
+        "siliconflow.json",
+    ])
+
+    assert exit_code == 0
+    assert seen["hashing_baseline_path"] == "hashing.json"
+    assert seen["production_baseline_path"] == "siliconflow.json"
+
+
 def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
     from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
 

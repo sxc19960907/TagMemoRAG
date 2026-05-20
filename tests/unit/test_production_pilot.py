@@ -65,6 +65,45 @@ def test_production_pilot_runs_local_profile_and_sanitizes_eval(tmp_path):
     assert "Authorization" not in serialized
 
 
+def test_production_pilot_includes_eval_reauthoring_warning_stage(tmp_path):
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        hashing_baseline_path="tests/fixtures/eval/baselines/hashing.json",
+        production_baseline_path="tests/fixtures/eval/baselines/siliconflow.json",
+    )
+
+    assert report.status == "warning"
+    stage = next(stage for stage in report.stages if stage.name == "eval_reauthoring_diagnosis")
+    assert stage.status == "warning"
+    assert stage.detail["schema_version"] == "eval_reauthoring_diagnosis.v1"
+    assert stage.detail["highest_severity"] == 3
+    assert stage.detail["status_counts"]["investigate"] >= 1
+    assert len(stage.detail["top_suites"]) <= 5
+    serialized = json.dumps(stage.to_dict(), ensure_ascii=False)
+    assert "蒸汽很小怎么办" not in serialized
+    assert "actual_top_k" not in serialized
+
+
+def test_production_pilot_requires_both_baselines_for_diagnosis(tmp_path):
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        hashing_baseline_path="tests/fixtures/eval/baselines/hashing.json",
+    )
+
+    assert report.status == "failed"
+    stage = next(stage for stage in report.stages if stage.name == "eval_reauthoring_diagnosis")
+    assert stage.status == "failed"
+    assert stage.error["reason"] == "both_hashing_and_production_baselines_required"
+
+
 def test_production_pilot_failure_aggregates_eval_threshold(tmp_path):
     report = run_production_pilot(
         config_path=_local_config(tmp_path),

@@ -260,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     pilot_run.add_argument("--min-recall-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_recall_at_k)
     pilot_run.add_argument("--min-mrr", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_mrr)
     pilot_run.add_argument("--min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
+    pilot_run.add_argument("--hashing-baseline", default=None)
+    pilot_run.add_argument("--production-baseline", default=None)
 
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
@@ -688,6 +690,8 @@ def main(argv: list[str] | None = None) -> int:
                 top_k=args.top_k,
                 source_k=args.source_k,
                 thresholds=thresholds,
+                hashing_baseline_path=args.hashing_baseline,
+                production_baseline_path=args.production_baseline,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)

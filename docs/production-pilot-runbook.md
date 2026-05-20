@@ -14,6 +14,20 @@ python -m tagmemorag pilot run \
   --workdir .tmp/production-pilot
 ```
 
+Attach the aggregate production-embedder diagnosis when reviewing pilot readiness:
+
+```bash
+python -m tagmemorag pilot run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
+  --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
+  --workdir .tmp/production-pilot
+```
+
+When the diagnosis stage finds `monitor`, `reauthor`, or `investigate` suites, the pilot status becomes `warning`, not `failed`. Treat that as a review gate: decide whether the affected suites are acceptable for the pilot profile or need case-level inspection first.
+
 To retain a reviewable report:
 
 ```bash
@@ -34,6 +48,7 @@ The command runs:
 | `provider_probe` | Probe configured remote providers through the existing explicit live-probe contract. | `failed` fails the pilot; all-skipped is acceptable for local/offline profiles. |
 | `readiness_smoke` | Build/retrieve/answer/queryplan/bundle composition with deterministic local data. | Must pass. |
 | `eval` | Retrieval fixture run with sanitized summary metrics. | Must pass the pilot thresholds. |
+| `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Warnings require reviewer signoff; invalid baseline input fails. |
 
 ## Thresholds
 

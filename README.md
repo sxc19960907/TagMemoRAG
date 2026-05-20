@@ -773,6 +773,8 @@ python -m tagmemorag pilot run \
   --config examples/config/local-hashing-npz.yaml \
   --suite tests/fixtures/eval/coffee.jsonl \
   --docs tests/fixtures \
+  --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
+  --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
   --workdir .tmp/production-pilot \
   --output .tmp/production-pilot/report.json
 ```

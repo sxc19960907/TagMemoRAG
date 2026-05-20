@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and architecture entry point."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Report privacy and pilot command contract."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Shared module vs script dependency boundary."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index for reuse and cross-layer checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicated diagnosis logic between script and pilot."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Map CLI args to pilot stage report."}

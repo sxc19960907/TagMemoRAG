@@ -184,7 +184,7 @@ Bundles include safe manifests, checksums, metadata records, and source bytes. T
 1. Configure storage root and model/provider settings.
 2. Run `python -m tagmemorag config validate --config config.yaml`.
 3. Run `python -m tagmemorag readiness smoke` locally for MVP composition.
-4. Run `python -m tagmemorag pilot run --config config.yaml --suite tests/fixtures/eval/coffee.jsonl --docs tests/fixtures --output .tmp/production-pilot/report.json` and retain the report.
+4. Run `python -m tagmemorag pilot run --config config.yaml --suite tests/fixtures/eval/coffee.jsonl --docs tests/fixtures --hashing-baseline tests/fixtures/eval/baselines/hashing.json --production-baseline tests/fixtures/eval/baselines/siliconflow.json --output .tmp/production-pilot/report.json` and retain the report.
 5. Start the service.
 6. Confirm `/health` and `/ready`.
 7. Build or restore a KB.

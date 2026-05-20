@@ -11,6 +11,7 @@ from .config_validation import ConfigValidationReport, validate_config
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.report import EvalReport
 from .eval.runner import run_eval
+from .eval_reauthoring import DiagnosisInputError, DiagnosisReport, diagnose_reauthoring
 from .provider_probe import ProviderProbeReport, run_provider_probe
 from .readiness import SmokeReport, run_readiness_smoke
 
@@ -98,6 +99,8 @@ def run_production_pilot(
     top_k: int | None = None,
     source_k: int | None = None,
     thresholds: EvalThresholds = DEFAULT_PILOT_THRESHOLDS,
+    hashing_baseline_path: str | Path | None = None,
+    production_baseline_path: str | Path | None = None,
 ) -> ProductionPilotReport:
     pilot_workdir = _pilot_workdir(workdir)
     stages: list[PilotStage] = []
@@ -141,6 +144,13 @@ def run_production_pilot(
                 {"type": type(exc).__name__, "reason": _safe_reason(str(exc))},
             )
         )
+
+    diagnosis_stage = _optional_diagnosis_stage(
+        hashing_baseline_path=hashing_baseline_path,
+        production_baseline_path=production_baseline_path,
+    )
+    if diagnosis_stage is not None:
+        stages.append(diagnosis_stage)
 
     status = _aggregate_status(stages)
     return ProductionPilotReport(
@@ -225,6 +235,44 @@ def _eval_stage(report: EvalReport) -> PilotStage:
         },
         _first_error([{"error": {"type": "EvalThreshold", "reason": "; ".join(case.failures)}} for case in report.cases if case.failures]),
     )
+
+
+def _optional_diagnosis_stage(
+    *,
+    hashing_baseline_path: str | Path | None,
+    production_baseline_path: str | Path | None,
+) -> PilotStage | None:
+    if hashing_baseline_path is None and production_baseline_path is None:
+        return None
+    if hashing_baseline_path is None or production_baseline_path is None:
+        return PilotStage(
+            "eval_reauthoring_diagnosis",
+            "failed",
+            {
+                "hashing_baseline_supplied": hashing_baseline_path is not None,
+                "production_baseline_supplied": production_baseline_path is not None,
+            },
+            {"type": "InvalidPilotInput", "reason": "both_hashing_and_production_baselines_required"},
+        )
+    try:
+        diagnosis = diagnose_reauthoring(hashing_baseline_path, production_baseline_path)
+    except DiagnosisInputError as exc:
+        return PilotStage(
+            "eval_reauthoring_diagnosis",
+            "failed",
+            {
+                "hashing_baseline": str(hashing_baseline_path),
+                "production_baseline": str(production_baseline_path),
+            },
+            {"type": "DiagnosisInputError", "reason": _safe_reason(str(exc))},
+        )
+    return _diagnosis_stage(diagnosis)
+
+
+def _diagnosis_stage(report: DiagnosisReport) -> PilotStage:
+    detail = report.to_stage_detail(limit=5)
+    status = "warning" if int(detail["highest_severity"]) > 0 else "passed"
+    return PilotStage("eval_reauthoring_diagnosis", status, detail)
 
 
 def _aggregate_status(stages: list[PilotStage]) -> str:
