@@ -115,9 +115,11 @@ uv run python -m tagmemorag production-provider verify \
 A passing run should show:
 
 - `required_env`: passed
-- `docker_providers`: passed or skipped by operator choice
+- `docker_providers`: passed, or skipped by explicit operator choice
 - `s3_bucket`: passed
 - `production_provider_smoke`: passed
+
+If `docker_providers` fails but `s3_bucket` and `production_provider_smoke` pass, the top-level verify status is `warning`. This means the Docker startup action failed, but the required provider services were already usable. Treat it as an operator cleanup item, not a fully clean run.
 
 Inside the smoke report, the important sanitized stage metrics are:
 
@@ -134,7 +136,9 @@ Inside the smoke report, the important sanitized stage metrics are:
 | Symptom | Likely Cause | Action |
 | --- | --- | --- |
 | `required_env` failed | One or more env vars are missing | Export the missing env names shown in the runner output. |
-| Docker port bind failure | Qdrant or MinIO is already running | Use `--skip-docker` if the existing services are intended. |
+| `docker_providers` failed and top-level status is `failed` | Docker startup failed and downstream provider checks did not prove services usable | Inspect bounded `stdout_tail` / `stderr_tail`, then check Docker daemon, image pull, and ports 6333/9000. |
+| `docker_providers` failed and top-level status is `warning` | Docker startup failed but S3 and nested smoke proved services usable | Clean up duplicate/stale provider containers, or rerun with `--skip-docker` when reusing existing services is intended. |
+| `docker_providers` skipped | Operator passed `--skip-docker` | Confirm Qdrant and MinIO are already running before relying on the result. |
 | `s3_bucket` failed | MinIO not reachable or credentials mismatch | Check `docker ps`, MinIO health, and `TAGMEMORAG_S3_*` values. |
 | `provider_probe` failed | External provider key/model/network issue | Run `python -m tagmemorag provider probe --config examples/config/production-provider-verification.yaml --all`. |
 | `qdrant_inspect.missing_vector_count > 0` | Rebuild/vector sync mismatch | Rerun with `--reset-qdrant-collection`; if it persists, inspect rebuild errors. |

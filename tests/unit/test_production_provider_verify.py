@@ -28,8 +28,10 @@ def _clear_provider_env(monkeypatch):
 
 
 class _Completed:
-    def __init__(self, returncode: int = 0):
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = ""):
         self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def test_verify_smoke_check_only_skips_nested_smoke(monkeypatch):
@@ -87,6 +89,83 @@ def test_verify_smoke_builds_sanitized_nested_command(monkeypatch, tmp_path):
     assert "sf-secret" not in serialized
     assert "deepseek-secret" not in serialized
     assert "tagmemorag-secret" not in serialized
+
+
+def test_docker_failure_with_passing_downstream_is_warning_and_diagnosed(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[0] == "docker":
+            return _Completed(
+                1,
+                stdout="starting qdrant",
+                stderr="port already allocated; token sk-x",
+            )
+        return _Completed()
+
+    result = run_production_provider_verify(
+        level="smoke",
+        config_path="examples/config/production-provider-verification.yaml",
+        workdir=tmp_path / "work",
+        output_path=tmp_path / "nested.json",
+        env=_env(),
+        runner=fake_run,
+        ensure_bucket_step=lambda cfg, env: {"name": "s3_bucket", "status": "passed", "detail": {"action": "exists"}},
+    )
+
+    assert result.status == "warning"
+    checks = {check["name"]: check for check in result.checks}
+    assert checks["docker_providers"]["status"] == "failed"
+    assert checks["docker_providers"]["detail"]["stdout_tail"] == "starting qdrant"
+    assert checks["docker_providers"]["detail"]["stderr_tail"] == "port already allocated; token sk-..."
+    serialized = result.to_json()
+    assert "sk-x" not in serialized
+
+
+def test_docker_failure_stays_failed_in_check_only(monkeypatch):
+    _clear_provider_env(monkeypatch)
+
+    def fake_run(cmd, **kwargs):
+        return _Completed(1, stderr="port already allocated")
+
+    result = run_production_provider_verify(
+        level="smoke",
+        config_path="examples/config/production-provider-verification.yaml",
+        env=_env(),
+        runner=fake_run,
+        ensure_bucket_step=lambda cfg, env: {"name": "s3_bucket", "status": "passed", "detail": {"action": "exists"}},
+        check_only=True,
+    )
+
+    assert result.status == "failed"
+    checks = {check["name"]: check for check in result.checks}
+    assert checks["docker_providers"]["detail"]["stderr_tail"] == "port already allocated"
+
+
+def test_docker_failure_and_nested_smoke_failure_stays_failed(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+
+    def fake_run(cmd, **kwargs):
+        if cmd[0] == "docker":
+            return _Completed(1, stderr="port already allocated")
+        return _Completed(1, stderr="provider probe failed")
+
+    result = run_production_provider_verify(
+        level="smoke",
+        config_path="examples/config/production-provider-verification.yaml",
+        workdir=tmp_path / "work",
+        output_path=tmp_path / "nested.json",
+        env=_env(),
+        runner=fake_run,
+        ensure_bucket_step=lambda cfg, env: {"name": "s3_bucket", "status": "passed", "detail": {"action": "exists"}},
+    )
+
+    assert result.status == "failed"
+    checks = {check["name"]: check for check in result.checks}
+    assert checks["docker_providers"]["status"] == "failed"
+    assert checks["production_provider_smoke"]["status"] == "failed"
 
 
 def test_verify_pilot_runs_after_smoke_and_writes_pilot_report(monkeypatch, tmp_path):
