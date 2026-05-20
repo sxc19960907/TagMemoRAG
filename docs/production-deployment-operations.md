@@ -145,7 +145,7 @@ Use these readiness layers together:
 | `pilot run` | One retained pre-pilot report over config validation, provider probes, readiness smoke, and a sanitized eval fixture summary. |
 | `/ready` | The running process has warmed up and loaded a KB for traffic. |
 
-For the operator sequence and report retention guidance, see [Production Pilot Runbook](production-pilot-runbook.md).
+For the operator sequence and report retention guidance, see [Production Pilot Runbook](production-pilot-runbook.md). For a first production-like environment verification pass with retained evidence, see [Production Environment Verification](production-environment-verification.md).
 
 ## Persistence Matrix
 
