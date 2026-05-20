@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 32
+- **Total Sessions**: 33
 - **Last Active**: 2026-05-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1145 | Active |
+| `journal-1.md` | ~1178 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 33 | 2026-05-20 | Production provider real PDF rerun | `dac262b` | `codex/production-provider-real-pdf-rerun` |
 | 32 | 2026-05-20 | HTTP embedding large batch hardening | `e068911` | `codex/siliconflow-embedding-large-corpus-hardening` |
 | 31 | 2026-05-20 | Production provider E2E pilot | `c091744` | `codex/production-provider-e2e-pilot` |
 | 30 | 2026-05-20 | Production provider verification profile | `f103e06` | `codex/production-provider-verification-profile` |

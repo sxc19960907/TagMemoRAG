@@ -22,6 +22,8 @@ SAFE_QDRANT_PAYLOAD_KEYS = {
     "vector_point_id",
 }
 
+QDRANT_UPSERT_BATCH_SIZE = 128
+
 
 class QdrantVectorStore(VectorStore):
     def __init__(
@@ -71,8 +73,8 @@ class QdrantVectorStore(VectorStore):
                 self._point_struct(int(node_id), vecs[index], payloads[index] if payloads is not None else None)
                 for index, node_id in enumerate(ids)
             ]
-            if points:
-                self.client.upsert(collection_name=self.collection_name, points=points)
+            for batch in _batched(points, QDRANT_UPSERT_BATCH_SIZE):
+                self.client.upsert(collection_name=self.collection_name, points=batch)
         except ServiceError:
             raise
         except Exception as exc:
@@ -342,6 +344,11 @@ def _safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         else:
             safe[key] = str(value)
     return safe
+
+
+def _batched(items: list[Any], batch_size: int) -> list[list[Any]]:
+    size = max(int(batch_size), 1)
+    return [items[index : index + size] for index in range(0, len(items), size)]
 
 
 def _missing_dependency() -> InvalidConfigError:

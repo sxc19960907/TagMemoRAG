@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check validation evidence and no secret/raw text leakage."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check sanitized report content."}
