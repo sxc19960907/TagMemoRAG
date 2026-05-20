@@ -52,6 +52,12 @@ from .production_pilot import (
     run_production_pilot,
     write_pilot_report,
 )
+from .production_provider_smoke import (
+    DEFAULT_PROVIDER_SMOKE_CONFIG,
+    DEFAULT_PROVIDER_SMOKE_QUESTION,
+    run_production_provider_smoke,
+    write_provider_smoke_report,
+)
 from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
 from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 
@@ -239,6 +245,22 @@ def main(argv: list[str] | None = None) -> int:
     provider_probe.add_argument("--reranker", action="store_true", default=False)
     provider_probe.add_argument("--qdrant", action="store_true", default=False)
     provider_probe.add_argument("--s3", action="store_true", default=False)
+
+    production_provider = sub.add_parser("production-provider")
+    production_provider_sub = production_provider.add_subparsers(dest="production_provider_command", required=True)
+    production_provider_smoke = production_provider_sub.add_parser("smoke")
+    production_provider_smoke.add_argument("--config", default=DEFAULT_PROVIDER_SMOKE_CONFIG)
+    production_provider_smoke.add_argument("--kb", default="default")
+    production_provider_smoke.add_argument("--manual", action="append", default=[], help="Manual source document path. Repeat for many files.")
+    production_provider_smoke.add_argument("--metadata", default=None, help="Optional JSON, JSONL, or CSV metadata path. Omit to use *.metadata.json sidecars.")
+    production_provider_smoke.add_argument("--metadata-format", choices=["json", "jsonl", "csv"], default="json")
+    production_provider_smoke.add_argument("--workdir", default=None)
+    production_provider_smoke.add_argument("--output", default=None)
+    production_provider_smoke.add_argument("--format", choices=["json", "markdown"], default="json")
+    production_provider_smoke.add_argument("--question", default=DEFAULT_PROVIDER_SMOKE_QUESTION)
+    production_provider_smoke.add_argument("--rebuild-mode", choices=["full", "incremental", "auto"], default="full")
+    production_provider_smoke.add_argument("--answer-top-k", type=int, default=6)
+    production_provider_smoke.add_argument("--answer-source-k", type=int, default=6)
 
     readiness = sub.add_parser("readiness")
     readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
@@ -680,6 +702,31 @@ def main(argv: list[str] | None = None) -> int:
                 selected.append(name)
         report = run_provider_probe(args.config, selected=selected or ["all"], kb_name=args.kb)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if report.status == "failed" else 0
+    if args.command == "production-provider" and args.production_provider_command == "smoke":
+        try:
+            report = run_production_provider_smoke(
+                config_path=args.config,
+                kb_name=args.kb,
+                manual_paths=args.manual,
+                metadata_path=args.metadata,
+                metadata_format=args.metadata_format,
+                workdir=args.workdir,
+                question=args.question,
+                rebuild_mode=args.rebuild_mode,
+                answer_top_k=args.answer_top_k,
+                answer_source_k=args.answer_source_k,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"production-provider smoke error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        if args.output:
+            write_provider_smoke_report(report, args.output, fmt=args.format)
+        else:
+            if args.format == "markdown":
+                print(report.to_markdown(), end="")
+            else:
+                print(report.to_json())
         return 1 if report.status == "failed" else 0
     if args.command == "readiness" and args.readiness_command == "smoke":
         report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
