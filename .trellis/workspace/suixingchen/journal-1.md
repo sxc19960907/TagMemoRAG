@@ -1077,3 +1077,36 @@ Added a secret-free production provider verification profile for Qdrant, MinIO, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: Production provider E2E pilot
+
+**Date**: 2026-05-20
+**Task**: Production provider E2E pilot
+**Branch**: `codex/production-provider-e2e-pilot`
+
+### Summary
+
+Ran the production provider profile through local Qdrant and MinIO with live SiliconFlow and DeepSeek providers; documented partial-pass results, fixed runtime reranker query passing without persisting raw query text, and made empty OpenAI-compatible answer content degrade as generation failure.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c091744` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
