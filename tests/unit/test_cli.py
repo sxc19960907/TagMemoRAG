@@ -192,6 +192,7 @@ def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, ca
             "4",
             "--answer-source-k",
             "5",
+            "--reset-qdrant-collection",
         ]
     )
 
@@ -205,6 +206,7 @@ def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, ca
     assert captured["rebuild_mode"] == "incremental"
     assert captured["answer_top_k"] == 4
     assert captured["answer_source_k"] == 5
+    assert captured["reset_qdrant_collection"] is True
     assert captured["written"] == ("passed", str(output), "markdown")
     assert capsys.readouterr().out == ""
 

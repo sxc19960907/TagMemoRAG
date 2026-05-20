@@ -119,6 +119,42 @@ Ran the merged `production-provider smoke` command against local Docker Qdrant/M
 - Consider a later operator cleanup task for resetting the verification Qdrant collection before smoke runs.
 
 
+## Session 39: Provider smoke Qdrant reset option
+
+**Date**: 2026-05-20
+**Task**: Provider Smoke Qdrant Reset Option
+**Branch**: `codex/provider-smoke-qdrant-reset-option`
+
+### Summary
+
+Added an opt-in Qdrant collection reset stage for `production-provider smoke` so local verification reports can start from a clean verification collection and avoid point-count residue from previous runs.
+
+### Main Changes
+
+- Added `--reset-qdrant-collection` to the production-provider smoke CLI.
+- Added `qdrant_reset` smoke stage with skipped, absent, deleted, and failed outcomes.
+- Added unit coverage for reset behavior and CLI argument wiring.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `222d22d` | chore(task): archive 05-20-provider-smoke-qdrant-reset-option |
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_production_provider_smoke.py tests/unit/test_cli.py`
+- [OK] `uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Commit feature changes and open PR.
+
+
 ## Session 10: T6 answer endpoint kickoff
 
 **Date**: 2026-05-19

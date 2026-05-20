@@ -261,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     production_provider_smoke.add_argument("--rebuild-mode", choices=["full", "incremental", "auto"], default="full")
     production_provider_smoke.add_argument("--answer-top-k", type=int, default=6)
     production_provider_smoke.add_argument("--answer-source-k", type=int, default=6)
+    production_provider_smoke.add_argument("--reset-qdrant-collection", action="store_true", default=False)
 
     readiness = sub.add_parser("readiness")
     readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
@@ -716,6 +717,7 @@ def main(argv: list[str] | None = None) -> int:
                 rebuild_mode=args.rebuild_mode,
                 answer_top_k=args.answer_top_k,
                 answer_source_k=args.answer_source_k,
+                reset_qdrant_collection=args.reset_qdrant_collection,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"production-provider smoke error: {type(exc).__name__}: {exc}", file=sys.stderr)
