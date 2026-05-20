@@ -1011,3 +1011,36 @@ Added a production environment verification checklist covering safe evidence ret
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: Production verification report command
+
+**Date**: 2026-05-20
+**Task**: Production verification report command
+**Branch**: `codex/production-verification-report`
+
+### Summary
+
+Added scripts/production_verify.py to generate sanitized JSON/Markdown production verification reports from config validation, readiness smoke, pilot reports, and optional explicit provider probes; documented it and covered it with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1276d3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
