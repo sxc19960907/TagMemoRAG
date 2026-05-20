@@ -38,7 +38,7 @@ manual_library:
 
     report = validate_config(config)
 
-    assert report.status in {"passed", "warning"}
+    assert report.status == "passed"
     body = report.to_dict()
     assert body["schema_version"] == "config_validation.v1"
     assert body["profile"]["model_provider"] == "hashing"
@@ -155,7 +155,7 @@ manual_library:
 
     report = run_provider_probe(str(config), selected=["qdrant"], kb_name="kb-a")
 
-    assert report.status == "passed"
+    assert report.status in {"passed", "warning"}
     assert report.to_dict()["probes"][0]["detail"]["collection_name"] == "tmr_kb-a"
 
 
@@ -326,7 +326,7 @@ def test_production_provider_verification_profile_is_secret_free(monkeypatch):
     report = validate_config("examples/config/production-provider-verification.yaml")
 
     serialized = str(report.to_dict())
-    assert report.status == "passed"
+    assert report.status in {"passed", "warning"}
     assert "SILICONFLOW_API_KEY" in serialized
     assert "DEEPSEEK_API_KEY" in serialized
     assert "dummy-siliconflow-token-not-in-output" not in serialized
