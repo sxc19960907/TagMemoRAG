@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Script and report output must avoid secrets/raw snippets and use tests without live providers by default."}
+{"file": "docs/production-provider-smoke-live-verification.md", "reason": "Recent live smoke result and operator notes that motivate the runner."}

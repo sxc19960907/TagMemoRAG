@@ -155,6 +155,43 @@ Added an opt-in Qdrant collection reset stage for `production-provider smoke` so
 - Commit feature changes and open PR.
 
 
+## Session 40: Production provider smoke runner
+
+**Date**: 2026-05-20
+**Task**: Production Provider Smoke Runner
+**Branch**: `codex/production-provider-smoke-runner`
+
+### Summary
+
+Added an operator runner for the local production-provider smoke path. The runner checks required provider env var names without printing values, can start local Docker providers, ensures the MinIO bucket, and invokes `production-provider smoke` with Qdrant reset enabled by default.
+
+### Main Changes
+
+- Added `scripts/run_production_provider_smoke.py`.
+- Added `docs/production-provider-smoke-runbook.md`.
+- Added unit tests for missing-env sanitization, check-only mode, and smoke command construction.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0b42f94` | chore(task): archive 05-20-production-provider-smoke-runner |
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_run_production_provider_smoke.py`
+- [OK] `uv run python scripts/run_production_provider_smoke.py --check-only --skip-docker --skip-bucket` failed safely because the shell lacked DeepSeek/MinIO env vars and printed only env names.
+- [OK] `uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Commit feature changes and open PR.
+
+
 ## Session 10: T6 answer endpoint kickoff
 
 **Date**: 2026-05-19
