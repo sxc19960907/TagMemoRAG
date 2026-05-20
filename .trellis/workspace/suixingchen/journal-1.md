@@ -41,6 +41,44 @@ Phase 1 ships the per-KB directed cooccurrence matrix builder and V6 LIF spike p
 - None - task complete
 
 
+## Session 37: Production provider smoke command
+
+**Date**: 2026-05-20
+**Task**: Production Provider Smoke Command
+**Branch**: `codex/production-provider-smoke-command`
+
+### Summary
+
+Implemented `tagmemorag production-provider smoke` as a repeatable local production-provider verification command. It reuses existing validation, provider probe, bulk manual import, registry blob verification, library rebuild, Qdrant inspection, reranker plan-log evidence, and `/answer` paths, while emitting sanitized JSON/Markdown reports.
+
+### Main Changes
+
+- Added `src/tagmemorag/production_provider_smoke.py` report contracts and orchestration.
+- Wired CLI options for config, KB, manuals, metadata, workdir, output format, question, rebuild mode, and answer retrieval budgets.
+- Added unit coverage for report serialization, sidecar metadata generation, answer sanitization, and CLI argument wiring.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7c8d1b8` | feat(provider): add production smoke command |
+| `4f35202` | chore(task): archive 05-20-05-20-production-provider-smoke-command |
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_production_provider_smoke.py tests/unit/test_cli.py`
+- [OK] `uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Push branch and open a PR.
+- Run the new smoke command against local Qdrant/MinIO plus real SiliconFlow/DeepSeek env once operator credentials are loaded.
+
+
 ## Session 10: T6 answer endpoint kickoff
 
 **Date**: 2026-05-19
