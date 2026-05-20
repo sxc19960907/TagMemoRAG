@@ -912,3 +912,36 @@ Added informational suite policy for eval reauthoring diagnosis, exposed it thro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: Pilot eval accepted suite policy
+
+**Date**: 2026-05-20
+**Task**: Pilot eval accepted suite policy
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added accepted-suite policy to eval reauthoring diagnosis and pilot reports, exposed --accepted-suites in diagnosis and pilot CLIs, documented the Phase B accepted suite list, and verified focused tests plus real pilot warning/pass paths.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f648a8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
