@@ -30,3 +30,29 @@ services:
       - ./data:/workspace/data
     entrypoint: ["sqlite3"]
     command: ["data/manual_registry.sqlite3"]
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles:
+      - providers
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+  minio:
+    image: quay.io/minio/minio:latest
+    profiles:
+      - providers
+    environment:
+      MINIO_ROOT_USER: tagmemorag
+      MINIO_ROOT_PASSWORD: tagmemorag-secret
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  qdrant_data:
+  minio_data:
