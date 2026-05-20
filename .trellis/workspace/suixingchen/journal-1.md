@@ -1591,3 +1591,40 @@ Verified the MVP delivery guide from isolated .tmp/clean-env-delivery runtime pa
 ### Next Steps
 
 - None - task complete
+
+## Session 42: Harden verify Docker diagnostics
+
+**Date**: 2026-05-20
+**Task**: Harden verify Docker diagnostics
+**Branch**: `codex/verify-docker-diagnostics-hardening`
+
+### Summary
+
+Made production-provider verify keep Docker startup failures visible, attach sanitized stdout/stderr tails, downgrade only proven reusable-provider Docker startup failures to warning, and documented the failed/warning/skipped runbook semantics.
+
+### Main Changes
+
+- Added bounded sanitized `stdout_tail` / `stderr_tail` diagnostics for failed verify subprocess checks.
+- Kept failed Docker startup visible as a failed `docker_providers` check while allowing top-level `warning` only when S3 and nested smoke prove providers are already usable.
+- Documented Docker `failed`, `warning`, and `skipped` semantics in the production provider smoke runbook.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1ac772b` | (see git log) |
+
+### Testing
+
+- [OK] `uv run pytest tests/unit/test_production_provider_verify.py tests/unit/test_cli_production_provider_verify.py tests/unit/test_run_production_provider_smoke.py tests/unit/test_production_provider_smoke.py`
+- [OK] `python3 -m py_compile src/tagmemorag/production_provider_verify.py`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+

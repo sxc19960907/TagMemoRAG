@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any, Callable, Iterable, Mapping
@@ -160,7 +161,7 @@ def run_production_provider_verify(
     smoke = _run_step("production_provider_smoke", smoke_cmd, runner=runner)
     checks.append(smoke)
     smoke_exit_code = int(smoke["detail"].get("exit_code", 1))
-    status = _aggregate(checks)
+    status = _aggregate_verify_checks(checks)
     if level == "smoke" or status == "failed":
         return ProductionProviderVerifyReport(
             status,
@@ -188,7 +189,7 @@ def run_production_provider_verify(
         write_pilot_report(pilot_report, pilot_output_path, fmt=pilot_output_format)
     checks.append(_pilot_check(pilot_report, pilot_output_path=pilot_output_path))
     return ProductionProviderVerifyReport(
-        _aggregate(checks),
+        _aggregate_verify_checks(checks),
         level,
         str(config_path),
         str(output_path),
@@ -292,13 +293,21 @@ def _smoke_command(
 
 def _run_step(name: str, cmd: list[str], *, runner: Runner = subprocess.run) -> dict[str, Any]:
     completed = runner(cmd, cwd=str(_repo_root()), text=True, capture_output=True)
+    detail = {
+        "command": _sanitize_command(cmd),
+        "exit_code": int(completed.returncode),
+    }
+    if completed.returncode:
+        stdout_tail = _bounded_output_tail(getattr(completed, "stdout", ""))
+        stderr_tail = _bounded_output_tail(getattr(completed, "stderr", ""))
+        if stdout_tail:
+            detail["stdout_tail"] = stdout_tail
+        if stderr_tail:
+            detail["stderr_tail"] = stderr_tail
     return {
         "name": name,
         "status": "passed" if completed.returncode == 0 else "failed",
-        "detail": {
-            "command": _sanitize_command(cmd),
-            "exit_code": int(completed.returncode),
-        },
+        "detail": detail,
         **({"error": {"type": "CommandFailed", "reason": name}} if completed.returncode else {}),
     }
 
@@ -366,6 +375,22 @@ def _aggregate(checks: list[dict[str, Any]]) -> str:
     return "passed"
 
 
+def _aggregate_verify_checks(checks: list[dict[str, Any]]) -> str:
+    statuses = {check["status"] for check in checks}
+    if "failed" not in statuses:
+        return _aggregate(checks)
+    by_name = {str(check.get("name")): check for check in checks}
+    failed = {name for name, check in by_name.items() if check.get("status") == "failed"}
+    docker_only_failed = failed == {"docker_providers"}
+    downstream_passed = all(
+        by_name.get(name, {}).get("status") == "passed"
+        for name in ("s3_bucket", "production_provider_smoke")
+    )
+    if docker_only_failed and downstream_passed:
+        return "warning"
+    return "failed"
+
+
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for status in statuses:
@@ -375,6 +400,19 @@ def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
 
 def _sanitize_command(cmd: list[str]) -> list[str]:
     return [part if not str(part).startswith("sk-") else "sk-..." for part in cmd]
+
+
+def _bounded_output_tail(value: Any, *, limit: int = 320) -> str:
+    text = _sanitize_output_text(str(value or ""))
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def _sanitize_output_text(value: str) -> str:
+    text = " ".join(str(value or "").split())
+    text = re.sub(r"sk-[A-Za-z0-9._-]+", "sk-...", text)
+    return text
 
 
 def _safe_reason(reason: str) -> str:

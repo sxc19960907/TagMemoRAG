@@ -1,0 +1,3 @@
+{"file": "src/tagmemorag/production_provider_verify.py", "reason": "Verify subprocess checks and aggregate status behavior."}
+{"file": "tests/unit/test_production_provider_verify.py", "reason": "Focused unit tests for Docker diagnostics and aggregation."}
+{"file": "docs/production-provider-smoke-runbook.md", "reason": "Operator semantics for Docker failed/warning/skipped outcomes."}
