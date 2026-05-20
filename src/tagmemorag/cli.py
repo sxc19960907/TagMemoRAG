@@ -262,6 +262,11 @@ def main(argv: list[str] | None = None) -> int:
     pilot_run.add_argument("--min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
     pilot_run.add_argument("--hashing-baseline", default=None)
     pilot_run.add_argument("--production-baseline", default=None)
+    pilot_run.add_argument(
+        "--informational-suites",
+        default="",
+        help="Comma-separated eval suite filenames whose diagnosis is informational and not blocking.",
+    )
 
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
@@ -692,6 +697,7 @@ def main(argv: list[str] | None = None) -> int:
                 thresholds=thresholds,
                 hashing_baseline_path=args.hashing_baseline,
                 production_baseline_path=args.production_baseline,
+                informational_suites=_split_csv(args.informational_suites),
             )
         except Exception as exc:  # noqa: BLE001
             print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -799,6 +805,10 @@ def _add_feedback_promote_args(parser: argparse.ArgumentParser) -> None:
 
 def _read_text_file(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _read_bulk_files(paths: list[str]) -> list[BulkUploadedFile]:

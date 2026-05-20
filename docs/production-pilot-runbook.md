@@ -23,10 +23,11 @@ python -m tagmemorag pilot run \
   --docs tests/fixtures \
   --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
   --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
+  --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl \
   --workdir .tmp/production-pilot
 ```
 
-When the diagnosis stage finds `monitor`, `reauthor`, or `investigate` suites, the pilot status becomes `warning`, not `failed`. Treat that as a review gate: decide whether the affected suites are acceptable for the pilot profile or need case-level inspection first.
+When the diagnosis stage finds `monitor`, `reauthor`, or `investigate` suites, non-informational suites make the pilot status `warning`, not `failed`. Treat that as a review gate: decide whether the affected suites are acceptable for the pilot profile or need case-level inspection first. The known stress-test suites above stay visible in the diagnosis, but they do not make the stage warning when explicitly listed as informational.
 
 To retain a reviewable report:
 
@@ -48,7 +49,7 @@ The command runs:
 | `provider_probe` | Probe configured remote providers through the existing explicit live-probe contract. | `failed` fails the pilot; all-skipped is acceptable for local/offline profiles. |
 | `readiness_smoke` | Build/retrieve/answer/queryplan/bundle composition with deterministic local data. | Must pass. |
 | `eval` | Retrieval fixture run with sanitized summary metrics. | Must pass the pilot thresholds. |
-| `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Warnings require reviewer signoff; invalid baseline input fails. |
+| `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Non-informational warnings require reviewer signoff; explicitly informational suites are retained in detail but do not gate the stage. Invalid baseline input fails. |
 
 ## Thresholds
 

@@ -81,11 +81,44 @@ def test_production_pilot_includes_eval_reauthoring_warning_stage(tmp_path):
     assert stage.status == "warning"
     assert stage.detail["schema_version"] == "eval_reauthoring_diagnosis.v1"
     assert stage.detail["highest_severity"] == 3
+    assert stage.detail["highest_blocking_severity"] == 3
     assert stage.detail["status_counts"]["investigate"] >= 1
     assert len(stage.detail["top_suites"]) <= 5
     serialized = json.dumps(stage.to_dict(), ensure_ascii=False)
     assert "蒸汽很小怎么办" not in serialized
     assert "actual_top_k" not in serialized
+
+
+def test_production_pilot_informational_diagnosis_can_pass_stage(tmp_path):
+    informational_suites = [
+        "coffee.jsonl",
+        "cross_kb_negatives.jsonl",
+        "fault_codes.jsonl",
+        "mixed_language.jsonl",
+        "model_numbers.jsonl",
+        "product_manuals.jsonl",
+        "tag_cooccurrence.jsonl",
+        "tag_rerank_edge.jsonl",
+    ]
+
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        hashing_baseline_path="tests/fixtures/eval/baselines/hashing.json",
+        production_baseline_path="tests/fixtures/eval/baselines/siliconflow.json",
+        informational_suites=informational_suites,
+    )
+
+    assert report.status == "passed"
+    stage = next(stage for stage in report.stages if stage.name == "eval_reauthoring_diagnosis")
+    assert stage.status == "passed"
+    assert stage.detail["highest_severity"] == 3
+    assert stage.detail["highest_blocking_severity"] == 0
+    assert stage.detail["informational_count"] == len(informational_suites)
+    assert all(suite["informational"] for suite in stage.detail["top_suites"])
 
 
 def test_production_pilot_requires_both_baselines_for_diagnosis(tmp_path):

@@ -89,7 +89,41 @@ def test_diagnose_reauthoring_outputs_sorted_json_and_markdown(tmp_path):
     assert body["summary"]["status_counts"] == {"investigate": 1, "ok": 1}
     assert [suite["suite"] for suite in body["suites"]] == ["bad.jsonl", "ok.jsonl"]
     markdown = report.to_markdown()
-    assert "| `bad.jsonl` | `investigate` | 3 |" in markdown
+    assert "| `bad.jsonl` | `investigate` | 3 | no |" in markdown
+
+
+def test_diagnose_reauthoring_marks_informational_without_hiding_status(tmp_path):
+    hashing = tmp_path / "hashing.json"
+    production = tmp_path / "siliconflow.json"
+    _write_baseline(
+        hashing,
+        "hashing",
+        {
+            "bad.jsonl": {"precision_at_k": 0.5, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
+            "ok.jsonl": {"precision_at_k": 0.5, "recall_at_k": 0.9, "mrr": 0.9, "hit_at_k": 1.0},
+        },
+    )
+    _write_baseline(
+        production,
+        "siliconflow",
+        {
+            "bad.jsonl": {"precision_at_k": 0.1, "recall_at_k": 0.3, "mrr": 0.2, "hit_at_k": 0.3},
+            "ok.jsonl": {"precision_at_k": 0.5, "recall_at_k": 0.88, "mrr": 0.88, "hit_at_k": 1.0},
+        },
+    )
+
+    report = der.diagnose_reauthoring(hashing, production, informational_suites=["bad.jsonl"])
+    body = report.to_dict()
+    bad = next(suite for suite in body["suites"] if suite["suite"] == "bad.jsonl")
+
+    assert bad["status"] == "investigate"
+    assert bad["severity"] == 3
+    assert bad["informational"] is True
+    assert body["summary"]["highest_severity"] == 3
+    assert body["summary"]["highest_blocking_severity"] == 0
+    assert body["summary"]["blocking_status_counts"] == {"ok": 1}
+    assert body["summary"]["informational_suites"] == ["bad.jsonl"]
+    assert report.to_stage_detail()["highest_blocking_severity"] == 0
 
 
 def test_cli_writes_markdown_file(tmp_path, capsys):
@@ -105,6 +139,8 @@ def test_cli_writes_markdown_file(tmp_path, capsys):
         str(hashing),
         "--production-baseline",
         str(production),
+        "--informational-suites",
+        "suite.jsonl",
         "--format",
         "markdown",
         "--output",
@@ -113,7 +149,9 @@ def test_cli_writes_markdown_file(tmp_path, capsys):
 
     assert exit_code == 0
     assert capsys.readouterr().out == ""
-    assert output.read_text(encoding="utf-8").startswith("# Eval Reauthoring Diagnosis")
+    rendered = output.read_text(encoding="utf-8")
+    assert rendered.startswith("# Eval Reauthoring Diagnosis")
+    assert "| `suite.jsonl` | `ok` | 0 | yes |" in rendered
 
 
 def test_cli_returns_two_for_invalid_input(tmp_path, capsys):

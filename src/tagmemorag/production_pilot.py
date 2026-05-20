@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Iterable
 
 from .config import load_config
 from .config_validation import ConfigValidationReport, validate_config
@@ -101,6 +101,7 @@ def run_production_pilot(
     thresholds: EvalThresholds = DEFAULT_PILOT_THRESHOLDS,
     hashing_baseline_path: str | Path | None = None,
     production_baseline_path: str | Path | None = None,
+    informational_suites: Iterable[str] | None = None,
 ) -> ProductionPilotReport:
     pilot_workdir = _pilot_workdir(workdir)
     stages: list[PilotStage] = []
@@ -148,6 +149,7 @@ def run_production_pilot(
     diagnosis_stage = _optional_diagnosis_stage(
         hashing_baseline_path=hashing_baseline_path,
         production_baseline_path=production_baseline_path,
+        informational_suites=informational_suites,
     )
     if diagnosis_stage is not None:
         stages.append(diagnosis_stage)
@@ -241,6 +243,7 @@ def _optional_diagnosis_stage(
     *,
     hashing_baseline_path: str | Path | None,
     production_baseline_path: str | Path | None,
+    informational_suites: Iterable[str] | None,
 ) -> PilotStage | None:
     if hashing_baseline_path is None and production_baseline_path is None:
         return None
@@ -255,7 +258,11 @@ def _optional_diagnosis_stage(
             {"type": "InvalidPilotInput", "reason": "both_hashing_and_production_baselines_required"},
         )
     try:
-        diagnosis = diagnose_reauthoring(hashing_baseline_path, production_baseline_path)
+        diagnosis = diagnose_reauthoring(
+            hashing_baseline_path,
+            production_baseline_path,
+            informational_suites=informational_suites,
+        )
     except DiagnosisInputError as exc:
         return PilotStage(
             "eval_reauthoring_diagnosis",
@@ -271,7 +278,7 @@ def _optional_diagnosis_stage(
 
 def _diagnosis_stage(report: DiagnosisReport) -> PilotStage:
     detail = report.to_stage_detail(limit=5)
-    status = "warning" if int(detail["highest_severity"]) > 0 else "passed"
+    status = "warning" if int(detail["highest_blocking_severity"]) > 0 else "passed"
     return PilotStage("eval_reauthoring_diagnosis", status, detail)
 
 

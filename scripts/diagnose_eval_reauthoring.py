@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -32,8 +33,14 @@ SCHEMA_VERSION = "eval_reauthoring_diagnosis.v1"
 def diagnose_reauthoring(
     hashing_baseline: str | Path = DEFAULT_HASHING_BASELINE,
     production_baseline: str | Path = DEFAULT_PRODUCTION_BASELINE,
+    *,
+    informational_suites: Iterable[str] | None = None,
 ) -> DiagnosisReport:
-    return _diagnose_reauthoring(hashing_baseline, production_baseline)
+    return _diagnose_reauthoring(
+        hashing_baseline,
+        production_baseline,
+        informational_suites=informational_suites,
+    )
 
 
 def write_report(report: DiagnosisReport, output: str | Path, *, fmt: str) -> None:
@@ -54,12 +61,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hashing-baseline", type=Path, default=DEFAULT_HASHING_BASELINE)
     parser.add_argument("--production-baseline", type=Path, default=DEFAULT_PRODUCTION_BASELINE)
+    parser.add_argument(
+        "--informational-suites",
+        default="",
+        help="Comma-separated suite filenames whose diagnosis is informational and does not count as blocking.",
+    )
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
 
     try:
-        report = diagnose_reauthoring(args.hashing_baseline, args.production_baseline)
+        report = diagnose_reauthoring(
+            args.hashing_baseline,
+            args.production_baseline,
+            informational_suites=_split_csv(args.informational_suites),
+        )
         rendered = render_report(report, fmt=args.format)
         if args.output is not None:
             write_report(report, args.output, fmt=args.format)
@@ -69,6 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     except DiagnosisInputError as exc:
         print(f"diagnose eval reauthoring error: {exc}", file=sys.stderr)
         return 2
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 __all__ = [

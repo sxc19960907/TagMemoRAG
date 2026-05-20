@@ -49,6 +49,14 @@ Before editing any fixture JSONL, generate the offline reauthoring diagnosis:
 uv run python scripts/diagnose_eval_reauthoring.py --format markdown
 ```
 
+Use `--informational-suites` when you want the report to keep known stress-test suites visible without counting them as blocking in downstream pilot summaries:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py \
+  --format markdown \
+  --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl
+```
+
 The diagnostic compares `baselines/hashing.json` with `baselines/siliconflow.json`, sorts suites by severity, and recommends `ok`, `monitor`, `reauthor`, or `investigate`. It is intentionally offline: it reads only committed aggregate baseline metrics and does not call SiliconFlow, refresh baselines, rewrite fixtures, or promote SiliconFlow to a CI gate.
 
 Use the report as the queue for human fixture review:

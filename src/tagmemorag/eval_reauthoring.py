@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 SCHEMA_VERSION = "eval_reauthoring_diagnosis.v1"
 METRIC_NAMES = ("precision_at_k", "recall_at_k", "mrr", "hit_at_k")
@@ -19,12 +19,14 @@ class SuiteDiagnosis:
     delta: dict[str, float] = field(default_factory=dict)
     recommendation: str = ""
     reasons: list[str] = field(default_factory=list)
+    informational: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "suite": self.suite,
             "status": self.status,
             "severity": self.severity,
+            "informational": self.informational,
             "hashing": dict(self.hashing),
             "production": dict(self.production),
             "delta": dict(self.delta),
@@ -37,6 +39,7 @@ class SuiteDiagnosis:
             "suite": self.suite,
             "status": self.status,
             "severity": self.severity,
+            "informational": self.informational,
             "recommendation": self.recommendation,
             "reasons": list(self.reasons),
         }
@@ -53,12 +56,25 @@ class DiagnosisReport:
 
     def summary(self) -> dict[str, Any]:
         counts: dict[str, int] = {}
+        blocking_counts: dict[str, int] = {}
+        informational_suites: list[str] = []
         for suite in self.suites:
             counts[suite.status] = counts.get(suite.status, 0) + 1
+            if suite.informational:
+                informational_suites.append(suite.suite)
+            else:
+                blocking_counts[suite.status] = blocking_counts.get(suite.status, 0) + 1
         return {
             "suite_count": len(self.suites),
             "status_counts": counts,
             "highest_severity": max((suite.severity for suite in self.suites), default=0),
+            "blocking_status_counts": blocking_counts,
+            "highest_blocking_severity": max(
+                (suite.severity for suite in self.suites if not suite.informational),
+                default=0,
+            ),
+            "informational_count": len(informational_suites),
+            "informational_suites": informational_suites,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -81,6 +97,10 @@ class DiagnosisReport:
             "suite_count": summary["suite_count"],
             "status_counts": dict(summary["status_counts"]),
             "highest_severity": summary["highest_severity"],
+            "blocking_status_counts": dict(summary["blocking_status_counts"]),
+            "highest_blocking_severity": summary["highest_blocking_severity"],
+            "informational_count": summary["informational_count"],
+            "informational_suites": list(summary["informational_suites"]),
             "top_suites": [suite.to_summary_dict() for suite in self.suites[:limit]],
         }
 
@@ -95,8 +115,8 @@ class DiagnosisReport:
             f"- Production baseline: `{self.production_baseline}`",
             f"- Embedder comparison: `{self.production_embedder}` minus `{self.hashing_embedder}`",
             "",
-            "| Suite | Status | Severity | Recall Δ | MRR Δ | Hit Δ | Recommendation |",
-            "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+            "| Suite | Status | Severity | Informational | Recall Δ | MRR Δ | Hit Δ | Recommendation |",
+            "| --- | --- | ---: | --- | ---: | ---: | ---: | --- |",
         ]
         for suite in self.suites:
             lines.append(
@@ -104,6 +124,7 @@ class DiagnosisReport:
                 f"`{suite.suite}` | "
                 f"`{suite.status}` | "
                 f"{suite.severity} | "
+                f"{'yes' if suite.informational else 'no'} | "
                 f"{_format_delta(suite.delta.get('recall_at_k'))} | "
                 f"{_format_delta(suite.delta.get('mrr'))} | "
                 f"{_format_delta(suite.delta.get('hit_at_k'))} | "
@@ -119,6 +140,8 @@ class DiagnosisInputError(ValueError):
 def diagnose_reauthoring(
     hashing_baseline: str | Path,
     production_baseline: str | Path,
+    *,
+    informational_suites: Iterable[str] | None = None,
 ) -> DiagnosisReport:
     hashing_path = Path(hashing_baseline)
     production_path = Path(production_baseline)
@@ -135,6 +158,9 @@ def diagnose_reauthoring(
         )
         for suite in suite_names
     ]
+    informational = _normalize_suite_names(informational_suites)
+    if informational:
+        diagnoses = [replace(diagnosis, informational=diagnosis.suite in informational) for diagnosis in diagnoses]
     diagnoses.sort(key=lambda item: (-item.severity, item.suite))
     return DiagnosisReport(
         hashing_baseline=str(hashing_path),
@@ -143,6 +169,12 @@ def diagnose_reauthoring(
         production_embedder=str(production_payload.get("embedder") or "production"),
         suites=diagnoses,
     )
+
+
+def _normalize_suite_names(suites: Iterable[str] | None) -> set[str]:
+    if suites is None:
+        return set()
+    return {str(suite).strip() for suite in suites if str(suite).strip()}
 
 
 def classify_suite(
