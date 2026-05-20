@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and architecture entry point."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Eval/report privacy and testing requirements."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keep script boundaries consistent with project layout."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index for reuse and cross-layer checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing eval report shape and avoid duplicated parsing patterns."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Map eval-report JSON to reviewer-facing output."}

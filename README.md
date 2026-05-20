@@ -1100,6 +1100,16 @@ uv run python scripts/diagnose_eval_reauthoring.py --format markdown
 
 The report compares hashing vs SiliconFlow aggregate baselines and marks suites as `ok`, `monitor`, `reauthor`, or `investigate`. It does not call external providers, rewrite JSONL fixtures, or make SiliconFlow a CI gate.
 
+For the next level down, summarize a saved eval report into a bounded case-review table:
+
+```bash
+uv run python scripts/summarize_eval_case_review.py \
+  --report .tmp/eval-review/coffee.json \
+  --format markdown
+```
+
+By default the case summary redacts raw queries and snippets. Use `--include-query` only for local review when that content is acceptable.
+
 ## Tag Data Model
 
 TagMemoRAG persists `manual.metadata.tags` into a structured, position-aware SQLite layer alongside the existing `manual_records` table, plus a global EPA basis file. Search behavior is unchanged at this layer — these tables are populated for downstream analytics and ranking experiments.

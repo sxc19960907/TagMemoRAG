@@ -58,6 +58,26 @@ Use the report as the queue for human fixture review:
 - `monitor`: divergence exists but should not trigger fixture edits without case-level evidence.
 - `ok`: no immediate fixture reauthoring is indicated.
 
+After choosing a suite, create a full eval report and summarize its case-level review queue:
+
+```bash
+uv run python -m tagmemorag eval run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --eval-data-dir .tmp/eval-review/data \
+  --output .tmp/eval-review/coffee.json \
+  --min-recall-at-k 1.0 \
+  --min-mrr 1.0 \
+  --min-hit-at-k 1.0
+
+uv run python scripts/summarize_eval_case_review.py \
+  --report .tmp/eval-review/coffee.json \
+  --format markdown
+```
+
+The case review summary is bounded by default. It includes case ids, metrics, failure reasons, negative-hit summaries, and top result source/header pairs. It omits raw queries and snippets unless `--include-query` is explicitly passed for local review.
+
 ## Reading a baseline diff
 
 Every commit that touches a baseline must include a one-line rationale in the commit message. Example shapes:
