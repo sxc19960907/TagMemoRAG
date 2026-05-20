@@ -141,6 +141,64 @@ model:
   api_key_env: SILICONFLOW_API_KEY
 ```
 
+## Scenario: HTTP Embedding Large Batch Failure Hardening
+
+### 1. Scope / Trigger
+
+- Trigger: HTTP embedding providers may reject or time out on larger PDF-derived batches even when single-query readiness probes pass.
+
+### 2. Signatures
+
+- `HttpEmbedder.encode_batch(texts: Sequence[str]) -> np.ndarray`
+- `HttpEmbedder._request_batch_with_split(texts: Sequence[str]) -> np.ndarray`
+- `HttpEmbedder._failure_detail(texts, split_attempted, status_code=None, error_type=None) -> dict[str, object]`
+
+### 3. Contracts
+
+- `model.batch_size` is the maximum HTTP embedding request size, not a guarantee that every provider accepts that request.
+- A failed multi-item HTTP embedding request must be retried by splitting into smaller sub-batches before surfacing a final failure.
+- Successful split retries must preserve input order and existing normalization behavior.
+- Failure detail may include endpoint, status/error type, batch size, min/max text length, total text length, and split-attempt status.
+- Failure detail must not include raw document text, request body, Authorization headers, API keys, provider response body, vectors, source paths, or snippets.
+
+### 4. Validation & Error Matrix
+
+- HTTP status failure on multi-item batch -> split retry; if sub-batches pass, return vectors.
+- HTTP status failure on single-item batch -> `EMBEDDING_FAILED` with sanitized detail.
+- Network/timeout/invalid JSON on multi-item batch -> split retry; if sub-batches fail, surface sanitized final detail.
+- Vector count/shape/content validation failures -> `EMBEDDING_FAILED` as before.
+
+### 5. Good/Base/Bad Cases
+
+- Good: 32-item request fails, two 16-item requests pass, rebuild continues with vectors in original order.
+- Base: configured batch succeeds on first request; no fallback is visible to callers.
+- Bad: error detail includes provider body or raw PDF text to help debugging.
+
+### 6. Tests Required
+
+- Multi-item batch failure falls back to smaller HTTP calls and preserves vector order.
+- Final failure detail contains safe numeric diagnostics and no raw text or secret values.
+- Existing payload, endpoint override, dotenv key, missing key, and provider factory tests remain green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+detail = {"endpoint": endpoint, "body": provider_error_body, "input": texts}
+```
+
+#### Correct
+
+```python
+detail = {
+    "endpoint": endpoint,
+    "batch_size": len(texts),
+    "max_text_chars": max(len(text) for text in texts),
+    "split_attempted": True,
+}
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger

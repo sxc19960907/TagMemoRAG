@@ -1110,3 +1110,36 @@ Ran the production provider profile through local Qdrant and MinIO with live Sil
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: HTTP embedding large batch hardening
+
+**Date**: 2026-05-20
+**Task**: HTTP embedding large batch hardening
+**Branch**: `codex/siliconflow-embedding-large-corpus-hardening`
+
+### Summary
+
+Hardened OpenAI-compatible HTTP embedding rebuilds by recursively splitting failed multi-item batches, preserving vector order, and surfacing sanitized batch diagnostics for provider failures. Added focused regression tests and updated backend quality spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e068911` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
