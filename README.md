@@ -1,6 +1,6 @@
 # TagMemoRAG
 
-A production-grade semantic retrieval engine for product manuals, built on the **WAVE-RAG** algorithm: knowledge chunks are organized into a semantic topology graph, and user queries propagate as waves along graph edges — interference peaks become the top-K results.
+A semantic retrieval engine for product manuals. The default path combines local vector scoring, metadata-aware filtering/boosting, bounded lexical recovery, optional Qdrant ANN candidate generation, and deterministic in-memory graph ranking. WAVE Phase 0/1 features remain available as experimental, default-off extensions; they are not part of the critical retrieval path unless explicitly enabled.
 
 `kb_name` selects an isolated knowledge base under `data/{kb_name}/`. API keys can be scoped to one or more KBs.
 
@@ -22,7 +22,7 @@ pip install -e ".[dev]"
 python -m tagmemorag build --docs docs/ --kb default --config config.yaml
 ```
 
-`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). PDF support extracts embedded text; scanned image-only PDFs need OCR before indexing.
+`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). PDF support extracts embedded text and uses a parser profile to split section-like chunks when headings are visible; the default `product_manual` profile preserves current product-manual heading hints, while `generic` uses only structural heading cues plus optional `parser.pdf_heading_hints`. Scanned image-only PDFs still need OCR before indexing.
 
 Manual metadata can live next to each source file as `<manual>.metadata.json`:
 
@@ -42,6 +42,7 @@ Manual metadata can live next to each source file as `<manual>.metadata.json`:
 ```
 
 If no sidecar exists, TagMemoRAG creates fallback metadata from the relative path, filename, parent directory, and `language="unknown"`.
+During build, manual metadata is also mirrored into a generic document contract (`doc_id`, `domain`, `doc_type`, `attributes`) plus internal identity tags such as `brand:gorenje`, `model:nrk6192`, `category:fridge`, `doc:gorenje-nrk6192-zh-cn-v1`, and `manual:gorenje-nrk6192-zh-cn-v1`. These internal tags help retrieval narrow or boost by document identity; `/manuals` and search results continue to expose only the original user-facing metadata tags.
 
 ### 2. Search from CLI
 
@@ -50,8 +51,9 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 ```
 
 Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
+When a query contains a known exact model, category alias, or brand, search can infer metadata narrowing before ranking. For example, `NRK6192 温度怎么调` hard-filters to chunks from the matching model when that model exists in the loaded KB. Explicit CLI/API filters always win over inferred filters, and empty inferred candidate sets fall back safely.
 
-Filtered search narrows retrieval before WAVE propagation:
+Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
 ```bash
 python -m tagmemorag search "冰箱温度怎么调" \
@@ -74,6 +76,17 @@ Health probes:
 curl http://127.0.0.1:8000/health  # 200 ok when the process is alive
 curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 ```
+
+Local readiness smoke check:
+
+```bash
+python -m tagmemorag readiness smoke
+python -m tagmemorag readiness smoke --keep-workdir
+```
+
+The smoke command builds an isolated temporary KB with the offline hashing embedder, runs retrieve plus noop answer generation, verifies QueryPlan persistence, and round-trips a managed-library bundle. It is a local MVP composition check; it does not validate live traffic, Qdrant, S3, remote model providers, or multi-replica coordination.
+
+For deployment profiles, backup/restore, Qdrant/S3 operations, diagnostics, and rollback playbooks, see [`docs/production-deployment-operations.md`](docs/production-deployment-operations.md).
 
 ## API Reference
 
@@ -99,6 +112,7 @@ curl http://127.0.0.1:8000/ready   # 200 only after model warm-up and KB load
 Response includes `build_id`, `search_time_ms`, and a `results` array. Each result has the existing `node_id / score / text / header / path / source_file / anchor_key` fields plus manual metadata such as `manual_id`, `manual_title`, `brand`, `product_category`, `product_model`, `language`, `version`, and `tags`.
 The response also includes `cache: "hit" | "miss"`.
 Set request `debug: true` or `search.debug_metadata_enabled=true` to include a `debug` object with search strategy, ANN candidate/fallback details, lexical candidate/source counts, and effective search parameters. Diagnostics intentionally omit raw query text, extracted tokens, document text, vectors, trace/search ids, and candidate id lists.
+Debug output also includes `debug.metadata_narrowing`, which reports detected metadata entities, inferred hard filters, soft boost filters, before/after candidate counts, and fallback reason. This is intended for operator routing diagnostics, not as a user-facing explanation.
 
 ### `POST /rebuild`
 
@@ -621,10 +635,20 @@ search:
   lexical_boost: 0.2
   lexical_exact_code_boost: 0.15
   lexical_model_boost: 0.12
+  metadata_narrowing_enabled: true
+  metadata_narrowing_brand_policy: boost_if_not_unique      # boost_if_not_unique | hard_filter | boost
+  metadata_narrowing_category_policy: hard_filter_product_manual # hard_filter_product_manual | hard_filter | boost
+  metadata_narrowing_min_candidates: 1
   debug_metadata_enabled: false
   ann_preselect_enabled: false
   ann_candidate_k: 64
   ann_force_exact_on_filters: false
+
+parser:
+  max_chars: 500
+  min_chars: 50
+  pdf_profile: product_manual   # product_manual | generic
+  pdf_heading_hints: []          # extra PDF heading hints for non-default profiles
 
 anchor:
   default_boost: 2.0
@@ -703,6 +727,57 @@ Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix 
 | `TAGMEMORAG__CACHE__MAX_ENTRIES` | `20000` |
 | `TAGMEMORAG__OBSERVABILITY__TRACING__ENABLED` | `true` |
 | `TAGMEMORAG__OBSERVABILITY__TRACING__OTLP_ENDPOINT` | `http://otel-collector:4317` |
+
+### Config Profiles And Validation
+
+Example profiles live under `examples/config/`:
+
+- `local-hashing-npz.yaml`
+- `local-sqlite-registry.yaml`
+- `qdrant.yaml`
+- `s3-blob.yaml`
+- `answer-openai-compatible.yaml`
+
+Validate a profile before starting the service:
+
+```bash
+python -m tagmemorag config validate --config examples/config/local-hashing-npz.yaml
+```
+
+`config validate` is static and local: it loads the config with normal env precedence, checks local writable paths, checks required env var names for configured remote providers, and warns when optional extras such as `qdrant-client` or `boto3` are not importable. It does not call Qdrant, S3, embedding, reranker, answer, OCR, or visual providers.
+
+Live provider probes are explicit because they can call external services:
+
+```bash
+python -m tagmemorag provider probe --config examples/config/answer-openai-compatible.yaml --answer
+python -m tagmemorag provider probe --config examples/config/qdrant.yaml --qdrant
+python -m tagmemorag provider probe --config config.yaml --all
+```
+
+Probe output is JSON and bounded: it reports provider status, env var names, dependency/provider names, and high-level error types, but not secrets, Authorization headers, raw responses, generated answer text, vectors, or document text.
+
+Use the checks for different questions:
+
+| Check | Answers |
+| --- | --- |
+| `config validate` | Is this config coherent and locally satisfiable? |
+| `provider probe` | Do explicitly selected remote providers respond with the configured credentials/endpoints? |
+| `readiness smoke` | Do the deterministic MVP build/retrieve/answer/queryplan/bundle paths compose in this checkout? |
+| `pilot run` | Do the local config/probe/readiness/eval pilot checks compose into one retained rollout report? |
+| `/ready` | Is this running process ready to serve its loaded KB? |
+
+For a bounded pre-pilot gate and retained JSON/Markdown report, see [Production Pilot Runbook](docs/production-pilot-runbook.md):
+
+```bash
+python -m tagmemorag pilot run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
+  --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
+  --workdir .tmp/production-pilot \
+  --output .tmp/production-pilot/report.json
+```
 
 ### Qdrant Vector Backend
 
@@ -794,9 +869,11 @@ Troubleshooting guide:
 | Dirty state remains pending after rebuild failure | `manual-library dirty --format json` | Fix Qdrant reachability, retry incremental, or full rebuild |
 | Qdrant outage blocks startup/load | provider config | Temporarily switch to `npz` and rebuild from managed sources |
 
-TagMemoRAG also adds a lightweight local lexical signal before WAVE-RAG ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
+TagMemoRAG also adds a lightweight local lexical signal before final ranking. It scans already-loaded node fields, including chunk text, headers, paths, source files, manual metadata, and tags, to recover exact product-manual terms such as `E21`, `E-21`, `F07`, `HR6FDFF701SW`, `排水泵`, and `童锁`. Lexical matches add bounded seed nodes and a bounded score hint; they do not replace vector similarity, graph propagation when enabled, anchors, filters, or metadata/tag boosts. Disable it with `search.lexical_enabled=false`, or tune the bounded scan with `search.lexical_candidate_k`, `search.lexical_source_k`, `search.lexical_boost`, `search.lexical_exact_code_boost`, and `search.lexical_model_boost`.
 
-Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local WAVE-RAG runs. This does not replace WAVE-RAG ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and runs graph propagation in memory, so ANN only narrows the candidate set and does not become the final ranker.
+Metadata narrowing runs just before filtering and ranking. It builds a local index from loaded graph metadata, detects high-confidence product-manual identity signals, and resolves them into hard filters or boost-only filters according to config. Exact model matches hard-filter by default, category aliases such as `冰箱`/`refrigerator` hard-filter in product-manual KBs, and brand-only matches boost unless the KB contains a single brand or policy says otherwise. Disable with `search.metadata_narrowing_enabled=false` for A/B checks or broad exploratory retrieval.
+
+Qdrant can also act as an optional ANN candidate generator for search. Set `search.ann_preselect_enabled=true` to let TagMemoRAG ask Qdrant for up to `search.ann_candidate_k` candidate node ids before local ranking runs. This does not replace local ranking: TagMemoRAG still recomputes exact local vector scores, unions safe lexical candidates when enabled, and applies deterministic in-memory graph propagation according to the active config, so ANN only narrows the candidate set and does not become the final ranker.
 
 The ANN path is intentionally conservative:
 
@@ -818,7 +895,7 @@ model:
   provider: http
   base_url: https://api.siliconflow.cn/v1
   api_key_env: SILICONFLOW_API_KEY
-  name: Qwen/Qwen3-VL-Embedding-8B
+  name: Qwen/Qwen3-Embedding-8B
   dim: 4096
   dimensions: 4096
   batch_size: 32
@@ -1006,7 +1083,34 @@ uv run python scripts/build_eval_baseline.py \
   --output tests/fixtures/eval/baselines/hashing.json
 ```
 
-For a SiliconFlow sanity run with `BAAI/bge-small-zh-v1.5`, set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The SiliconFlow baseline lives at `tests/fixtures/eval/baselines/siliconflow.json` and is **not** part of CI; it serves as a smoke test for divergence between hashing and the production embedder.
+For a SiliconFlow run with the production target model (`Qwen/Qwen3-Embedding-8B`, 4096 dim), set `SILICONFLOW_API_KEY` and run `scripts/eval-siliconflow.sh`. The script wraps `build_eval_baseline.py --embedder siliconflow` (with smoke test, exponential-backoff retry, and atomic write). To diff against hashing in one shot, append `--compare-with tests/fixtures/eval/baselines/hashing.json`:
+
+```bash
+uv run python scripts/build_eval_baseline.py \
+  --embedder siliconflow \
+  --output tests/fixtures/eval/baselines/siliconflow.json \
+  --compare-with tests/fixtures/eval/baselines/hashing.json
+```
+
+`tests/fixtures/eval/baselines/siliconflow.json` is **informational only** — it captures the production embedder's measurements but is **not** a CI quality gate. Today's eval fixtures' case-level thresholds were authored against hashing-embedder-recall, so siliconflow rankings often miss the same case-level cuts; `run_eval_ci.py --baseline siliconflow.json --embedder siliconflow --no-default-thresholds` is the closest you get to a self-pass run, but case-level fixture thresholds are not bypassable. Diagnosing or reauthoring the fixture suite to match the production embedder is a separate readiness task.
+
+Generate the offline reauthoring queue before editing fixture expectations:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py --format markdown
+```
+
+The report compares hashing vs SiliconFlow aggregate baselines and marks suites as `ok`, `monitor`, `reauthor`, or `investigate`. It does not call external providers, rewrite JSONL fixtures, or make SiliconFlow a CI gate.
+
+For the next level down, summarize a saved eval report into a bounded case-review table:
+
+```bash
+uv run python scripts/summarize_eval_case_review.py \
+  --report .tmp/eval-review/coffee.json \
+  --format markdown
+```
+
+By default the case summary redacts raw queries and snippets. Use `--include-query` only for local review when that content is acceptable.
 
 ## Tag Data Model
 
@@ -1064,6 +1168,188 @@ rm -rf data/_global/
 
 The next rebuild recreates everything; `execute_search` output is byte-identical regardless of whether the data is present.
 
+### Experimental WAVE Phase 1 — co-occurrence + spike propagation
+
+Phase 1 turns tag data into a query-vector enhancement. Each rebuild now also writes a directed co-occurrence matrix at `data/_global/tag_cooccurrence/{kb}.npz`, and an opt-in spike walk over that matrix can fuse a "tag context vector" into the query before vector search runs. **This is experimental and defaults to off** so existing deployments keep current behaviour.
+
+```yaml
+wave_phase1:
+  enabled: true                # master switch (rebuild + search)
+  spike_enabled: false         # query-vector enhancement — flip to true to activate
+  cooccurrence_enabled: true   # rebuild step on/off
+  legacy_chunk_tag_boost: false  # escape hatch: keep chunk-side tag bonus when spike is on
+```
+
+Relationship to existing knobs:
+- `search.tag_boost = 0.03` keeps its numeric value. With `spike_enabled=true`, it is consumed as the base alpha for the query-vector blend; the chunk-side `tags`-field bonus inside `wave_searcher` is silenced unless `legacy_chunk_tag_boost=true`.
+- Setting `spike_enabled=false` returns the search path to Phase 0 byte-for-byte.
+- `rm -rf data/_global/tag_cooccurrence/` is safe — the loader returns `None` on missing files and `apply_tag_boost` short-circuits.
+
+EPA dynamic boost remains opt-in. Keep `dynamic_boost_factor_strategy: constant`
+until `data/_global/epa_basis.npz` reports `train_kind="real-pca"`; with the
+default `wave_phase0.epa_min_k=8`, that means at least 16 canonical tags. Before
+switching to `dynamic_boost_factor_strategy: epa`, run
+`uv run python scripts/diag_epa_logic_depth.py` and confirm the real-PCA alpha
+distribution passes. The Phase 2a hashing fixture uses
+`epa_logic_depth_scale: 2.0` and `epa_floor: 0.0`; if EPA mode looks noisy in a
+deployment, switch the strategy back to `constant`.
+
+Phase 2b-1 adds a third option `dynamic_boost_factor_strategy: pyramid`. It
+swaps the top-K cosine seed selector for a multi-level Gram-Schmidt residual
+pyramid (V6 source `applyTagBoost`'s `[2] Residual Pyramid` step) and uses the
+full source formula:
+
+```
+activation_mult = act_min + tag_memo_activation * (act_max - act_min)
+dynamic = (logicDepth * (1 + log(1+resonance)) / (1 + entropy*0.5)) * activation_mult
+        * pyramid_post_scale     # then floored at epa_floor
+```
+
+`resonance` stays stubbed at `0` (Phase 2b-2 territory). Defaults
+(`pyramid_post_scale=4.0` calibrated on hashing dim=64 fixture, `act_min=0.5`,
+`act_max=1.5`) are wired to keep alpha series within the same magnitude as the
+`epa` path. To switch: confirm
+`uv run python scripts/diag_pyramid_dynamic_boost.py` returns
+`overall: PASS`, then set `dynamic_boost_factor_strategy: pyramid`. Roll back to
+`epa` or `constant` if hashing-dim noise dominates `coherence`; alternatively
+set `pyramid_use_handshake_features: false` to disable the handshake submodule
+without removing pyramid (degenerates `tag_memo_activation` to 0, equivalent to
+`act_mult = act_min`).
+
+Full design, tuning notes, and the 2026-05-17 KEEP_OFF readiness result live in [`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md).
+
+#### External modulators (Phase 2b-2)
+
+When `dynamic_boost_factor_strategy: pyramid` is on, the search request can pass
+two extra "spotlight" hints that map to V6 `applyTagBoost`'s 4 peripheral
+modulators (langPenalty + dynamicCoreBoostFactor + core completion + ghost
+injection). All inputs are optional and default off; under `constant`/`epa`
+strategies they round-trip through `info` without changing weights (`R10`).
+
+`SearchRequest` adds:
+
+```jsonc
+{
+  "core_tags": ["filter-cleaning", "cooling"],   // synonym-resolved to canonical
+  "ghost_tags": [
+    {"name": "airflow", "vector": [0.12, ...], "is_core": true},
+    {"name": "noise",   "vector": [0.04, ...], "is_core": false}
+  ]
+}
+```
+
+- **`core_tags`**: caller already knows the query's key tag(s). The matcher first
+  resolves synonyms (e.g. `cooling-mode → cooling`) via `tag_governance`, then
+  forces those tags into the candidate set under `strategy="pyramid"`. If a
+  named tag is present in the KB but missed by the pyramid pass, it is pulled
+  via SQL and weighted at `max_base × dynamicCoreBoostFactor`.
+- **`ghost_tags`**: caller has KB-external tags with vectors (e.g. expansion
+  tags from another model). Vector dim must match the embedding model;
+  mismatched ghosts are silently skipped and counted in
+  `info.ghost_skipped_dim_mismatch`. Hard ghosts (`is_core=true`) get the
+  dynamic core-boost multiplier; soft ghosts use unit weight.
+- **`wave_phase1.lang_penalty_enabled` (default `false`)**: turn on to
+  re-introduce V6's "tag is technical noise in non-technical world" penalty.
+  Defaults preserve hashing-fixture invariance because the cold-start EPA basis
+  emits axis labels like `axis-0` / `cooling`, which match the technical-world
+  regex and thus never fire the penalty. Once a real-PCA basis surfaces a
+  non-technical label (e.g. a Politics-themed cluster), enabling the flag will
+  start dampening pure-ASCII technical tags.
+
+Example:
+
+```bash
+curl -s -X POST http://localhost:8000/search \
+  -H 'content-type: application/json' \
+  -d '{
+    "question": "F07 sensor wire loose",
+    "kb_name": "default",
+    "core_tags": ["filter-cleaning"],
+    "ghost_tags": [
+      {"name": "airflow", "vector": [0.1, 0.2, 0.0, ...], "is_core": true}
+    ]
+  }'
+```
+
+`info.tag_boost` in the debug payload now includes
+`core_tags_input / core_tags_resolved / core_completion_count / ghosts_injected
+/ ghost_skipped_dim_mismatch / lang_penalty_applied_count / query_world` for
+post-mortem diagnostics.
+
+#### Cross-domain resonance (Phase 3)
+
+Phase 3 replaces the Phase 2b-1 `resonance = 0` stub with a port of V6
+`EPAModule.detectCrossDomainResonance` (source: `lioensky/VCPToolBox`
+`EPAModule.js:170-201`). When `wave_phase1.cross_domain_resonance_enabled`
+is `true`, the dynamicBoostFactor formula's resonance term becomes
+`log(1 + Σ sqrt(top.energy * sec.energy))` over each EPA dominant axis pair
+that crosses the hardcoded threshold `0.15`.
+
+Defaults are off so 8 hashing eval suites stay byte-stable. Toggle per-deploy:
+
+```yaml
+wave_phase1:
+  spike_enabled: true
+  dynamic_boost_factor_strategy: pyramid
+  cross_domain_resonance_enabled: true   # Phase 3 opt-in
+```
+
+**Log-domain amplification reference:**
+
+| `resonance` | `log(1 + r)` | dynamic factor multiplier |
+|------------:|------------:|--------------------------:|
+| 0 (cold-start / single dominant axis) | 0.000 | × 1.00 |
+| 0.3 (one moderate co-activation)      | 0.262 | × 1.26 |
+| 0.5 (one strong co-activation)        | 0.405 | × 1.40 |
+| 1.0 (one strong + several moderate)   | 0.693 | × 1.69 |
+| 2.0 (multi-axis dense activation)     | 1.099 | × 2.10 |
+
+The 12-tag hashing fixture diagnostic (`scripts/diag_pyramid_dynamic_boost.py`)
+records `pyramid+resonance` `resonance: mean=0.76, std=0.12, range=[0.47, 1.05]`
+on the eval set with the default `pyramid_post_scale=4.0` (no recalibration
+needed); the alpha series clears the D2 PASS thresholds with margin.
+
+The debug payload exposes the per-bridge breakdown only when at least one pair
+crosses the threshold:
+
+```json
+{
+  "tag_boost": {"cross_domain_resonance": 0.5, "cross_domain_bridges_count": 1, ...},
+  "tag_boost_debug": {
+    "cross_domain_bridges": [
+      {"from": "Tech", "to": "Logic", "strength": 0.5, "balance": 1.0}
+    ]
+  }
+}
+```
+
+Phase 3.5 will train real `tag_intrinsic_residuals` and feed them into the
+ResidualPyramid as a prior; Phase 4 covers V8 `geodesicRerank`.
+
+#### Experimental geodesic rerank (Phase 4)
+
+Phase 4 ports V8 `TagMemoEngine.geodesicRerank` as an experimental, default-off WAVE extension. After Phase 1 spike
+propagation publishes a tag-energy field (`accumulated_energy`), V8 reranks
+the wave_search candidates by mean tag energy per chunk:
+
+```yaml
+wave_phase1:
+  spike_enabled: true
+  geodesic_rerank_enabled: true       # Phase 4 opt-in
+  geodesic_alpha: 0.3                 # blend weight, clamped to [0, 1]
+  geodesic_oversample_factor: 2.0     # pool = top_k × factor
+  geodesic_min_geo_samples: 2         # source default 4; lowered for ~3 tags/chunk
+```
+
+Default off keeps existing baselines byte-stable. The 2026-05-17 readiness check kept this flag OFF after mixed eval results. When on, V8 silently
+no-ops if any precondition fails (spike disabled, matrix missing, energy
+field empty, etc.) and records the reason via
+`tagmemorag_geodesic_rerank_skipped_total{reason}` for ops dashboards.
+Diagnostics live in `scripts/diag_geodesic_rerank.py` (sweeps α and
+min_geo_samples, prints hit-count histogram, applies a PASS gate of
+`applied_pct > 0` AND `max_geo_zero_pct < 50`). Full design notes are in
+[`docs/wave-phase1-architecture.md`](docs/wave-phase1-architecture.md#geodesic-rerank-phase-4).
+
 ## Roadmap
 
 | Milestone | Scope |
@@ -1084,7 +1370,7 @@ The next rebuild recreates everything; `execute_search` output is byte-identical
 | **M13** ✅ | Incremental manual rebuild/update path |
 | **M14** ✅ | Incremental rebuild strategy and impact reporting |
 | **M15** ✅ | Point-level incremental Qdrant updates |
-| **M16** ✅ | Qdrant ANN preselection as candidate generation for local WAVE-RAG ranking |
+| **M16** ✅ | Qdrant ANN preselection as candidate generation before local deterministic ranking |
 | **M17** ✅ | Incremental rebuild plus ANN integration regression coverage |
 | **M18** ✅ | Batched Qdrant payload refresh with safe per-point fallback |
 | **M19** ✅ | Opt-in search diagnostics and operator debug metadata |
@@ -1099,4 +1385,5 @@ The next rebuild recreates everything; `execute_search` output is byte-identical
 | **M29** ✅ | Admin diagnostics for dirty state, registry, blobs, audit, and queue jobs |
 | **M30** ✅ | Portable managed-library import/export bundles |
 | **M31** ✅ | Tag data model: position-aware tag links, embeddings, and global EPA basis |
+| **Ops Guide** ✅ | Production deployment and operations guide for Docker, backups, Qdrant, S3, diagnostics, and rollback |
 | **Parking lot** | Payload-filtered ANN, HA multi-replica, streaming bundle API, bundle encryption/signing |

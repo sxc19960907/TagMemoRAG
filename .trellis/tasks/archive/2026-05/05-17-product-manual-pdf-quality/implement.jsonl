@@ -1,0 +1,6 @@
+{"file":".trellis/tasks/05-17-product-manual-pdf-quality/prd.md","reason":"Product requirements and acceptance criteria for product-manual PDF quality."}
+{"file":".trellis/tasks/05-17-product-manual-pdf-quality/design.md","reason":"Technical design for lightweight PDF section chunking and realmanuals eval loop."}
+{"file":".trellis/tasks/05-17-product-manual-pdf-quality/implement.md","reason":"Implementation checklist and validation gates."}
+{"file":".trellis/tasks/archive/2026-05/05-17-pdf-manual-real-eval/research/realmanuals-eval-report.md","reason":"Empirical evidence that page-level PDF chunks are the current bottleneck."}
+{"file":".trellis/tasks/archive/2026-05/05-17-general-rag-metadata-narrowing/design.md","reason":"Recent metadata narrowing contract that product-manual retrieval should build on."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Project quality rules and validation expectations before implementation."}

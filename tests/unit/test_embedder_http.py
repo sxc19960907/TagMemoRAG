@@ -44,7 +44,7 @@ def test_http_embedder_posts_openai_compatible_payload(monkeypatch):
 
     monkeypatch.setattr("tagmemorag.embedder.urlopen", fake_urlopen)
     embedder = HttpEmbedder(
-        "Qwen/Qwen3-VL-Embedding-8B",
+        "Qwen/Qwen3-Embedding-8B",
         base_url="https://api.siliconflow.cn/v1",
         api_key_env="SILICONFLOW_API_KEY",
         timeout_seconds=12,
@@ -57,7 +57,7 @@ def test_http_embedder_posts_openai_compatible_payload(monkeypatch):
     assert captured["timeout"] == 12
     assert captured["headers"]["Authorization"] == "Bearer secret"
     assert captured["body"] == {
-        "model": "Qwen/Qwen3-VL-Embedding-8B",
+        "model": "Qwen/Qwen3-Embedding-8B",
         "input": ["a", "b"],
         "encoding_format": "float",
         "dimensions": 4096,
@@ -133,7 +133,7 @@ def test_create_embedder_http_provider(monkeypatch):
     monkeypatch.setenv("SILICONFLOW_API_KEY", "secret")
 
     embedder = create_embedder(
-        "Qwen/Qwen3-VL-Embedding-8B",
+        "Qwen/Qwen3-Embedding-8B",
         provider="http",
         api_key_env="SILICONFLOW_API_KEY",
         base_url="https://api.siliconflow.cn/v1",

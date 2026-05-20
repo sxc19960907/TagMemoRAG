@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
@@ -20,6 +20,12 @@ class ModelConfig(BaseModel):
     timeout_seconds: float = 30.0
     dimensions: int | None = None
     normalize: bool = True
+    embedding_model_id: str | None = None
+    embedding_model_version: str = "v1"
+
+    @property
+    def effective_embedding_model_id(self) -> str:
+        return self.embedding_model_id or self.name
 
 
 class GraphConfig(BaseModel):
@@ -50,16 +56,33 @@ class SearchConfig(BaseModel):
     lexical_boost: float = 0.2
     lexical_exact_code_boost: float = 0.15
     lexical_model_boost: float = 0.12
+    metadata_narrowing_enabled: bool = True
+    metadata_narrowing_brand_policy: Literal["boost_if_not_unique", "hard_filter", "boost"] = "boost_if_not_unique"
+    metadata_narrowing_category_policy: Literal["hard_filter_product_manual", "hard_filter", "boost"] = "hard_filter_product_manual"
+    metadata_narrowing_min_candidates: int = Field(default=1, ge=1)
 
 
 class ParserConfig(BaseModel):
     max_chars: int = 500
     min_chars: int = 50
+    overlap_chars: int = Field(default=0, ge=0)
+    pdf_profile: Literal["product_manual", "generic"] = "product_manual"
+    pdf_heading_hints: list[str] = Field(default_factory=list)
 
 
 class StorageConfig(BaseModel):
     data_dir: str = "data"
     schema_version: str = "1"
+    retire_min_hours_after_swap: float = 24.0
+
+
+class AssetConfig(BaseModel):
+    enabled: bool = False
+    store_backend: Literal["local", "s3"] = "local"
+    root_dir: str = "data/document_assets"
+    pdf_page_snapshots_enabled: bool = False
+    extractor_version: str = "pdf_snapshot.v1"
+    strict_extraction: bool = False
 
 
 class VectorStoreConfig(BaseModel):
@@ -139,6 +162,110 @@ class ManualLibraryConfig(BaseModel):
     s3_timeout_seconds: float = 10.0
 
 
+class QueryPlanConfig(BaseModel):
+    """T2: Settings block for QueryPlan + plan log behavior (Architecture v2 § A2)."""
+
+    persist_enabled: bool = True
+    retention_days: int = 30
+    private_kbs: list[str] = Field(default_factory=list)
+    default_latency_ms: int = 5000
+    default_max_evidence: int = 8
+    default_rerank_tier: Literal["off", "tier1", "tier2"] = "off"
+    default_allow_external_reranker: bool = True
+    out_of_scope_keywords: list[str] | None = None
+    pii_mask_rules: list[dict] | None = None
+    background_writer_max_queue: int = 1024
+
+
+class RerankerConfig(BaseModel):
+    """T3: Settings block for the Reranker first-class component (Architecture v2 § A3).
+
+    `enabled` defaults to False so T3 ships dormant; ops flips this in yaml
+    after observation. Vendor specifics (model_id, base_url) live here per
+    [[arch-vendor-specifics-discipline]] — never hard-coded in dispatcher
+    or build_plan.
+    """
+
+    enabled: bool = False
+    default_tier: Literal["off", "tier1", "tier2"] = "tier1"
+
+    provider: Literal["siliconflow", "noop"] = "siliconflow"
+    model_id: str = "Qwen/Qwen3-Reranker-0.6B"
+    model_version: str = "v1"
+    instruction: str | None = None
+    top_n: int = Field(default=20, ge=1)
+    rerank_candidates_n: int = Field(default=100, ge=1)
+
+    calibrator: Literal["minmax", "zscore", "sigmoid", "identity"] = "minmax"
+
+    max_seq_length: int = 32768
+    query_token_budget: int = 256
+    instruction_token_budget: int = 64
+
+    retry_max: int = Field(default=1, ge=0)
+    retry_backoff_ms: int = Field(default=200, ge=0)
+    circuit_breaker_threshold: int = Field(default=3, ge=1)
+    circuit_breaker_cooldown_seconds: int = Field(default=30, ge=1)
+
+    min_budget_ms: int = Field(default=500, ge=0)
+    hard_timeout_ms: int = Field(default=3000, ge=1)
+    downstream_reserve_ms: int = Field(default=200, ge=0)
+
+    cache_enabled: bool = True
+    cache_max_entries: int = Field(default=5000, ge=1)
+
+    api_key_env: str = "SILICONFLOW_API_KEY"
+    base_url: str = "https://api.siliconflow.cn/v1"
+
+
+class AnswerConfig(BaseModel):
+    """T6: Settings block for the optional /answer generation layer."""
+
+    enabled: bool = False
+    provider: Literal["noop", "openai_compatible"] = "noop"
+    model_id: str = ""
+    model_version: str = "v1"
+    prompt_version: str = "answer_prompt.v1"
+    base_url: str = "https://api.openai.com/v1"
+    chat_completions_url: str | None = None
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_seconds: float = Field(default=30.0, gt=0.0)
+    max_output_tokens: int = Field(default=512, ge=1)
+    temperature: float = Field(default=0.0, ge=0.0)
+
+
+class OCRConfig(BaseModel):
+    """T7: Settings block for optional OCR text ingestion."""
+
+    enabled: bool = False
+    provider: Literal["deterministic"] = "deterministic"
+    version: str = "ocr.v1"
+    trigger: Literal["missing_text"] = "missing_text"
+    strict_extraction: bool = False
+
+
+class VisualRetrievalConfig(BaseModel):
+    """T8: Settings block for optional visual retrieval candidate generation."""
+
+    enabled: bool = False
+    provider: Literal["deterministic"] = "deterministic"
+    reranker: Literal["noop"] = "noop"
+    trigger: Literal["visual_intent"] = "visual_intent"
+    max_candidates: int = Field(default=4, ge=0)
+    min_score: float = Field(default=0.1, ge=0.0, le=1.0)
+    provider_version: str = "visual_retrieval.v1"
+    reranker_version: str = "visual_reranker.noop.v1"
+
+
+class ConnectorsConfig(BaseModel):
+    """T9: Settings block for optional connector materialization."""
+
+    enabled: bool = False
+    provider: Literal["fixture"] = "fixture"
+    materialized_root_dir: str = "data/connectors"
+    strict_sync: bool = False
+
+
 class WavePhase0Config(BaseModel):
     enabled: bool = True
     epa_basis_enabled: bool = True
@@ -147,6 +274,109 @@ class WavePhase0Config(BaseModel):
     epa_energy_threshold: float = Field(default=0.95, gt=0.0, le=1.0)
     epa_retrain_growth_ratio: float = Field(default=0.20, ge=0.0)
     epa_lock_timeout_seconds: float = Field(default=30.0, gt=0.0)
+
+
+class WavePhase1Config(BaseModel):
+    enabled: bool = True
+    spike_enabled: bool = False
+    cooccurrence_enabled: bool = True
+
+    # Co-occurrence builder (mirror VCPToolBox PHI_MAX/PHI_MIN/LEGACY_PHI)
+    phi_max: float = Field(default=0.9, gt=0.0, le=1.0)
+    phi_min: float = Field(default=0.5, ge=0.0, le=1.0)
+    legacy_phi: float = Field(default=0.7, ge=0.0, le=1.0)
+    max_tags_per_manual: int = Field(default=100, ge=2)
+
+    # Spike propagation (mirror srConfig defaults from TagMemoEngine.js:187-195)
+    spike_max_hops: int = Field(default=4, ge=1)
+    spike_base_momentum: float = Field(default=2.0, ge=0.0)
+    spike_firing_threshold: float = Field(default=0.10, ge=0.0)
+    spike_base_decay: float = Field(default=0.25, gt=0.0, le=1.0)
+    spike_wormhole_decay: float = Field(default=0.70, gt=0.0, le=1.0)
+    spike_tension_threshold: float = Field(default=1.0, gt=0.0)
+    spike_max_emergent_nodes: int = Field(default=50, ge=1)
+    spike_max_neighbors_per_node: int = Field(default=20, ge=1)
+
+    # Seed selection (top-K cosine substitute for ResidualPyramid in Phase 1)
+    seed_top_k: int = Field(default=8, ge=1)
+    seed_min_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
+
+    # Boost factor strategy (D2/D5: constant=1.0 default; "epa" = Phase 2a logicDepth*scale;
+    # "pyramid" = Phase 2b-1 full source formula via ResidualPyramid features).
+    dynamic_boost_factor_strategy: Literal["constant", "epa", "pyramid"] = "constant"
+    dynamic_boost_min: float = Field(default=0.3, ge=0.0)
+    dynamic_boost_max: float = Field(default=2.0, gt=0.0)
+
+    # Phase 2a: EPA dynamic boost shape — `dynamic = max(epa_floor, logicDepth * scale)`.
+    # Defaults (1.0 / 0.0) keep behavior equivalent to Phase 1 strategy="epa" path.
+    # D4: also applied as post-multiplier/floor to strategy="pyramid" output for ops escape hatch.
+    epa_logic_depth_scale: float = Field(default=1.0, ge=0.0)
+    epa_floor: float = Field(default=0.0, ge=0.0)
+
+    # Phase 2b-1: ResidualPyramid (multi-level Gram-Schmidt) seed selector + full
+    # dynamicBoostFactor formula. See ResidualPyramid source defaults.
+    pyramid_max_levels: int = Field(default=3, ge=1, le=10)
+    pyramid_top_k: int = Field(default=10, ge=1, le=100)
+    pyramid_min_energy_ratio: float = Field(default=0.1, gt=0.0, le=1.0)
+    pyramid_layer_decay_base: float = Field(default=0.7, gt=0.0, le=1.0)
+    pyramid_use_handshake_features: bool = Field(default=True)
+    activation_multiplier_min: float = Field(default=0.5, ge=0.0)
+    activation_multiplier_max: float = Field(default=1.5, ge=0.0)
+    # Post-scale applied AFTER the full pyramid dynamicBoostFactor formula.
+    # Default 1.0 keeps the formula numerically equivalent to VCP source
+    # (TagMemoEngine.js:88 has no post-scale; this knob exists only as an
+    # ops escape hatch for deployment-specific tuning, never as a fixture
+    # calibration handle).
+    pyramid_post_scale: float = Field(default=1.0, ge=0.0)
+
+    # Phase 2b-2: external modulators (langPenalty + coreBoost). Defaults preserve
+    # Phase 2b-1 behavior (lang_penalty_enabled=False ⇒ all helpers return 1.0).
+    # Source defaults: TagMemoEngine.js:140-180 (penaltyUnknown=0.4, penaltyCrossDomain=0.3,
+    # coreBoostRange=[1.20, 1.40]).
+    lang_penalty_enabled: bool = False
+    lang_penalty_unknown: float = Field(default=0.4, ge=0.0, le=1.0)
+    lang_penalty_cross_domain: float = Field(default=0.3, ge=0.0, le=1.0)
+    core_boost_min: float = Field(default=1.20, ge=1.0)
+    core_boost_max: float = Field(default=1.40, ge=1.0)
+
+    # Phase 3: V6 detectCrossDomainResonance. Default off — when enabled, the
+    # pyramid dynamicBoostFactor formula's `resonance` term stops being stubbed
+    # at 0 and instead reads cross-axis co-activation from the EPA dominantAxes.
+    # Source: lioensky/VCPToolBox EPAModule.js:170-201 (commit aff66193).
+    cross_domain_resonance_enabled: bool = False
+
+    # Phase 3.5: true tag-intrinsic residual energy producer/consumer. Producer
+    # can write rows during rebuild, while this flag keeps online consumers off
+    # by default for baseline compatibility.
+    intrinsic_residuals_enabled: bool = False
+    intrinsic_residual_top_n: int | None = Field(default=None, ge=1, le=100)
+
+    # Experimental Phase 4: V8 geodesicRerank — reranks wave_search candidates
+    # by tag energy field accumulated during spike propagation. Default off and
+    # kept off by the 2026-05-17 WAVE readiness check. When explicitly enabled
+    # with spike_enabled=true, execute_search oversamples wave_search candidates
+    # (top_k * geodesic_oversample_factor), reranks via tag-energy mean per
+    # chunk, then truncates to top_k. minGeoSamples differs from source default
+    # (4) because this repo's manuals carry ~3 tags/chunk on average.
+    geodesic_rerank_enabled: bool = False
+    geodesic_alpha: float = Field(default=0.3, ge=0.0, le=1.0)
+    geodesic_oversample_factor: float = Field(default=2.0, ge=1.0)
+    geodesic_min_geo_samples: int = Field(default=2, ge=1)
+
+    # Semantic dedup
+    dedup_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
+    dedup_weight_transfer: float = Field(default=0.2, ge=0.0, le=1.0)
+
+    # Compatibility (D3: chunk-side tag_boost is silenced when spike is on)
+    legacy_chunk_tag_boost: bool = False
+
+    @model_validator(mode="after")
+    def _validate_core_boost_range(self) -> "WavePhase1Config":
+        if self.core_boost_max < self.core_boost_min:
+            raise ValueError(
+                f"core_boost_max ({self.core_boost_max}) must be >= core_boost_min ({self.core_boost_min})"
+            )
+        return self
 
 
 class MetricsConfig(BaseModel):
@@ -182,6 +412,7 @@ class Settings(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     parser: ParserConfig = Field(default_factory=ParserConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    assets: AssetConfig = Field(default_factory=AssetConfig)
     vector_store: VectorStoreConfig = Field(default_factory=VectorStoreConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -189,7 +420,14 @@ class Settings(BaseSettings):
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     manual_library: ManualLibraryConfig = Field(default_factory=ManualLibraryConfig)
+    queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
+    answer: AnswerConfig = Field(default_factory=AnswerConfig)
+    ocr: OCRConfig = Field(default_factory=OCRConfig)
+    visual_retrieval: VisualRetrievalConfig = Field(default_factory=VisualRetrievalConfig)
+    connectors: ConnectorsConfig = Field(default_factory=ConnectorsConfig)
     wave_phase0: WavePhase0Config = Field(default_factory=WavePhase0Config)
+    wave_phase1: WavePhase1Config = Field(default_factory=WavePhase1Config)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
 
     @classmethod

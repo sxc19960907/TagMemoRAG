@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review test coverage, privacy-safe reporting, and forbidden debug metadata."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify the new module keeps entrypoint dependencies one-way."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify report fields survive CLI serialization without leaking raw eval content."}

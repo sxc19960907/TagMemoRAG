@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and architecture entry point."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Current MVP capability map and production-readiness honesty constraints."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundaries and dependency direction for adding a CLI orchestration layer."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and privacy constraints for debug/report metadata."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index for cross-layer and reuse checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Ensure the pilot reuses existing readiness/probe/eval contracts."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Map CLI-to-service-to-report data flow."}

@@ -1,0 +1,7 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "backend dependency boundaries"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "asset manifest and storage persistence patterns"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "structured API/storage errors"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "testing and compatibility checklist"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "safe observability rules"}
+{"file": ".trellis/tasks/archive/2026-05/05-17-production-rag-architecture/design.md", "reason": "Phase 4 roadmap and production checks"}

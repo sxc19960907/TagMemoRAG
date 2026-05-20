@@ -23,7 +23,8 @@ M0 quality is defined by the acceptance criteria in `.trellis/tasks/05-10-wave-r
 - Keep rebuild double-buffer behavior: build new state off to the side, then swap only after success.
 - Include `build_id` in search results and relevant logs.
 - Use explicit config objects instead of scattering constants across modules.
-- Keep hybrid lexical retrieval local and bounded: scan loaded graph node fields only, respect filters and KB boundaries, and keep WAVE-RAG as the final deterministic ranker.
+- Keep hybrid lexical retrieval local and bounded: scan loaded graph node fields only, respect filters and KB boundaries, and keep final ranking deterministic over the loaded graph and vectors.
+- Match normalized English metadata aliases on token boundaries, not substrings, so `washer` never narrows a `dishwasher` query.
 - For `BaseSettings` configs that merge YAML with env vars, explicitly test precedence. The M1 contract is `env > .env > YAML init data > defaults`; pydantic-settings does not preserve that order unless `settings_customise_sources` is configured.
 
 ---
@@ -138,4 +139,66 @@ model:
 model:
   provider: http
   api_key_env: SILICONFLOW_API_KEY
+```
+
+## Scenario: Production Pilot Command
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing `tagmemorag pilot run`, the operator-facing pre-pilot gate that composes config validation, provider probe, readiness smoke, and eval.
+- This is a cross-layer CLI/service/report contract. Keep the CLI thin and put report assembly in `src/tagmemorag/production_pilot.py`.
+
+### 2. Signatures
+
+- CLI: `python -m tagmemorag pilot run --config <path> --suite <jsonl> --docs <dir> --workdir <dir> --output <path> --format json|markdown`
+- Service: `run_production_pilot(config_path, suite_path, docs_path, workdir, top_k, source_k, thresholds) -> ProductionPilotReport`
+- Writer: `write_pilot_report(report, path, fmt="json"|"markdown") -> None`
+
+### 3. Contracts
+
+- Response schema version: `production_pilot.v1`.
+- Report fields: `status`, `config_path`, `suite_path`, `docs_path`, `workdir`, `stages`, `next_steps`.
+- Stage fields: `name`, `status`, `detail`, optional `error`.
+- Allowed detail content: stage counts, provider/check names, profile names, numeric eval metrics, eval suite filename, failed case ids.
+- Forbidden detail content: raw eval queries, retrieved snippets, vectors, full source-file lists, API keys, Authorization headers, raw provider responses, generated answer text.
+- Default local pilot thresholds may be lower than strict `eval run` defaults when documented as pilot-specific; strict regression gating should use `eval run --baseline`.
+
+### 4. Validation & Error Matrix
+
+- `config_validate.status == failed` -> pilot status `failed`.
+- `provider_probe.status == failed` -> pilot status `failed`.
+- `provider_probe.status == skipped` -> allowed for local/offline profiles.
+- `readiness_smoke.status != passed` -> pilot status `failed`.
+- `eval.summary.passed is false` -> pilot status `failed`.
+- Runtime exceptions that prevent report creation -> CLI prints `pilot error: <type>: <reason>` to stderr and exits `2`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: local hashing/NPZ pilot exits `0`, provider stage is all skipped, readiness and eval pass, and JSON/Markdown report is retained.
+- Base: warning config checks produce pilot `warning` unless a later required stage fails.
+- Bad: dumping `EvalReport.to_dict()` into the pilot report leaks queries and snippets; summarize only `summary.metrics`, counts, and failed case ids.
+
+### 6. Tests Required
+
+- Real local pilot test with hashing config and fixture data.
+- Sanitization assertions that fixture queries/snippets and `actual_top_k` do not appear in the pilot report JSON.
+- CLI tests for JSON file output, Markdown stdout, and failed report exit code.
+- Failure aggregation test using intentionally strict thresholds.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+stage_detail = eval_report.to_dict()
+```
+
+#### Correct
+
+```python
+stage_detail = {
+    "cases": eval_report.summary.cases,
+    "metrics": eval_report.summary.metrics.to_dict(),
+    "failed_cases": [case.id for case in eval_report.cases if not case.passed],
+}
 ```

@@ -1,0 +1,22 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-answer/data
+vector_store:
+  provider: npz
+manual_library:
+  root_dir: .tmp/tagmemorag-answer/manuals
+  registry_backend: file
+  blob_backend: local
+  blob_root_dir: .tmp/tagmemorag-answer/blobs
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: gpt-4.1-mini
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+logging:
+  level: INFO
+  format: json

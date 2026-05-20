@@ -1,0 +1,16 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-local/data
+vector_store:
+  provider: npz
+manual_library:
+  root_dir: .tmp/tagmemorag-local/manuals
+  registry_backend: file
+  blob_backend: local
+  blob_root_dir: .tmp/tagmemorag-local/blobs
+logging:
+  level: INFO
+  format: json

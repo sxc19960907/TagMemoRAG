@@ -64,7 +64,7 @@ class ChunkIdentityMap:
     schema_version: str
     kb_name: str
     build_id: str
-    parser: dict[str, int]
+    parser: dict[str, object]
     chunks: dict[str, ChunkIdentityEntry] = field(default_factory=dict)
 
     @classmethod
@@ -79,7 +79,7 @@ class ChunkIdentityMap:
             schema_version=str(data.get("schema_version") or ""),
             kb_name=str(data.get("kb_name") or ""),
             build_id=str(data.get("build_id") or ""),
-            parser={str(key): int(value) for key, value in dict(data.get("parser") or {}).items()},
+            parser=dict(data.get("parser") or {}),
             chunks=chunks,
         )
 
@@ -171,8 +171,14 @@ def entry_from_node(node_id: int, node: dict[str, Any], *, metadata: dict[str, A
     )
 
 
-def parser_signature(cfg: Settings) -> dict[str, int]:
-    return {"max_chars": int(cfg.parser.max_chars), "min_chars": int(cfg.parser.min_chars)}
+def parser_signature(cfg: Settings) -> dict[str, object]:
+    return {
+        "max_chars": int(cfg.parser.max_chars),
+        "min_chars": int(cfg.parser.min_chars),
+        "overlap_chars": int(cfg.parser.overlap_chars),
+        "pdf_profile": str(cfg.parser.pdf_profile),
+        "pdf_heading_hints_hash": _stable_string_list_hash(cfg.parser.pdf_heading_hints),
+    }
 
 
 def text_hash(text: str) -> str:
@@ -181,6 +187,11 @@ def text_hash(text: str) -> str:
 
 def metadata_hash(metadata: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(json.dumps(metadata, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _stable_string_list_hash(values: list[str]) -> str:
+    normalized = sorted(str(value).strip().lower() for value in values if str(value).strip())
+    return "sha256:" + hashlib.sha256(json.dumps(normalized, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def _entry(

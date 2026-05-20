@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and project rules."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Provider and deployment-readiness boundaries."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module placement and dependency direction for CLI/provider helper code."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Network-avoidant tests and provider config rules."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Bounded structured failure behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "No secret/raw payload leakage in operator output."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking-guide index."}

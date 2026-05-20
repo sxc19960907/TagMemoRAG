@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify bounded output and no raw eval content."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify dependency direction after shared-module extraction."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify report fields and CLI behavior align."}

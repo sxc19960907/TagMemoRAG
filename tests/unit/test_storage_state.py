@@ -8,10 +8,12 @@ import threading
 import numpy as np
 import pytest
 
-from tagmemorag.config import Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import OCRConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.graph_builder import build_graph
 from tagmemorag.errors import RebuildInProgressError
 from tagmemorag.qdrant_ops import inspect_qdrant
+from tagmemorag.parser import parse_document
+from tagmemorag.ocr.base import OCRPageResult
 from tagmemorag.state import AppState, build_kb, load_kb, save_kb
 from tagmemorag.storage.atomic import atomic_write
 from tagmemorag.storage.json_anchor import JsonAnchorStore
@@ -160,6 +162,27 @@ def test_storage_round_trip(tmp_path):
     assert JsonAnchorStore(tmp_path / "anchors.json").load()[0].anchor_key == anchor.anchor_key
 
 
+def test_graph_storage_round_trip_preserves_lineage_metadata(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    path = docs / "manual.md"
+    path.write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    chunks = parse_document(path, min_chars=1, root_dir=docs, metadata={"manual_id": "coffee-manual"})
+    graph = build_graph(chunks, np.array([[1.0, 0.0]], dtype=np.float32))
+
+    JsonGraphStore(tmp_path / "graph.json").save(graph)
+    loaded_graph = JsonGraphStore(tmp_path / "graph.json").load()
+    metadata = loaded_graph.nodes[0]["metadata"]
+
+    assert metadata["doc_id"] == "coffee-manual"
+    assert metadata["section_path"] == ["操作"]
+    assert metadata["asset_refs"] == []
+    assert metadata["parser_profile"] == "markdown"
+    assert metadata["parser_version"] == "1"
+    assert metadata["chunk_id"].startswith("chunk:sha256:")
+    assert metadata["element_ids"][0].startswith("element:sha256:")
+
+
 def test_atomic_write_preserves_original_on_failure(tmp_path):
     target = tmp_path / "data.json"
     target.write_text("old", encoding="utf-8")
@@ -199,6 +222,10 @@ def test_qdrant_vector_store_round_trip_and_search():
     assert store.get(20).tolist() == [0.0, 1.0]
     assert store.search(np.array([1.0, 0.0], dtype=np.float32), 2) == [(10, 1.0), (30, pytest.approx(0.8))]
     assert collection_name("tmr", "product/a") == "tmr_product-a"
+    assert collection_name("tmr", "product/a", generation=1) == "tmr_product-a_g1"
+    assert collection_name("tmr", "product/a", generation=42) == "tmr_product-a_g42"
+    with pytest.raises(ValueError):
+        collection_name("tmr", "product/a", generation=0)
 
 
 def test_qdrant_vector_store_update_payload_and_delete():
@@ -217,6 +244,8 @@ def test_qdrant_vector_store_update_payload_and_delete():
         payloads=[
             {
                 "build_id": "b1",
+                "doc_id": "doc-1",
+                "chunk_id": "chunk:sha256:abc",
                 "chunk_identity_key": "sha256:key",
                 "manual_id": "m1",
                 "source_file": "manual.md",
@@ -231,6 +260,8 @@ def test_qdrant_vector_store_update_payload_and_delete():
         "kb_name": "default",
         "node_id": 1,
         "build_id": "b1",
+        "doc_id": "doc-1",
+        "chunk_id": "chunk:sha256:abc",
         "chunk_identity_key": "sha256:key",
         "manual_id": "m1",
         "source_file": "manual.md",
@@ -340,7 +371,9 @@ def test_qdrant_inspect_reports_collection_counts_and_payload_keys(monkeypatch, 
     assert report["missing_vector_count"] == 0
     assert report["sample_payload_keys"] == [
         "build_id",
+        "chunk_id",
         "chunk_identity_key",
+        "doc_id",
         "kb_name",
         "manual_id",
         "node_id",
@@ -461,7 +494,13 @@ def test_build_save_load_kb(tmp_path, test_config, fake_embedder):
     assert loaded.graph.number_of_nodes() == state.graph.number_of_nodes()
     assert loaded.vectors.shape == state.vectors.shape
     assert loaded.graph.nodes[0]["manual_id"] == "coffee-manual"
-    assert loaded.graph.nodes[0]["metadata"]["tags"] == ["steam"]
+    assert loaded.graph.nodes[0]["metadata"]["public_tags"] == ["steam"]
+    assert loaded.graph.nodes[0]["metadata"]["tags"] == [
+        "steam",
+        "doc:coffee-manual",
+        "manual:coffee-manual",
+        "category:coffee",
+    ]
     meta = json.loads((tmp_path / "data" / "default" / "meta.json").read_text())
     assert meta["schema_version"] == "1"
 
@@ -510,7 +549,54 @@ def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fak
     assert node["manual_id"] == "fridge"
     assert node["product_category"] == "unknown"
     assert node["header"] == "Page 1"
+    assert node["metadata"]["page_start"] == 1
+    assert node["metadata"]["pdf_header_source"] == "page_fallback"
+    assert node["metadata"]["pdf_parser_profile"] == "product_manual"
+    assert node["metadata"]["parser_profile"] == "pdf:product_manual"
+    assert node["metadata"]["doc_id"] == "fridge"
+    assert node["metadata"]["chunk_id"].startswith("chunk:sha256:")
     assert "冷藏室温度" in node["text"]
+
+
+def test_build_kb_includes_ocr_text_for_empty_pdf_pages(monkeypatch, tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        ocr=OCRConfig(enabled=True, version="fixture.v1"),
+    )
+
+    class FakePdfPage:
+        def extract_text(self, *args, **kwargs):
+            return ""
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [FakePdfPage()]
+
+    class FakeOCRProvider:
+        provider_name = "fixture"
+        version = "fixture.v1"
+
+        def recognize_pdf_page(self, context):
+            return OCRPageResult("OCR steam wand instructions.")
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    monkeypatch.setattr("tagmemorag.state.create_ocr_provider", lambda _cfg: FakeOCRProvider())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "coffee.pdf").write_bytes(b"%PDF fake")
+
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+
+    assert state.graph.number_of_nodes() == 1
+    node = state.graph.nodes[0]
+    assert "OCR steam wand" in node["text"]
+    assert node["metadata"]["parser_profile"] == "pdf_ocr:product_manual"
+    assert node["metadata"]["ocr_provider"] == "fixture"
+    assert node["metadata"]["ocr_version"] == "fixture.v1"
+    assert state.meta["ocr"]["attempted"] == 1
+    assert state.meta["ocr"]["created"] == 1
+    assert "OCR steam wand" not in str(state.meta["ocr"])
 
 
 def test_rebuild_keeps_old_state_until_done(tmp_path, test_config, fake_embedder):

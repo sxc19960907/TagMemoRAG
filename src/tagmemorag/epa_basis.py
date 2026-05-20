@@ -7,7 +7,7 @@ import fcntl
 import os
 from pathlib import Path
 import time
-from typing import Iterator, Sequence
+from typing import TYPE_CHECKING, Iterator, Sequence
 
 import numpy as np
 
@@ -16,6 +16,9 @@ from .errors import ErrorCode, ServiceError
 from .manual_registry import create_registry
 from .observability.metrics import get_metrics
 from .tag_store import StoredTag, iter_canonical_tags_with_vectors
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .indexgen import KbPaths
 
 EPA_BASIS_SCHEMA_VERSION = 1
 COLD_START = "cold-start"
@@ -50,20 +53,26 @@ class EPABasis:
         }
 
 
-def basis_path(cfg: Settings) -> Path:
+def basis_path(cfg: Settings, paths: "KbPaths | None" = None) -> Path:
+    if paths is not None:
+        return paths.epa_basis
     return Path(cfg.storage.data_dir) / "_global" / "epa_basis.npz"
 
 
-def basis_lock_path(cfg: Settings) -> Path:
+def basis_lock_path(cfg: Settings, paths: "KbPaths | None" = None) -> Path:
+    if paths is not None:
+        return paths.generation_root / "epa_basis.lock"
     return Path(cfg.storage.data_dir) / "_global" / "epa_basis.lock"
 
 
-def basis_dirty_path(cfg: Settings) -> Path:
+def basis_dirty_path(cfg: Settings, paths: "KbPaths | None" = None) -> Path:
+    if paths is not None:
+        return paths.generation_root / "epa_basis.dirty"
     return Path(cfg.storage.data_dir) / "_global" / "epa_basis.dirty"
 
 
-def mark_epa_basis_dirty(cfg: Settings) -> None:
-    path = basis_dirty_path(cfg)
+def mark_epa_basis_dirty(cfg: Settings, paths: "KbPaths | None" = None) -> None:
+    path = basis_dirty_path(cfg, paths)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_now(), encoding="utf-8")
 
@@ -226,13 +235,18 @@ def load_epa_basis(path: Path) -> EPABasis | None:
     return basis
 
 
-def retrain_if_needed(cfg: Settings, *, force: bool = False) -> dict[str, object] | None:
+def retrain_if_needed(
+    cfg: Settings,
+    *,
+    force: bool = False,
+    paths: "KbPaths | None" = None,
+) -> dict[str, object] | None:
     if not cfg.wave_phase0.enabled or not cfg.wave_phase0.epa_basis_enabled:
         return None
 
-    path = basis_path(cfg)
-    with epa_basis_lock(basis_lock_path(cfg), timeout_sec=cfg.wave_phase0.epa_lock_timeout_seconds):
-        dirty_path = basis_dirty_path(cfg)
+    path = basis_path(cfg, paths)
+    with epa_basis_lock(basis_lock_path(cfg, paths), timeout_sec=cfg.wave_phase0.epa_lock_timeout_seconds):
+        dirty_path = basis_dirty_path(cfg, paths)
         dirty = dirty_path.exists()
         current = load_epa_basis(path)
         rows = _load_global_tag_vectors(cfg)
@@ -266,17 +280,22 @@ def retrain_if_needed(cfg: Settings, *, force: bool = False) -> dict[str, object
         }
 
 
-def retrain_report(cfg: Settings, *, force: bool = False) -> dict[str, object]:
+def retrain_report(
+    cfg: Settings,
+    *,
+    force: bool = False,
+    paths: "KbPaths | None" = None,
+) -> dict[str, object]:
     started = time.perf_counter()
     try:
-        report = retrain_if_needed(cfg, force=force)
+        report = retrain_if_needed(cfg, force=force, paths=paths)
     except Exception as exc:
         get_metrics().record_epa_basis_retrain(outcome="failed", duration=time.perf_counter() - started)
         return {"epa_train_error": type(exc).__name__}
     duration = time.perf_counter() - started
     if report is None:
         get_metrics().record_epa_basis_retrain(outcome="skipped", duration=duration)
-        current = load_epa_basis(basis_path(cfg))
+        current = load_epa_basis(basis_path(cfg, paths))
         if current is None:
             return {}
         return {

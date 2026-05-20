@@ -112,15 +112,28 @@ def lookup_tag_id(conn: sqlite3.Connection, kb_name: str, tag_name: str) -> int 
     return int(row["id"]) if row is not None else None
 
 
-def iter_canonical_tags_with_vectors(conn: sqlite3.Connection) -> list[StoredTag]:
-    rows = conn.execute(
-        """
-        SELECT id, kb_name, name, vector, embedding_dim, embedded_at
-        FROM tags
-        WHERE vector IS NOT NULL
-        ORDER BY kb_name, name, id
-        """
-    ).fetchall()
+def iter_canonical_tags_with_vectors(
+    conn: sqlite3.Connection, *, kb_name: str | None = None
+) -> list[StoredTag]:
+    if kb_name is None:
+        rows = conn.execute(
+            """
+            SELECT id, kb_name, name, vector, embedding_dim, embedded_at
+            FROM tags
+            WHERE vector IS NOT NULL
+            ORDER BY kb_name, name, id
+            """
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, kb_name, name, vector, embedding_dim, embedded_at
+            FROM tags
+            WHERE vector IS NOT NULL AND kb_name = ?
+            ORDER BY name, id
+            """,
+            (kb_name,),
+        ).fetchall()
     return [_stored_tag_from_row(row) for row in rows]
 
 

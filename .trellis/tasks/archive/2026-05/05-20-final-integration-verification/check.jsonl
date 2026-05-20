@@ -1,0 +1,2 @@
+{"file": ".github/workflows/quality.yml", "reason": "Check local command matches merge-facing CI command."}
+{"file": ".trellis/tasks/05-20-final-integration-verification/implement.md", "reason": "Verify recorded outcomes match command results."}

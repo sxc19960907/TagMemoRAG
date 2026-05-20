@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and quality scope."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundary and dependency direction for new training/helper code."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Persistence and safe storage conventions for registry writes."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Fail-soft rebuild and CLI/service error behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Metrics/logging label safety and observability conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and compatibility requirements."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans rebuild, storage, config, CLI, online search, and metrics."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse ResidualPyramid Gram-Schmidt and existing registry patterns."}
+{"file": ".trellis/tasks/archive/2026-05/05-15-wave-phase2b-residualpyramid/research/source-residual-pyramid.md", "reason": "Source ResidualPyramid and Gram-Schmidt behavior."}

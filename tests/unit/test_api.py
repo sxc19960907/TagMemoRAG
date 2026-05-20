@@ -3,8 +3,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
+from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.cache.lru_ttl import LRUTTLCache
-from tagmemorag.config import CacheConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, CacheConfig, OCRConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig, VisualRetrievalConfig
+from tagmemorag.ocr.base import OCRPageResult
+from tagmemorag.document_assets import AssetManifest, DocumentAsset, LocalDocumentAssetStore, save_asset_manifest
 from tagmemorag.state import AppState, build_kb, save_kb
 from tagmemorag.types import Anchor
 from tests.unit.test_storage_state import FakeQdrantClient
@@ -36,6 +39,256 @@ def test_api_search_and_anchor(tmp_path, test_config, fake_embedder, monkeypatch
     assert client.delete(f"/anchor/{anchor_key}").status_code == 200
 
 
+def test_api_retrieve_returns_text_evidence_context_and_citations(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽很小", "top_k": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "retrieve.v1"
+    assert body["build_id"] == state.build_id
+    assert body["search_id"]
+    assert body["retrieve_id"]
+    assert body["results"]
+    assert body["evidence"]
+    evidence = body["evidence"][0]
+    assert evidence["evidence_id"] == "ev_001"
+    assert evidence["citation_id"] == "cit_001"
+    assert evidence["doc_id"]
+    assert evidence["chunk_id"].startswith("chunk:sha256:")
+    assert evidence["matched_chunk_ids"] == [evidence["chunk_id"]]
+    assert body["citations"][0]["evidence_id"] == "ev_001"
+    item = body["context_pack"]["items"][0]
+    assert item["context_item_id"] == "ctx_001"
+    assert item["citation_id"] == "cit_001"
+    assert item["evidence_refs"] == ["ev_001"]
+    assert item["asset_refs"] == []
+    assert body["answerability"]["answerable"] is True
+    assert "debug" not in body
+
+
+def test_api_retrieve_attaches_visual_assets_from_manifest(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    chunk_metadata = dict(state.graph.nodes[0]["metadata"])
+    asset = DocumentAsset(
+        asset_id="asset:sha256:retrieve",
+        kb_name="default",
+        doc_id=str(chunk_metadata["doc_id"]),
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key="default/manual/page_snapshot/asset-sha256-retrieve.png",
+        checksum="hidden-checksum",
+        page_number=None,
+        width=640,
+        height=480,
+        status="ready",
+    )
+    chunk_metadata["asset_refs"] = [asset.asset_id]
+    state.graph.nodes[0]["metadata"] = chunk_metadata
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "给我看蒸汽按钮在哪", "top_k": 1, "debug": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    evidence = body["evidence"][0]
+    assert [item["asset_id"] for item in evidence["assets"]] == ["asset:sha256:retrieve"]
+    assert evidence["assets"][0]["url"] == "/assets/asset%3Asha256%3Aretrieve?kb_name=default"
+    assert body["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:retrieve"]
+    assert body["visual_evidence"]["intent"] == "visual_reference"
+    assert body["debug"]["retrieve_inspect"]["visual_evidence"]["attached_count"] == 1
+    serialized = str(body)
+    assert "storage_key" not in serialized
+    assert "hidden-checksum" not in serialized
+
+
+def test_api_retrieve_visual_retrieval_can_return_visual_only_asset(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        visual_retrieval=VisualRetrievalConfig(enabled=True, max_candidates=2),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n普通文本。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    store = LocalDocumentAssetStore(cfg.assets.root_dir)
+    ref = store.put("default", "manual", "page_snapshot", "asset:sha256:visual", b"png", "image/png")
+    asset = DocumentAsset(
+        asset_id="asset:sha256:visual",
+        kb_name="default",
+        doc_id="manual",
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type=ref.mime_type,
+        storage_backend=ref.backend,
+        storage_key=ref.storage_key,
+        checksum=ref.checksum,
+        page_number=1,
+        width=640,
+        height=480,
+        caption="Reset button diagram",
+        nearby_text="Hold reset button for three seconds.",
+        status="ready",
+    )
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "show reset button", "filters": {"manual_id": "missing"}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"][0]["content_type"] == "visual_asset"
+    assert body["evidence"][0]["assets"][0]["asset_id"] == "asset:sha256:visual"
+    assert body["context_pack"]["items"][0]["asset_refs"] == ["asset:sha256:visual"]
+    assert body["visual_evidence"]["retrieval"]["candidate_count"] == 1
+    serialized = str(body)
+    assert ref.storage_key not in serialized
+    assert ref.checksum not in serialized
+
+
+def test_api_retrieve_debug_includes_safe_inspect_payload(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n# 清洗\n喷嘴堵塞需要清洗。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽很小", "top_k": 2, "debug": True})
+
+    assert response.status_code == 200
+    inspect = response.json()["debug"]["retrieve_inspect"]
+    assert inspect["schema_version"] == "retrieve_inspect.v1"
+    assert inspect["retrieve_id"] == response.json()["retrieve_id"]
+    assert inspect["evidence_count"] == len(response.json()["evidence"])
+    assert inspect["context_item_count"] == len(response.json()["context_pack"]["items"])
+    assert inspect["selected"][0]["evidence_id"] == "ev_001"
+    assert inspect["selected"][0]["chunk_id"].startswith("chunk:sha256:")
+    serialized = str(inspect)
+    assert "蒸汽功能可以打奶泡" not in serialized
+    assert "question" not in inspect
+    assert "storage_key" not in serialized
+
+
+def test_api_retrieve_context_budget_exhausted_is_explicit(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽", "top_k": 1, "token_budget": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence"]
+    assert body["context_pack"]["items"] == []
+    assert body["answerability"] == {
+        "answerable": False,
+        "confidence": 0.0,
+        "warnings": ["context_budget_exhausted"],
+        "fallback_reason": "context_budget_exhausted",
+    }
+
+
+def test_api_retrieve_no_results_returns_insufficient_evidence(tmp_path, test_config, fake_embedder):
+    cfg = test_config.model_copy(update={"search": SearchConfig(metadata_narrowing_enabled=False)})
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "蒸汽", "filters": {"manual_id": "missing"}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
+    assert body["evidence"] == []
+    assert body["citations"] == []
+    assert body["context_pack"]["items"] == []
+    assert body["answerability"]["answerable"] is False
+    assert body["answerability"]["fallback_reason"] == "no_results"
+
+
+def test_api_retrieve_can_return_ocr_only_pdf_text(tmp_path, fake_embedder, monkeypatch):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        ocr=OCRConfig(enabled=True, version="fixture.v1"),
+    )
+
+    class FakePdfPage:
+        def extract_text(self, *args, **kwargs):
+            return ""
+
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [FakePdfPage()]
+
+    class FakeOCRProvider:
+        provider_name = "fixture"
+        version = "fixture.v1"
+
+        def recognize_pdf_page(self, context):
+            return OCRPageResult("Hidden drain pump filter is behind the lower cover.")
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    monkeypatch.setattr("tagmemorag.state.create_ocr_provider", lambda _cfg: FakeOCRProvider())
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "washer.pdf").write_bytes(b"%PDF fake")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/retrieve", json={"question": "Where is the drain pump filter?", "top_k": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answerability"]["answerable"] is True
+    assert "Hidden drain pump filter" in body["context_pack"]["items"][0]["content"]
+    assert body["results"][0]["metadata"]["ocr_provider"] == "fixture"
+    assert body["results"][0]["metadata"]["ocr_version"] == "fixture.v1"
+
+
 def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_config, fake_embedder):
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -63,8 +316,42 @@ def test_api_search_debug_request_includes_operator_metadata(tmp_path, test_conf
         "steps": test_config.search.steps,
         "aggregate": test_config.search.aggregate,
         "eligible_node_count": state.graph.number_of_nodes(),
+        "legacy_tag_boost_disabled": False,
+        "metadata_narrowing": {
+            "enabled": True,
+            "mode": "none",
+            "detected": [],
+            "hard_filters": {},
+            "boost_filters": {},
+            "before_count": state.graph.number_of_nodes(),
+            "after_count": None,
+            "fallback_reason": "",
+        },
     }
     assert not {"trace_id", "search_id", "question", "candidate_ids"} & set(body["debug"])
+
+
+def test_api_search_shape_does_not_include_visual_evidence(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "蒸汽很小", "top_k": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "evidence" not in body
+    assert "visual_evidence" not in body
 
 
 def test_api_search_config_debug_and_cache_shapes_do_not_cross(tmp_path, fake_embedder):
@@ -157,6 +444,37 @@ def test_api_search_filters_by_manual_metadata(tmp_path, test_config, fake_embed
     assert no_match.json()["results"] == []
 
 
+def test_api_search_auto_narrows_by_model_metadata(tmp_path, test_config, fake_embedder):
+    docs = tmp_path / "docs"
+    (docs / "fridge").mkdir(parents=True)
+    (docs / "coffee").mkdir()
+    (docs / "fridge" / "manual.md").write_text("# 温度\n冷藏室温度可以调节。\n", encoding="utf-8")
+    (docs / "fridge" / "manual.metadata.json").write_text(
+        '{"manual_id":"fridge-manual","title":"Fridge Manual","source_file":"fridge/manual.md","brand":"Gorenje","product_category":"fridge","product_model":"NRK6192","language":"zh-CN","tags":["temperature-setting"]}',
+        encoding="utf-8",
+    )
+    (docs / "coffee" / "manual.md").write_text("# 温度\n咖啡温度和蒸汽设置。\n", encoding="utf-8")
+    (docs / "coffee" / "manual.metadata.json").write_text(
+        '{"manual_id":"coffee-manual","title":"Coffee Manual","source_file":"coffee/manual.md","brand":"Acme","product_category":"coffee","product_model":"CM1","language":"zh-CN","tags":["maintenance"]}',
+        encoding="utf-8",
+    )
+    state = build_kb(docs, "default", test_config, embedder=fake_embedder)
+    api.settings = test_config
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    response = client.post("/search", json={"question": "NRK6192 温度怎么调", "top_k": 5, "debug": True})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"]
+    assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+    assert body["debug"]["metadata_narrowing"]["mode"] == "hard_filter"
+    assert body["debug"]["metadata_narrowing"]["hard_filters"] == {"product_model": "NRK6192"}
+    assert body["debug"]["metadata_narrowing"]["after_count"] == 1
+
+
 def test_api_manuals_lists_metadata_facets(tmp_path, test_config, fake_embedder):
     docs = tmp_path / "docs"
     (docs / "fridge").mkdir(parents=True)
@@ -194,6 +512,92 @@ def test_api_manuals_lists_metadata_facets(tmp_path, test_config, fake_embedder)
     assert body["facets"]["brand"] == ["Gorenje"]
     assert body["facets"]["product_category"] == ["fridge"]
     assert body["facets"]["tags"] == ["maintenance", "temperature-setting"]
+
+
+def test_api_asset_endpoint_serves_ready_asset_with_kb_auth(tmp_path, fake_embedder):
+    secret = "tmr_live_asset"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(
+                    id="searcher",
+                    hash=ConfigAuthStore.hash_plaintext(secret),
+                    kb_allowlist=["default"],
+                    scopes=["search"],
+                )
+            ],
+        ),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    store = LocalDocumentAssetStore(cfg.assets.root_dir)
+    ref = store.put("default", "manual", "page_snapshot", "asset:sha256:test", b"png", "image/png")
+    asset = DocumentAsset(
+        asset_id="asset:sha256:test",
+        kb_name="default",
+        doc_id="manual",
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key=ref.storage_key,
+        checksum=ref.checksum,
+        size_bytes=ref.size_bytes,
+        status="ready",
+    )
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    app_state = AppState(state)
+    app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    api.app_state = app_state
+    client = TestClient(api.app)
+
+    response = client.get("/assets/asset:sha256:test?kb_name=default", headers={"Authorization": f"Bearer {secret}"})
+
+    assert response.status_code == 200
+    assert response.content == b"png"
+    assert response.headers["x-document-asset-id"] == "asset:sha256:test"
+
+
+def test_api_asset_endpoint_rejects_wrong_kb_allowlist(tmp_path, fake_embedder):
+    secret = "tmr_live_asset"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(
+                    id="searcher",
+                    hash=ConfigAuthStore.hash_plaintext(secret),
+                    kb_allowlist=["other"],
+                    scopes=["search"],
+                )
+            ],
+        ),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    app_state = AppState(state)
+    app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    api.app_state = app_state
+    client = TestClient(api.app)
+
+    response = client.get("/assets/asset:sha256:test?kb_name=default", headers={"Authorization": f"Bearer {secret}"})
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
 
 
 def test_api_anchor_add_invalid_node_returns_400(tmp_path, test_config, fake_embedder):

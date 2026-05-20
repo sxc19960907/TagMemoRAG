@@ -42,9 +42,14 @@ def _payload():
         "kb_name": "default",
         "trace_id": "trace-1",
         "search_id": "search-1",
+        "retrieve_id": "retrieve-1",
         "build_id": "build-1",
         "query": "E05 蒸汽异常怎么处理",
         "outcome": "missing_result",
+        "selected_evidence_ids": ["ev_001"],
+        "selected_context_item_ids": ["ctx_001"],
+        "answerable": False,
+        "failure_reason": "no_results",
         "expected": [{"source_file": "coffee.md", "header": "E05", "metadata": {"manual_id": "cm1"}}],
     }
 
@@ -75,11 +80,25 @@ def test_feedback_api_submit_list_review_and_preview(tmp_path, fake_embedder):
     assert preview.json()["cases"][0]["id"] == f"feedback-{feedback_id}"
 
 
+def test_retrieve_feedback_api_submit_alias_persists_retrieve_fields(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    created = client.post("/retrieve/feedback", json=_payload())
+
+    assert created.status_code == 200
+    feedback = created.json()["feedback"]
+    assert feedback["retrieve_id"] == "retrieve-1"
+    assert feedback["selected_evidence_ids"] == ["ev_001"]
+    assert feedback["selected_context_item_ids"] == ["ctx_001"]
+    assert feedback["answerable"] is False
+    assert feedback["failure_reason"] == "no_results"
+
+
 def test_feedback_api_auth_scopes(tmp_path, fake_embedder):
     client = _client(tmp_path, fake_embedder, auth=True)
 
     created = client.post(
-        "/search/feedback",
+        "/retrieve/feedback",
         headers={"Authorization": "Bearer tmr_live_reader"},
         json=_payload(),
     )

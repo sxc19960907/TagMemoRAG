@@ -1,0 +1,7 @@
+{"file": "src/tagmemorag/eval_reauthoring.py", "reason": "Core diagnosis schema and blocking aggregation semantics."}
+{"file": "src/tagmemorag/production_pilot.py", "reason": "Pilot stage status depends on diagnosis summary fields."}
+{"file": "src/tagmemorag/cli.py", "reason": "CLI argument parsing must pass accepted suites to service."}
+{"file": "scripts/diagnose_eval_reauthoring.py", "reason": "Standalone diagnosis CLI should expose the same accepted policy."}
+{"file": "tests/unit/test_diagnose_eval_reauthoring.py", "reason": "Shared diagnosis and script CLI coverage."}
+{"file": "tests/unit/test_production_pilot.py", "reason": "Pilot stage status and report detail coverage."}
+{"file": "tests/unit/test_cli.py", "reason": "tagmemorag pilot CLI wiring coverage."}

@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and architecture entry point."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Eval-as-driver and documentation honesty context, plus production embedder caveat."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keep diagnostic as a script/helper without violating package dependency direction."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, report privacy, and eval/reporting quality rules."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index for cross-layer and reuse checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse baseline parsing patterns and avoid duplicate report logic where practical."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Script-to-docs-to-reviewer data flow."}

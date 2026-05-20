@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import readiness
 
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
@@ -44,6 +45,284 @@ storage:
     assert body["results"]
     assert "debug" not in body
     assert any("蒸汽" in result["text"] or "E05" in result["text"] for result in body["results"])
+
+
+def test_cli_config_validate_outputs_json_and_exit_code(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["config", "validate", "--config", str(config)])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "config_validation.v1"
+    assert body["status"] == "passed"
+    assert body["config_path"] == str(config)
+
+
+def test_cli_config_validate_failed_report_returns_one(tmp_path, capsys):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: http
+  name: remote
+  dim: 64
+  api_key_env: TMR_ABSENT_FOR_CLI_TEST
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["config", "validate", "--config", str(config)])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert "TMR_ABSENT_FOR_CLI_TEST" in json.dumps(body)
+
+
+def test_cli_provider_probe_all_skipped_for_local_profile(capsys):
+    exit_code = cli.main(["provider", "probe", "--config", "examples/config/local-hashing-npz.yaml", "--all"])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "provider_probe.v1"
+    assert body["status"] == "skipped"
+    assert {probe["status"] for probe in body["probes"]} == {"skipped"}
+
+
+def test_cli_provider_probe_failed_returns_one(tmp_path, capsys):
+    config = tmp_path / "answer.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: model
+  api_key_env: TMR_ABSENT_PROVIDER_PROBE_KEY
+""",
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["provider", "probe", "--config", str(config), "--answer"])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert body["probes"][0]["detail"]["env"] == "TMR_ABSENT_PROVIDER_PROBE_KEY"
+
+
+def test_cli_readiness_smoke_succeeds_and_keeps_workdir(tmp_path, capsys):
+    workdir = tmp_path / "smoke"
+
+    exit_code = cli.main(["readiness", "smoke", "--workdir", str(workdir), "--keep-workdir"])
+
+    assert exit_code == 0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "readiness_smoke.v1"
+    assert body["status"] == "passed"
+    assert body["workdir"] == str(workdir.resolve())
+    checks = {check["name"]: check for check in body["checks"]}
+    assert checks["build"]["detail"]["chunks"] >= 1
+    assert checks["retrieve_answer"]["detail"]["evidence_count"] >= 1
+    assert checks["queryplan"]["detail"]["rows"] == 1
+    assert checks["bundle_roundtrip"]["detail"]["imported_manuals"] == 1
+    assert (workdir / "data").exists()
+
+
+def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
+    def _failed_smoke(*, workdir=None, keep_workdir=False):
+        return readiness.SmokeReport(
+            status="failed",
+            checks=[
+                readiness.SmokeCheck(
+                    "build",
+                    "failed",
+                    error={"type": "ReadinessSmokeError", "reason": "no_chunks_built"},
+                )
+            ],
+            workdir="/tmp/tagmemorag-readiness-test",
+        )
+
+    monkeypatch.setattr(cli, "run_readiness_smoke", _failed_smoke)
+
+    exit_code = cli.main(["readiness", "smoke"])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert body["checks"][0]["error"]["reason"] == "no_chunks_built"
+    serialized = json.dumps(body)
+    assert "storage_key" not in serialized
+    assert "checksum" not in serialized
+
+
+def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    def _fake_pilot(**_kwargs):
+        return ProductionPilotReport(
+            status="passed",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir=str(tmp_path / "pilot"),
+            stages=[PilotStage("eval", "passed", {"cases": 1})],
+            next_steps=["Retain the pilot report."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    output = tmp_path / "pilot.json"
+
+    exit_code = cli.main(["pilot", "run", "--output", str(output)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == ""
+    body = json.loads(output.read_text(encoding="utf-8"))
+    assert body["schema_version"] == "production_pilot.v1"
+    assert body["status"] == "passed"
+
+
+def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    seen = {}
+
+    def _fake_pilot(**kwargs):
+        seen.update(kwargs)
+        return ProductionPilotReport(
+            status="warning",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir=str(tmp_path / "pilot"),
+            stages=[PilotStage("eval_reauthoring_diagnosis", "warning", {"highest_severity": 3})],
+            next_steps=["Review warning stages."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+
+    exit_code = cli.main([
+        "pilot",
+        "run",
+        "--hashing-baseline",
+        "hashing.json",
+        "--production-baseline",
+        "siliconflow.json",
+        "--informational-suites",
+        "fault_codes.jsonl, cross_kb_negatives.jsonl",
+        "--accepted-suites",
+        "product_manuals.jsonl, mixed_language.jsonl",
+    ])
+
+    assert exit_code == 0
+    assert seen["hashing_baseline_path"] == "hashing.json"
+    assert seen["production_baseline_path"] == "siliconflow.json"
+    assert seen["informational_suites"] == ["fault_codes.jsonl", "cross_kb_negatives.jsonl"]
+    assert seen["accepted_suites"] == ["product_manuals.jsonl", "mixed_language.jsonl"]
+
+
+def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    def _fake_pilot(**_kwargs):
+        return ProductionPilotReport(
+            status="failed",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir="/tmp/pilot",
+            stages=[PilotStage("eval", "failed", {"cases": 1}, {"type": "EvalThreshold", "reason": "low recall"})],
+            next_steps=["Investigate failed stage(s): eval."],
+        )
+
+    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+
+    exit_code = cli.main(["pilot", "run", "--format", "markdown"])
+
+    assert exit_code == 1
+    output = capsys.readouterr().out
+    assert "# TagMemoRAG Production Pilot Report" in output
+    assert "`failed`" in output
+
+
+def test_readiness_smoke_retains_auto_workdir_on_failure(monkeypatch):
+    monkeypatch.setattr(readiness, "build_kb", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    report = readiness.run_readiness_smoke()
+
+    assert report.status == "failed"
+    assert report.workdir is not None
+    assert report.checks[0].name == "unexpected"
+    assert report.checks[0].error["type"] == "RuntimeError"
+    assert (readiness.Path(report.workdir) / "docs").exists()
+
+
+def test_cli_retrain_residuals_reports_rows(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# 操作\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs / "manual.metadata.json").write_text(
+        '{"manual_id":"m1","title":"m1","source_file":"manual.md","product_category":"coffee","tags":["Steam","Wand"]}',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+manual_library:
+  registry_path: {tmp_path / "manual_registry.sqlite3"}
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "build", "--docs", str(docs), "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "retrain-residuals", "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    body = json.loads(result.stdout)
+    assert body["tag_intrinsic_residual_rows"] == 2
 
 
 def test_cli_search_filters_manual_metadata(tmp_path):
@@ -105,6 +384,63 @@ storage:
     assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
 
 
+def test_cli_search_auto_narrows_by_model_metadata(tmp_path):
+    docs = tmp_path / "docs"
+    (docs / "fridge").mkdir(parents=True)
+    (docs / "coffee").mkdir()
+    (docs / "fridge" / "manual.md").write_text("# 温度\n冷藏室温度可以调节。\n", encoding="utf-8")
+    (docs / "fridge" / "manual.metadata.json").write_text(
+        '{"manual_id":"fridge-manual","title":"Fridge Manual","source_file":"fridge/manual.md","brand":"Gorenje","product_category":"fridge","product_model":"NRK6192","language":"zh-CN","tags":["temperature-setting"]}',
+        encoding="utf-8",
+    )
+    (docs / "coffee" / "manual.md").write_text("# 温度\n咖啡温度和蒸汽设置。\n", encoding="utf-8")
+    (docs / "coffee" / "manual.metadata.json").write_text(
+        '{"manual_id":"coffee-manual","title":"Coffee Manual","source_file":"coffee/manual.md","brand":"Acme","product_category":"coffee","product_model":"CM1","language":"zh-CN","tags":["maintenance"]}',
+        encoding="utf-8",
+    )
+    config = tmp_path / "config.yaml"
+    data_dir = tmp_path / "data"
+    config.write_text(
+        f"""
+model:
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir}
+""",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        [sys.executable, "-m", "tagmemorag", "build", "--docs", str(docs), "--config", str(config)],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    search = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "search",
+            "NRK6192 温度怎么调",
+            "--config",
+            str(config),
+            "--top-k",
+            "5",
+            "--debug-search",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    body = json.loads(search.stdout)
+    assert body["results"]
+    assert {result["manual_id"] for result in body["results"]} == {"fridge-manual"}
+    assert body["debug"]["metadata_narrowing"]["hard_filters"] == {"product_model": "NRK6192"}
+
+
 def test_cli_search_debug_outputs_operator_metadata(tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -155,6 +491,7 @@ storage:
     assert "lexical_candidate_count" in body["debug"]
     assert "lexical_source_count" in body["debug"]
     assert body["debug"]["lexical_profile"] == "source_boost"
+    assert body["debug"]["metadata_narrowing"]["mode"] == "none"
 
 
 def test_cli_search_with_ann_preselection_qdrant(tmp_path):

@@ -12,6 +12,7 @@ import uvicorn
 
 from .config import load_config
 from .auth.config_store import ConfigAuthStore
+from .config_validation import validate_config
 from .embedder import create_embedder
 from .epa_basis import retrain_if_needed, basis_path, load_epa_basis
 from .eval.dataset import EvalSuiteError, EvalThresholds
@@ -20,7 +21,10 @@ from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
+from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
+from .provider_probe import run_provider_probe
 from .qdrant_ops import inspect_qdrant
+from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
 from .retrieval_feedback import (
     create_feedback,
@@ -39,6 +43,17 @@ from .tag_governance import (
     tag_usage_report,
     preview_tag_rewrite,
 )
+from .manual_registry import create_registry
+from .production_pilot import (
+    DEFAULT_PILOT_CONFIG,
+    DEFAULT_PILOT_DOCS,
+    DEFAULT_PILOT_SUITE,
+    DEFAULT_PILOT_THRESHOLDS,
+    run_production_pilot,
+    write_pilot_report,
+)
+from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
+from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
 
 
 def _create_embedder_from_config(cfg):
@@ -82,6 +97,16 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
     serve.add_argument("--config", default="config.yaml")
+
+    config_cmd = sub.add_parser("config")
+    config_sub = config_cmd.add_subparsers(dest="config_command", required=True)
+    config_validate = config_sub.add_parser("validate")
+    config_validate.add_argument("--config", default="config.yaml")
+    config_validate.add_argument("--format", choices=["json"], default="json")
+
+    residuals = sub.add_parser("retrain-residuals")
+    residuals.add_argument("--kb", default="default")
+    residuals.add_argument("--config", default="config.yaml")
 
     eval_parser = sub.add_parser("eval")
     eval_sub = eval_parser.add_subparsers(dest="eval_command", required=True)
@@ -202,6 +227,52 @@ def main(argv: list[str] | None = None) -> int:
     qdrant_inspect.add_argument("--kb", default="default")
     qdrant_inspect.add_argument("--config", default="config.yaml")
 
+    provider = sub.add_parser("provider")
+    provider_sub = provider.add_subparsers(dest="provider_command", required=True)
+    provider_probe = provider_sub.add_parser("probe")
+    provider_probe.add_argument("--config", default="config.yaml")
+    provider_probe.add_argument("--kb", default="default")
+    provider_probe.add_argument("--format", choices=["json"], default="json")
+    provider_probe.add_argument("--all", action="store_true", default=False)
+    provider_probe.add_argument("--embedding", action="store_true", default=False)
+    provider_probe.add_argument("--answer", action="store_true", default=False)
+    provider_probe.add_argument("--reranker", action="store_true", default=False)
+    provider_probe.add_argument("--qdrant", action="store_true", default=False)
+    provider_probe.add_argument("--s3", action="store_true", default=False)
+
+    readiness = sub.add_parser("readiness")
+    readiness_sub = readiness.add_subparsers(dest="readiness_command", required=True)
+    readiness_smoke = readiness_sub.add_parser("smoke")
+    readiness_smoke.add_argument("--workdir", default=None)
+    readiness_smoke.add_argument("--keep-workdir", action="store_true", default=False)
+
+    pilot = sub.add_parser("pilot")
+    pilot_sub = pilot.add_subparsers(dest="pilot_command", required=True)
+    pilot_run = pilot_sub.add_parser("run")
+    pilot_run.add_argument("--config", default=DEFAULT_PILOT_CONFIG)
+    pilot_run.add_argument("--suite", default=DEFAULT_PILOT_SUITE)
+    pilot_run.add_argument("--docs", default=DEFAULT_PILOT_DOCS)
+    pilot_run.add_argument("--workdir", default=None)
+    pilot_run.add_argument("--output", default=None)
+    pilot_run.add_argument("--format", choices=["json", "markdown"], default="json")
+    pilot_run.add_argument("--top-k", type=int, default=None)
+    pilot_run.add_argument("--source-k", type=int, default=None)
+    pilot_run.add_argument("--min-recall-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_recall_at_k)
+    pilot_run.add_argument("--min-mrr", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_mrr)
+    pilot_run.add_argument("--min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
+    pilot_run.add_argument("--hashing-baseline", default=None)
+    pilot_run.add_argument("--production-baseline", default=None)
+    pilot_run.add_argument(
+        "--informational-suites",
+        default="",
+        help="Comma-separated eval suite filenames whose diagnosis is informational and not blocking.",
+    )
+    pilot_run.add_argument(
+        "--accepted-suites",
+        default="",
+        help="Comma-separated eval suite filenames whose diagnosis has been reviewed and accepted as non-blocking.",
+    )
+
     epa = sub.add_parser("epa")
     epa_sub = epa.add_subparsers(dest="epa_command", required=True)
     epa_rebuild = epa_sub.add_parser("rebuild")
@@ -264,6 +335,16 @@ def main(argv: list[str] | None = None) -> int:
             "language": args.language,
             "tags": resolve_tags_for_search(args.tag, load_tag_policy(args.kb, cfg)),
         }
+        narrowing = infer_metadata_narrowing(
+            query_text=args.question,
+            graph=state.graph,
+            explicit_filters=filters,
+            enabled=cfg.search.metadata_narrowing_enabled,
+            category_policy=cfg.search.metadata_narrowing_category_policy,
+            brand_policy=cfg.search.metadata_narrowing_brand_policy,
+            min_candidates=cfg.search.metadata_narrowing_min_candidates,
+        )
+        filters = merge_inferred_filters(filters, narrowing)
         execution = execute_search(
             state=state,
             query_vec=query_vec,
@@ -276,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=str(params["aggregate"]),
             filters=filters,
+            boost_filters=narrowing.boost_filters,
         )
         payload = {"build_id": state.build_id, "results": [r.to_dict() for r in execution.results]}
         if search_debug_enabled(args.debug_search, cfg):
@@ -283,6 +365,9 @@ def main(argv: list[str] | None = None) -> int:
                 execution,
                 params,
                 ann_enabled=search_ann_enabled(state, cfg),
+            )
+            payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+                enabled=cfg.search.metadata_narrowing_enabled
             )
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
@@ -293,6 +378,36 @@ def main(argv: list[str] | None = None) -> int:
 
         api.settings = cfg
         uvicorn.run(api.app, host=args.host or cfg.server.host, port=args.port or cfg.server.port)
+        return 0
+    if args.command == "config" and args.config_command == "validate":
+        report = validate_config(args.config)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if report.status == "failed" else 0
+    if args.command == "retrain-residuals":
+        cfg = load_config(args.config)
+        configure_logging(cfg.logging.level, cfg.logging.format)
+        matrix = load_cooccurrence(cooccurrence_path(cfg, args.kb))
+        if matrix is None or matrix.edge_count == 0:
+            print(f"retrain-residuals error: cooccurrence matrix missing for kb={args.kb!r}", file=sys.stderr)
+            return 2
+        registry_path = Path(cfg.storage.data_dir) / "manual_registry.sqlite3"
+        if cfg.manual_library.registry_path != "data/manual_registry.sqlite3":
+            registry_path = Path(cfg.manual_library.registry_path)
+        top_n = cfg.wave_phase1.intrinsic_residual_top_n or cfg.wave_phase1.pyramid_top_k
+        try:
+            registry = create_registry(registry_path)
+            with registry.connection() as conn:
+                report = train_intrinsic_residuals_for_kb(
+                    args.kb,
+                    conn,
+                    matrix,
+                    expected_dim=cfg.model.dim,
+                    top_n=int(top_n),
+                )
+        except Exception as exc:
+            print(f"retrain-residuals error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"kb_name": args.kb, **report.to_dict()}, ensure_ascii=False))
         return 0
     if args.command == "eval" and args.eval_command == "run":
         cfg = load_config(args.config)
@@ -556,6 +671,51 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(cfg.logging.level, cfg.logging.format)
         print(json.dumps(inspect_qdrant(args.kb, cfg), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "provider" and args.provider_command == "probe":
+        selected = []
+        if args.all:
+            selected.append("all")
+        for name in ("embedding", "answer", "reranker", "qdrant", "s3"):
+            if getattr(args, name):
+                selected.append(name)
+        report = run_provider_probe(args.config, selected=selected or ["all"], kb_name=args.kb)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 1 if report.status == "failed" else 0
+    if args.command == "readiness" and args.readiness_command == "smoke":
+        report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.status == "passed" else 1
+    if args.command == "pilot" and args.pilot_command == "run":
+        thresholds = EvalThresholds(
+            min_recall_at_k=args.min_recall_at_k,
+            min_mrr=args.min_mrr,
+            min_hit_at_k=args.min_hit_at_k,
+        )
+        try:
+            report = run_production_pilot(
+                config_path=args.config,
+                suite_path=args.suite,
+                docs_path=args.docs,
+                workdir=args.workdir,
+                top_k=args.top_k,
+                source_k=args.source_k,
+                thresholds=thresholds,
+                hashing_baseline_path=args.hashing_baseline,
+                production_baseline_path=args.production_baseline,
+                informational_suites=_split_csv(args.informational_suites),
+                accepted_suites=_split_csv(args.accepted_suites),
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        if args.output:
+            write_pilot_report(report, args.output, fmt=args.format)
+        else:
+            if args.format == "markdown":
+                print(report.to_markdown(), end="")
+            else:
+                print(report.to_json())
+        return 1 if report.status == "failed" else 0
     if args.command == "epa" and args.epa_command == "rebuild":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)
@@ -651,6 +811,10 @@ def _add_feedback_promote_args(parser: argparse.ArgumentParser) -> None:
 
 def _read_text_file(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _read_bulk_files(paths: list[str]) -> list[BulkUploadedFile]:

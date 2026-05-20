@@ -6,5 +6,5 @@
   "product_category": "air-conditioner",
   "product_model": "AP12",
   "language": "en",
-  "tags": ["filter-cleaning", "mode", "cooling"]
+  "tags": ["filter-cleaning", "mode", "cooling", "airflow", "condensate-drain"]
 }

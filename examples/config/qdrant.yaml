@@ -1,0 +1,21 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-qdrant/data
+vector_store:
+  provider: qdrant
+  qdrant_url: http://localhost:6333
+  collection_prefix: tagmemorag
+manual_library:
+  root_dir: .tmp/tagmemorag-qdrant/manuals
+  registry_backend: file
+  blob_backend: local
+  blob_root_dir: .tmp/tagmemorag-qdrant/blobs
+search:
+  ann_preselect_enabled: true
+  ann_candidate_k: 64
+logging:
+  level: INFO
+  format: json

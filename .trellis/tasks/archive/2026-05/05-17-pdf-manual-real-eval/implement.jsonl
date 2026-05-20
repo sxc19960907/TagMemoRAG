@@ -1,0 +1,5 @@
+{"file":".trellis/tasks/05-17-pdf-manual-real-eval/prd.md","reason":"Task requirements, acceptance criteria, and decisions for real PDF manual eval."}
+{"file":".trellis/tasks/05-17-pdf-manual-real-eval/design.md","reason":"Technical design for ingest, KB build, fixture, and four-config diagnostic flow."}
+{"file":".trellis/tasks/05-17-pdf-manual-real-eval/implement.md","reason":"Execution checklist and completion note, including the pivot from placeholder matcher eval to category routing diagnostic."}
+{"file":".trellis/tasks/05-17-pdf-manual-real-eval/research/realmanuals-eval-report.md","reason":"Empirical findings and recommendation that PDF structural parsing is the next bottleneck."}
+{"file":".trellis/tasks/05-17-pdf-manual-real-eval/research/realmanuals-diag.txt","reason":"Archived output from the reproducible four-config realmanuals routing diagnostic."}

@@ -1,0 +1,16 @@
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/prd.md","reason":"Acceptance criteria and non-goals to verify against."}
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/design.md","reason":"Compatibility and debug-output contracts to check during review."}
+{"file":".trellis/tasks/05-17-general-rag-metadata-narrowing/implement.md","reason":"Validation commands and review gates."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Project quality checklist and forbidden patterns."}
+{"file":"src/tagmemorag/document_metadata.py","reason":"Implemented generic DocumentMetadata and product-manual adapter with public/internal tag separation."}
+{"file":"src/tagmemorag/metadata_narrowing.py","reason":"Implemented metadata index, deterministic entity detection, narrowing decisions, and fallback diagnostics."}
+{"file":"src/tagmemorag/api.py","reason":"Verified API search merges inferred hard filters and exposes metadata_narrowing debug output."}
+{"file":"src/tagmemorag/cli.py","reason":"Verified CLI search uses the same metadata narrowing helper and debug diagnostics."}
+{"file":"src/tagmemorag/search_runtime.py","reason":"Verified hard filters and boost-only metadata filters are separated before WAVE ranking."}
+{"file":"src/tagmemorag/incremental_rebuild.py","reason":"Verified incremental rebuild uses the same manual-to-generic metadata adapter as full build."}
+{"file":"tests/unit/test_document_metadata.py","reason":"Regression coverage for generic metadata, identity tags, and legacy compatibility."}
+{"file":"tests/unit/test_metadata_narrowing.py","reason":"Regression coverage for model/category/brand narrowing, conflicts, and fallback behavior."}
+{"file":"tests/unit/test_api.py","reason":"Regression coverage for API auto-narrowing and debug shape."}
+{"file":"tests/unit/test_cli.py","reason":"Regression coverage for CLI auto-narrowing and debug shape."}
+{"command":".venv/bin/python -m pytest tests/ -q","result":"pass","summary":"474 passed, 2 skipped","checked_at":"2026-05-17T05:50:57Z"}
+{"command":".venv/bin/python scripts/run_eval_ci.py","result":"pass","summary":"All 8 eval suites passed (baseline = hashing.json)","checked_at":"2026-05-17T05:50:57Z"}

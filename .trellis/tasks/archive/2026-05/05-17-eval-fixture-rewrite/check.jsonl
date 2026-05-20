@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate testing requirements + HTTP Embedding Provider compliance."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify API key safety, no secrets in commit / log / fixture / config."}
+{"file": ".trellis/tasks/05-17-eval-fixture-rewrite/prd.md", "reason": "Acceptance criteria source-of-truth."}
+{"file": ".trellis/tasks/05-17-eval-fixture-rewrite/design.md", "reason": "Data flow + contract + rollback shape."}
+{"file": ".trellis/tasks/05-17-eval-fixture-rewrite/implement.md", "reason": "Stage-by-stage validation gates."}

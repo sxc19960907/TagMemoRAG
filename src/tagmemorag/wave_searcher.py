@@ -23,10 +23,14 @@ def wave_search(
     aggregate: Literal["max", "sum"] = "max",
     eligible_node_ids: set[int] | None = None,
     filters: Mapping[str, Any] | None = None,
+    boost_filters: Mapping[str, Any] | None = None,
     metadata_field_boost: float = 0.0,
     tag_boost: float = 0.0,
     lexical_scores: Mapping[int, float] | None = None,
     lexical_source_k: int = 0,
+    *,
+    disable_legacy_tag_boost: bool = False,
+    rerank_pool_size: int | None = None,
 ) -> list[Result]:
     anchors = anchors or {}
     if aggregate not in {"max", "sum"}:
@@ -91,20 +95,24 @@ def wave_search(
         current_wave = next_wave
 
     normalized_filters = normalize_filters(filters)
+    normalized_boost_filters = {**normalized_filters, **normalize_filters(boost_filters)}
+    effective_tag_boost = 0.0 if disable_legacy_tag_boost else tag_boost
     boosted = {
         node_id: _apply_lexical_boost(
             _apply_metadata_boost(
                 score,
                 metadata_from_node(graph.nodes[node_id]),
-                normalized_filters,
+                normalized_boost_filters,
                 metadata_field_boost=metadata_field_boost,
-                tag_boost=tag_boost,
+                tag_boost=effective_tag_boost,
             ),
             lexical_scores.get(node_id, 0.0),
         )
         for node_id, score in amplitudes.items()
     }
-    ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))[:top_k]
+    ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))
+    limit = top_k if rerank_pool_size is None else max(int(rerank_pool_size), 0)
+    ranked = ranked[:limit]
     return [_make_result(graph, node_id, score) for node_id, score in ranked]
 
 

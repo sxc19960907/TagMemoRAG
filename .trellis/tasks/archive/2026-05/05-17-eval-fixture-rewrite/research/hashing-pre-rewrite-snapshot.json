@@ -1,0 +1,58 @@
+{
+  "captured_at": "2026-05-15T00:52:47+00:00",
+  "config_hash": "sha256:f54b09e69e6a2ddee9812b26ab165481e7b5090a3298ce49e88988f744e7559e",
+  "embedder": "hashing",
+  "suites": {
+    "coffee.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 0.928571,
+      "precision_at_k": 0.214286,
+      "recall_at_k": 0.928571
+    },
+    "cross_kb_negatives.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 1.0,
+      "precision_at_k": 0.5,
+      "recall_at_k": 1.0
+    },
+    "fault_codes.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 0.9,
+      "precision_at_k": 0.6,
+      "recall_at_k": 1.0
+    },
+    "mixed_language.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 0.9,
+      "precision_at_k": 0.6,
+      "recall_at_k": 1.0
+    },
+    "model_numbers.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 1.0,
+      "precision_at_k": 0.7,
+      "recall_at_k": 1.0
+    },
+    "product_manuals.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 1.0,
+      "precision_at_k": 0.214286,
+      "recall_at_k": 1.0
+    },
+    "tag_cooccurrence.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 1.0,
+      "precision_at_k": 0.9,
+      "recall_at_k": 1.0
+    },
+    "tag_rerank_edge.jsonl": {
+      "hit_at_k": 1.0,
+      "mrr": 1.0,
+      "precision_at_k": 0.7,
+      "recall_at_k": 1.0
+    }
+  },
+  "thresholds_applied": {
+    "floor_delta": 0.02
+  }
+}

@@ -8,7 +8,7 @@ import time
 import numpy as np
 import pytest
 
-from tagmemorag.config import ManualLibraryConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import ManualLibraryConfig, ParserConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
     build_dirty_state_report,
@@ -323,6 +323,63 @@ def test_incremental_rebuild_reuses_unchanged_dirty_manual_chunk(library_config,
     assert task.impact_report["summary"]["chunks_reused"] >= 1
 
 
+def test_incremental_rebuild_falls_back_when_parser_profile_changes(library_config, fake_embedder):
+    upsert_manual("default", _metadata("coffee/a.md", "a"), b"# Same\nSteam works.\n", library_config)
+    old_state = build_kb(library_root("default", library_config), "default", library_config, embedder=fake_embedder)
+    app = AppState(old_state)
+    mark_pending("default", library_config, pending=True, build_id=old_state.build_id)
+    first = start_library_rebuild(app, "default", library_config, embedder=fake_embedder)
+    for _ in range(100):
+        if first.status != "running":
+            break
+        time.sleep(0.01)
+    assert first.status == "done"
+
+    cfg = library_config.model_copy(update={"parser": ParserConfig(pdf_profile="generic")})
+    update_manual_metadata("default", "a", {"product_model": "A1"}, cfg)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "full"
+    assert task.fallback_reason == "parser_config_changed"
+    assert task.chunk_identity_fallback_reason == "parser_config_changed"
+
+
+def test_incremental_rebuild_falls_back_when_overlap_config_changes(library_config, fake_embedder):
+    upsert_manual(
+        "default",
+        _metadata("coffee/a.md", "a"),
+        b"# Same\nOpen the service panel. Rinse the filter. Close the panel.\n",
+        library_config,
+    )
+    old_state = build_kb(library_root("default", library_config), "default", library_config, embedder=fake_embedder)
+    app = AppState(old_state)
+    mark_pending("default", library_config, pending=True, build_id=old_state.build_id)
+    first = start_library_rebuild(app, "default", library_config, embedder=fake_embedder)
+    for _ in range(100):
+        if first.status != "running":
+            break
+        time.sleep(0.01)
+    assert first.status == "done"
+
+    cfg = library_config.model_copy(update={"parser": ParserConfig(overlap_chars=16)})
+    update_manual_metadata("default", "a", {"product_model": "A1"}, cfg)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "full"
+    assert task.fallback_reason == "parser_config_changed"
+    assert task.chunk_identity_fallback_reason == "parser_config_changed"
+
+
 def test_auto_mode_threshold_chooses_full(library_config, fake_embedder):
     cfg = library_config.model_copy(
         update={"manual_library": ManualLibraryConfig(root_dir=library_config.manual_library.root_dir, incremental_auto_max_dirty_manuals=0)}
@@ -600,23 +657,21 @@ def test_qdrant_incremental_sync_skips_reused_points(qdrant_library_config, fake
     }
     assert FakeQdrantClient.upsert_calls[-1] == ("test_default", [0])
     assert FakeQdrantClient.set_payload_calls == []
-    assert FakeQdrantClient.batch_payload_calls[-1] == (
-        "test_default",
-        [
-            (
-                1,
-                {
-                    "kb_name": "default",
-                    "node_id": 1,
-                    "build_id": app.get_current("default").build_id,
-                    "chunk_identity_key": FakeQdrantClient.collections["test_default"][1].payload["chunk_identity_key"],
-                    "manual_id": "b",
-                    "source_file": "coffee/b.md",
-                    "text_hash": FakeQdrantClient.collections["test_default"][1].payload["text_hash"],
-                },
-            )
-        ],
-    )
+    assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
+    assert len(FakeQdrantClient.batch_payload_calls[-1][1]) == 1
+    reused_node_id, reused_payload = FakeQdrantClient.batch_payload_calls[-1][1][0]
+    assert reused_node_id == 1
+    assert reused_payload == {
+        "kb_name": "default",
+        "node_id": 1,
+        "build_id": app.get_current("default").build_id,
+        "doc_id": "b",
+        "chunk_id": FakeQdrantClient.collections["test_default"][1].payload["chunk_id"],
+        "chunk_identity_key": FakeQdrantClient.collections["test_default"][1].payload["chunk_identity_key"],
+        "manual_id": "b",
+        "source_file": "coffee/b.md",
+        "text_hash": FakeQdrantClient.collections["test_default"][1].payload["text_hash"],
+    }
     assert FakeQdrantClient.collections["test_default"][0].payload["build_id"] == app.get_current("default").build_id
     assert FakeQdrantClient.collections["test_default"][1].payload["build_id"] == app.get_current("default").build_id
 
@@ -648,6 +703,8 @@ def test_qdrant_incremental_sync_batches_multiple_reused_payloads(qdrant_library
     assert FakeQdrantClient.batch_payload_calls[-1][0] == "test_default"
     assert [node_id for node_id, _payload in FakeQdrantClient.batch_payload_calls[-1][1]] == [1, 2]
     assert all(payload["build_id"] == app.get_current("default").build_id for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1])
+    assert all(payload["chunk_id"].startswith("chunk:sha256:") for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1])
+    assert {payload["doc_id"] for _node_id, payload in FakeQdrantClient.batch_payload_calls[-1][1]} == {"b", "c"}
 
 
 def test_qdrant_incremental_rebuild_then_ann_search_regression(monkeypatch, tmp_path):

@@ -8,7 +8,7 @@ import json
 import sys
 import time
 from io import StringIO
-from typing import cast
+from typing import Literal, cast
 import uuid
 
 from pathlib import Path
@@ -17,20 +17,25 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import numpy as np
 from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from .anchor import AnchorSystem
+from .answer import create_answer_generator
+from .answer.base import AnswerGenerationError, AnswerGenerator, AnswerRequestContext
+from .answer.prompt import build_answer_prompt, validate_generation_citations
 from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .cache.lru_ttl import LRUTTLCache
 from .config import Settings, load_config
+from .document_assets import create_asset_store, load_asset_manifest
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
-from .manuals import metadata_from_node
+from .manuals import metadata_from_node, public_tags_from_metadata
 from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import (
     build_dirty_state_report,
@@ -48,10 +53,13 @@ from .manual_library import (
     verify_registry_blobs,
 )
 from .manual_registry import create_registry
+from .metadata_narrowing import NarrowingDecision, infer_metadata_narrowing, merge_inferred_filters
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
+from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
+from .retrieval import VisualRetrievalResolver
 from .retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -66,9 +74,11 @@ from .search_runtime import (
     search_debug_enabled,
     search_debug_payload,
 )
+from .wave_tag_spike import GhostTag
 from .state import AppState, load_kb, start_library_rebuild
 from .storage.json_anchor import JsonAnchorStore
 from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
+from .visual_retrieval import create_visual_components
 from .tag_governance import (
     commit_tag_rewrite,
     load_tag_policy,
@@ -172,6 +182,18 @@ app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
 app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
 
 
+class GhostTagSpec(BaseModel):
+    """Caller-supplied tag with explicit vector, bypassing the KB tag store.
+
+    `vector` length must equal the model embedding dim at request time;
+    mismatched ghosts are silently skipped and counted in `info.ghost_skipped_dim_mismatch`.
+    """
+
+    name: str = Field(..., min_length=1, max_length=128)
+    vector: list[float] = Field(..., min_length=1)
+    is_core: bool = False
+
+
 class SearchRequest(BaseModel):
     question: str
     top_k: int | None = None
@@ -183,6 +205,51 @@ class SearchRequest(BaseModel):
     kb_name: str = "default"
     filters: "SearchFilters | None" = None
     debug: bool | None = None
+    # Phase 2b-2: caller-supplied "spotlight" tags. Only take effect under
+    # `wave_phase1.dynamic_boost_factor_strategy="pyramid"` (PRD R10);
+    # otherwise they round-trip through `info.core_tags_input/resolved` for
+    # diagnostics with no impact on weights.
+    core_tags: list[str] = Field(default_factory=list)
+    ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
+    # T2: optional per-request budget override; missing fields fall through to
+    # Settings.queryplan.default_*. None means "use settings defaults entirely".
+    budget: "BudgetSpec | None" = None
+
+
+class BudgetSpec(BaseModel):
+    """T2: optional per-request resource budget override.
+
+    Missing fields fall through to Settings.queryplan.default_*. The
+    deadline_at lifecycle field on the runtime Budget is computed by
+    build_plan and never appears in the API surface.
+    """
+
+    latency_ms: int | None = Field(default=None, ge=1)
+    rerank_tier: Literal["off", "tier1", "tier2"] | None = None
+    max_evidence: int | None = Field(default=None, ge=1)
+    allow_external_reranker: bool | None = None
+
+    def to_planner_dict(self) -> dict:
+        """Convert to the dict shape expected by build_plan(budget_spec=...)."""
+        out: dict = {}
+        if self.latency_ms is not None:
+            out["latency_ms"] = self.latency_ms
+        if self.rerank_tier is not None:
+            out["rerank_tier"] = self.rerank_tier
+        if self.max_evidence is not None:
+            out["max_evidence"] = self.max_evidence
+        if self.allow_external_reranker is not None:
+            out["allow_external_reranker"] = self.allow_external_reranker
+        return out
+
+
+class RetrieveRequest(SearchRequest):
+    token_budget: int = Field(default=DEFAULT_TOKEN_BUDGET, ge=0, le=128000)
+
+
+class AnswerRequest(RetrieveRequest):
+    answer_token_budget: int | None = Field(default=None, ge=1, le=128000)
+    include_retrieve: bool = True
 
 
 class SearchFilters(BaseModel):
@@ -260,16 +327,46 @@ class CacheClearRequest(BaseModel):
     kb_name: str | None = None
 
 
+class IndexGenBuildShadowRequest(BaseModel):
+    kb_name: str = "default"
+    docs_dir: str | None = None
+    embedding_model_id: str | None = None
+    embedding_model_version: str | None = None
+    parser_version: str | None = None
+    chunker_version: str | None = None
+    index_schema_version: int | None = None
+
+
+class IndexGenCancelShadowRequest(BaseModel):
+    kb_name: str = "default"
+
+
+class IndexGenSwapRequest(BaseModel):
+    kb_name: str = "default"
+
+
+class IndexGenRetireRequest(BaseModel):
+    kb_name: str = "default"
+    generation: int
+    force: bool = False
+
+
 class FeedbackSubmitRequest(BaseModel):
     kb_name: str = "default"
     trace_id: str = ""
     search_id: str = ""
+    retrieve_id: str = ""
     build_id: str = ""
     query: str = Field(..., max_length=1000)
     outcome: str
     selected_results: list[dict[str, object]] = Field(default_factory=list, max_length=20)
+    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
+    selected_context_item_ids: list[str] = Field(default_factory=list, max_length=20)
+    answerable: bool | None = None
+    failure_reason: str = Field(default="", max_length=120)
     expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
     note: str = Field(default="", max_length=2000)
+    plan_id: str | None = Field(default=None, max_length=120)
 
 
 class FeedbackReviewRequest(BaseModel):
@@ -381,12 +478,40 @@ def _search_param_values(request: SearchRequest) -> dict[str, object]:
     }
 
 
+def _spotlight_cache_suffix(request: SearchRequest) -> str:
+    """Stable hash of caller-supplied core_tags / ghost_tags for cache keying.
+
+    Different spotlight inputs ⇒ different results, so cache must split on them.
+    Empty lists ⇒ stable empty suffix (no cache busting for default callers).
+    """
+    if not request.core_tags and not request.ghost_tags:
+        return "spot:none"
+    payload = {
+        "core": [str(t).strip().lower() for t in request.core_tags],
+        "ghost": [
+            {
+                "name": str(g.name).strip().lower(),
+                "is_core": bool(g.is_core),
+                "vec_hash": hashlib.sha256(
+                    np.asarray(g.vector, dtype=np.float32).tobytes()
+                ).hexdigest()[:16],
+            }
+            for g in request.ghost_tags
+        ],
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"spot:{digest}"
+
+
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
-    filter_dict = _governed_filter_dict(request.kb_name, request.filters)
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
+    spotlight_suffix = _spotlight_cache_suffix(request)
     parts = [
         request.kb_name,
         state.build_id,
@@ -401,15 +526,18 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
         debug_suffix,
+        spotlight_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
 def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
     params = _search_param_values(request)
-    canonical_filters = normalize_filters(_governed_filter_dict(request.kb_name, request.filters))
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
+    spotlight_suffix = _spotlight_cache_suffix(request)
     parts = [
         state.kb_name,
         state.build_id,
@@ -424,8 +552,84 @@ def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str)
         json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
         strategy_suffix,
         debug_suffix,
+        spotlight_suffix,
     ]
     return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+def _compute_retrieve_id(request: RetrieveRequest, state: GraphState, trace_id: str) -> str:
+    base = _compute_search_id(request, state, trace_id)
+    parts = ["retrieve", base, str(int(request.token_budget))]
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
+def _build_and_log_plan(request: SearchRequest, state: GraphState):
+    """T2: construct QueryPlan + insert basic row. Returns (plan, plan_log).
+
+    Caller is responsible for calling plan_log.update_result_async() before
+    returning the response to fill in result columns.
+    """
+    from .queryplan import PlanLog, build_plan
+
+    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    budget_spec = request.budget.to_planner_dict() if request.budget else None
+    plan = build_plan(
+        request.question,
+        request.kb_name,
+        settings,
+        filters=filter_dict,
+        budget_spec=budget_spec,
+    )
+    plan_log = PlanLog(request.kb_name, settings)
+    plan_log.insert_basic(plan)
+    return plan, plan_log
+
+
+def _served_by_generation(state: GraphState) -> int | None:
+    """T2: Try to read served_by_generation from state.meta; falls back to None
+    when index.json is not yet wired into rebuilds."""
+    if not isinstance(state.meta, dict):
+        return None
+    gen = state.meta.get("served_by_generation")
+    return int(gen) if gen is not None else None
+
+
+_RERANK_DISPATCHER_CACHE: dict[int, "object"] = {}
+
+
+def _rerank_dispatcher():
+    """T3: lazy singleton dispatcher keyed by current Settings identity.
+
+    Rebuilt when api.settings is replaced (test fixtures swap settings
+    between tests).
+    """
+    from .reranker import RerankerDispatcher
+
+    key = id(settings)
+    cached = _RERANK_DISPATCHER_CACHE.get(key)
+    if cached is None:
+        cached = RerankerDispatcher(settings)
+        _RERANK_DISPATCHER_CACHE[key] = cached
+    return cached
+
+
+def _reorder_results(original_results, rerank_outcome):
+    """Reorder execute_search results by rerank_outcome's chunk_id ordering.
+
+    Items not in rerank_outcome are dropped (rerank already filtered to top_n).
+    Falls back to original order when rerank_outcome is empty.
+    """
+    if not rerank_outcome.items:
+        return list(original_results)
+    from .reranker.dispatcher import _candidate_chunk_id
+
+    by_id = {_candidate_chunk_id(r): r for r in original_results}
+    out = []
+    for item in rerank_outcome.items:
+        cid = item.chunk_id
+        if cid in by_id and by_id[cid] is not None:
+            out.append(by_id[cid])
+    return out
 
 
 @app.middleware("http")
@@ -586,7 +790,111 @@ def search(
         raise
 
 
+@app.post("/retrieve")
+def retrieve(
+    request: RetrieveRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    state = app_state.get_current(request.kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.retrieve", **span_attrs):
+            return _retrieve_impl(request, http_request, state, t0)
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=request.kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
+@app.post("/answer")
+def answer(
+    request: AnswerRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    state = app_state.get_current(request.kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.answer", **span_attrs):
+            retrieve_payload = _retrieve_impl(request, http_request, state, t0)
+            return _build_answer_response(request, retrieve_payload)
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=request.kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
+    plan, plan_log = _build_and_log_plan(request, state)
+    warnings: list[str] = []
+
+    # Out-of-scope short-circuit (T2 D2): skip retrieval, return empty results,
+    # still write plan log so we can study these queries later.
+    from .queryplan import Intent
+
+    if plan.intent == Intent.OUT_OF_SCOPE:
+        warnings.append("out_of_scope_intent")
+        trace_id = str(getattr(http_request.state, "trace_id", ""))
+        search_id = _compute_search_id(request, state, trace_id)
+        payload = {
+            "build_id": state.build_id,
+            "kb_name": state.kb_name,
+            "trace_id": trace_id,
+            "search_id": search_id,
+            "plan_id": plan.plan_id,
+            "results": [],
+            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
+            "cache": "disabled",
+            "warnings": list(warnings),
+        }
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "disabled",
+            "evidence_ids": [],
+            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
+            "warnings": list(warnings),
+        })
+        get_metrics().record_search(
+            kb_name=state.kb_name,
+            cache_status="disabled",
+            outcome="success",
+            duration=time.perf_counter() - t0,
+            result_count=0,
+        )
+        return payload
+
     cache_status = "disabled"
     cache_key = _compute_cache_key(request, state)
     cache = app_state.query_cache if settings.cache.enabled else None
@@ -599,8 +907,16 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         search_time_ms = (time.perf_counter() - t0) * 1000.0
         trace_id = str(getattr(http_request.state, "trace_id", ""))
         search_id = _compute_search_id(request, state, trace_id)
-        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit"}
+        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit", "plan_id": plan.plan_id}
         result_count = len(payload.get("results", []))
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "hit",
+            "evidence_ids": [],
+            "latency_ms_observed": int(search_time_ms),
+            "warnings": list(warnings),
+        })
         get_metrics().record_search(
             kb_name=state.kb_name,
             cache_status="hit",
@@ -642,7 +958,15 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict = _governed_filter_dict(request.kb_name, request.filters)
+        filter_dict, narrowing = _resolved_filter_dict(request, state)
+        ghost_tag_args = tuple(
+            GhostTag(
+                name=str(g.name),
+                vector=np.asarray(g.vector, dtype=np.float32),
+                is_core=bool(g.is_core),
+            )
+            for g in request.ghost_tags
+        )
         execution = execute_search(
             state=state,
             query_vec=query_vec,
@@ -655,6 +979,9 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             amplitude_cutoff=float(params["amplitude_cutoff"]),
             aggregate=aggregate,
             filters=filter_dict,
+            boost_filters=narrowing.boost_filters,
+            core_tags=tuple(request.core_tags),
+            ghost_tags=ghost_tag_args,
         )
         results = execution.results
     search_time_ms = (time.perf_counter() - t0) * 1000.0
@@ -693,24 +1020,333 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
         "kb_name": state.kb_name,
         "trace_id": trace_id,
         "search_id": _compute_search_id(request, state, trace_id),
+        "plan_id": plan.plan_id,
         "results": [r.to_dict() for r in results],
         "search_time_ms": round(search_time_ms, 3),
         "cache": "miss",
     }
+    if warnings:
+        payload["warnings"] = list(warnings)
     if search_debug_enabled(request.debug, settings):
         payload["debug"] = search_debug_payload(
             execution,
             params,
             ann_enabled=search_ann_enabled(state, settings),
         )
+        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+            enabled=settings.search.metadata_narrowing_enabled
+        )
     if cache is not None:
         cache.set(
             cache_key,
-            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache"}},
+            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache", "plan_id"}},
             kb_name=request.kb_name,
         )
         get_metrics().record_cache_operation(operation="set", outcome="success")
         get_metrics().set_cache_entries(len(cache))
+    plan_log.update_result_async(plan.plan_id, {
+        "served_by_generation": _served_by_generation(state),
+        "served_by_build_id": state.build_id,
+        "cache_status": cache_status,
+        "evidence_ids": [r.id for r in results if hasattr(r, "id")],
+        "latency_ms_observed": int(search_time_ms),
+        "warnings": list(warnings),
+    })
+    return payload
+
+
+def _build_answer_response(request: AnswerRequest, retrieve_payload: dict) -> dict:
+    warnings = list(retrieve_payload.get("warnings") or [])
+    answerability = dict(retrieve_payload.get("answerability") or {})
+    if not bool(answerability.get("answerable")):
+        reason = str(answerability.get("fallback_reason") or "insufficient_evidence")
+        answer_obj = _answer_error_obj(
+            kind="refusal",
+            reason=reason,
+            warning=f"answer_refused:{reason}",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[reason],
+        )
+        warnings.append(f"answer_refused:{reason}")
+        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+    if not settings.answer.enabled:
+        answer_obj = _answer_error_obj(
+            kind="error",
+            reason="generation_disabled",
+            warning="answer_generation_disabled",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[],
+        )
+        warnings.append("answer_generation_disabled")
+        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+    prompt = build_answer_prompt(
+        question=request.question,
+        retrieve_payload=retrieve_payload,
+        prompt_version=settings.answer.prompt_version,
+    )
+    context = AnswerRequestContext(
+        question=request.question,
+        retrieve_payload=retrieve_payload,
+        prompt=prompt,
+        max_output_tokens=int(request.answer_token_budget or settings.answer.max_output_tokens),
+    )
+    try:
+        generation = _answer_generator().generate(context)
+        cleaned = validate_generation_citations(generation, prompt.allowed_citation_ids)
+        answer_obj = cleaned.to_answer_dict(confidence=float(answerability.get("confidence") or 0.0))
+        warnings.extend(cleaned.warnings)
+    except (AnswerGenerationError, ServiceError, ValueError) as exc:
+        reason = type(exc).__name__
+        answer_obj = _answer_error_obj(
+            kind="error",
+            reason="generation_failed",
+            warning=f"answer_generation_failed:{reason}",
+            confidence=float(answerability.get("confidence") or 0.0),
+            missing_evidence_hints=[],
+        )
+        warnings.append(f"answer_generation_failed:{reason}")
+    return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
+
+
+def _answer_error_obj(
+    *,
+    kind: str,
+    reason: str,
+    warning: str,
+    confidence: float,
+    missing_evidence_hints: list[str],
+) -> dict:
+    return {
+        "kind": kind,
+        "text": "",
+        "confidence": confidence,
+        "citations": [],
+        "refusal_reason": reason,
+        "missing_evidence_hints": missing_evidence_hints,
+        "model_id": settings.answer.model_id or settings.answer.provider,
+        "model_version": settings.answer.model_version,
+        "prompt_version": settings.answer.prompt_version,
+        "warnings": [warning],
+    }
+
+
+def _answer_response_payload(request: AnswerRequest, retrieve_payload: dict, answer_obj: dict, warnings: list[str]) -> dict:
+    payload = {
+        "schema_version": "answer.v1",
+        "build_id": retrieve_payload.get("build_id", ""),
+        "kb_name": retrieve_payload.get("kb_name", request.kb_name),
+        "trace_id": retrieve_payload.get("trace_id", ""),
+        "plan_id": retrieve_payload.get("plan_id", ""),
+        "answer": answer_obj,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+    if request.include_retrieve:
+        payload["retrieve"] = retrieve_payload
+    return payload
+
+
+_ANSWER_GENERATOR_CACHE: dict[int, AnswerGenerator] = {}
+
+
+def _answer_generator() -> AnswerGenerator:
+    key = id(settings)
+    cached = _ANSWER_GENERATOR_CACHE.get(key)
+    if cached is None:
+        cached = create_answer_generator(settings)
+        _ANSWER_GENERATOR_CACHE[key] = cached
+    return cached
+
+
+def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):
+    plan, plan_log = _build_and_log_plan(request, state)
+    warnings: list[str] = []
+
+    # Out-of-scope short-circuit (T2 D2)
+    from .queryplan import Intent
+    from .queryplan.budget import BudgetGuard
+
+    if plan.intent == Intent.OUT_OF_SCOPE:
+        warnings.append("out_of_scope_intent")
+        trace_id = str(getattr(http_request.state, "trace_id", ""))
+        search_id = _compute_search_id(request, state, trace_id)
+        retrieve_id = _compute_retrieve_id(request, state, trace_id)
+        empty_payload = {
+            "build_id": state.build_id,
+            "kb_name": state.kb_name,
+            "trace_id": trace_id,
+            "search_id": search_id,
+            "retrieve_id": retrieve_id,
+            "plan_id": plan.plan_id,
+            "results": [],
+            "evidence": [],
+            "context_pack": {"items": []},
+            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
+            "warnings": list(warnings),
+        }
+        plan_log.update_result_async(plan.plan_id, {
+            "served_by_generation": _served_by_generation(state),
+            "served_by_build_id": state.build_id,
+            "cache_status": "disabled",
+            "evidence_ids": [],
+            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
+            "warnings": list(warnings),
+        })
+        get_metrics().record_search(
+            kb_name=state.kb_name,
+            cache_status="disabled",
+            outcome="success",
+            duration=time.perf_counter() - t0,
+            result_count=0,
+        )
+        return empty_payload
+
+    emb_t0 = time.perf_counter()
+    try:
+        with start_span("tagmemorag.retrieve.embedding", **{"tagmemorag.kb_name": state.kb_name}):
+            query_vec = embedder.encode_query(request.question)
+        get_metrics().record_embedding(operation="query", outcome="success", duration=time.perf_counter() - emb_t0)
+    except Exception:
+        get_metrics().record_embedding(operation="query", outcome="error", duration=time.perf_counter() - emb_t0)
+        raise
+    params = _search_param_values(request)
+    aggregate = str(params["aggregate"])
+    if aggregate not in {"max", "sum"}:
+        raise ServiceError(
+            ErrorCode.INVALID_INPUT,
+            "aggregate must be 'max' or 'sum'.",
+            {"aggregate": aggregate},
+        )
+    with start_span("tagmemorag.retrieve.wave", **{"tagmemorag.kb_name": state.kb_name}):
+        filter_dict, narrowing = _resolved_filter_dict(request, state)
+        ghost_tag_args = tuple(
+            GhostTag(
+                name=str(g.name),
+                vector=np.asarray(g.vector, dtype=np.float32),
+                is_core=bool(g.is_core),
+            )
+            for g in request.ghost_tags
+        )
+        # T3 D1: when reranker active, expand candidate window to
+        # rerank_candidates_n; reranker prunes back to top_n; downstream
+        # build_retrieve_response truncates to user's token_budget.
+        effective_top_k = int(params["top_k"])
+        rerank_active = (
+            plan.budget.rerank_tier != "off"
+            and plan.budget.rerank_candidates_n > 0
+        )
+        if rerank_active:
+            effective_top_k = max(effective_top_k, plan.budget.rerank_candidates_n)
+        execution = execute_search(
+            state=state,
+            query_vec=query_vec,
+            settings=settings,
+            query_text=request.question,
+            top_k=effective_top_k,
+            source_k=int(params["source_k"]),
+            steps=int(params["steps"]),
+            decay=float(params["decay"]),
+            amplitude_cutoff=float(params["amplitude_cutoff"]),
+            aggregate=aggregate,
+            filters=filter_dict,
+            boost_filters=narrowing.boost_filters,
+            core_tags=tuple(request.core_tags),
+            ghost_tags=ghost_tag_args,
+        )
+    candidates_used = execution.results
+    rerank_log_entry: dict | None = None
+    if rerank_active:
+        guard = BudgetGuard(plan)
+        rerank_outcome = _rerank_dispatcher().rerank(plan, list(execution.results), guard)
+        if rerank_outcome.warnings:
+            warnings.extend(rerank_outcome.warnings)
+        candidates_used = _reorder_results(execution.results, rerank_outcome)
+        rerank_log_entry = {
+            "vendor_used": rerank_outcome.vendor_used,
+            "calibrator": settings.reranker.calibrator,
+            "calibrated": True,
+            "latency_ms": rerank_outcome.latency_ms,
+            "top_n_returned": len(rerank_outcome.items),
+            "truncated_count": len(rerank_outcome.truncated_chunk_ids),
+            "cache_status": rerank_outcome.cache_status,
+            "warnings": list(rerank_outcome.warnings),
+        }
+    search_time_ms = (time.perf_counter() - t0) * 1000.0
+    trace_id = str(getattr(http_request.state, "trace_id", ""))
+    search_id = _compute_search_id(request, state, trace_id)
+    asset_manifest = load_asset_manifest(state.kb_name, settings) if settings.assets.enabled else None
+    visual_provider, visual_reranker = create_visual_components(settings)
+    payload = build_retrieve_response(
+        results=candidates_used,
+        build_id=state.build_id,
+        kb_name=state.kb_name,
+        trace_id=trace_id,
+        search_id=search_id,
+        retrieve_id=_compute_retrieve_id(request, state, trace_id),
+        token_budget=request.token_budget,
+        search_time_ms=search_time_ms,
+        visual_resolver=VisualEvidenceResolver(kb_name=state.kb_name, manifest=asset_manifest) if settings.assets.enabled else None,
+        visual_retrieval_resolver=VisualRetrievalResolver(
+            kb_name=state.kb_name,
+            manifest=asset_manifest,
+            provider=visual_provider,
+            reranker=visual_reranker,
+            enabled=settings.visual_retrieval.enabled,
+            max_candidates=settings.visual_retrieval.max_candidates,
+            min_score=settings.visual_retrieval.min_score,
+            trigger=settings.visual_retrieval.trigger,
+        ),
+        query_text=request.question,
+    )
+    if search_debug_enabled(request.debug, settings):
+        payload["debug"] = search_debug_payload(
+            execution,
+            params,
+            ann_enabled=search_ann_enabled(state, settings),
+        )
+        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
+            enabled=settings.search.metadata_narrowing_enabled
+        )
+        payload["debug"]["retrieve_inspect"] = retrieve_inspect_payload(payload)
+    get_metrics().record_search(
+        kb_name=state.kb_name,
+        cache_status="disabled",
+        outcome="success",
+        duration=time.perf_counter() - t0,
+        result_count=len(execution.results),
+    )
+    set_span_attributes(
+        **{
+            "tagmemorag.result_count": len(execution.results),
+            "tagmemorag.search.strategy": execution.strategy,
+        }
+    )
+    structlog.get_logger().info(
+        "retrieve",
+        kb_name=state.kb_name,
+        build_id=state.build_id,
+        query_len=len(request.question),
+        top_k=request.top_k or settings.search.top_k,
+        result_count=len(execution.results),
+        latency_ms=round(search_time_ms, 3),
+        search_strategy=execution.strategy,
+    )
+    payload["plan_id"] = plan.plan_id
+    if warnings:
+        payload["warnings"] = list(warnings)
+    plan_log.update_result_async(plan.plan_id, {
+        "served_by_generation": _served_by_generation(state),
+        "served_by_build_id": state.build_id,
+        "cache_status": "disabled",
+        "evidence_ids": [
+            ev.get("evidence_id") for ev in payload.get("evidence", [])
+            if isinstance(ev, dict) and ev.get("evidence_id")
+        ],
+        "latency_ms_observed": int(search_time_ms),
+        "warnings": list(warnings),
+        "rerank": rerank_log_entry,
+    })
     return payload
 
 
@@ -735,6 +1371,24 @@ def submit_search_feedback(
     feedback = create_feedback(request.kb_name, request.model_dump(), settings)
     structlog.get_logger().info(
         "search_feedback_created",
+        kb_name=feedback.kb_name,
+        outcome=feedback.outcome,
+        status=feedback.status,
+        trace_id=feedback.trace_id,
+    )
+    return {"feedback": feedback.to_dict()}
+
+
+@app.post("/retrieve/feedback")
+def submit_retrieve_feedback(
+    request: FeedbackSubmitRequest,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, request.kb_name)
+    feedback = create_feedback(request.kb_name, request.model_dump(), settings)
+    structlog.get_logger().info(
+        "retrieve_feedback_created",
         kb_name=feedback.kb_name,
         outcome=feedback.outcome,
         status=feedback.status,
@@ -890,6 +1544,60 @@ def graph_info(
     }
 
 
+@app.get("/assets/{asset_id}")
+def get_document_asset(
+    asset_id: str,
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    manifest = load_asset_manifest(kb_name, settings)
+    asset = manifest.assets.get(asset_id)
+    if asset is None or asset.status != "ready":
+        raise ServiceError(ErrorCode.INVALID_REQUEST, "Document asset not found.", {"asset_id": asset_id, "kb_name": kb_name})
+    if asset.kb_name != kb_name:
+        raise ServiceError(ErrorCode.FORBIDDEN, "Document asset belongs to a different KB.", {"asset_id": asset_id, "kb_name": kb_name})
+    store = create_asset_store(settings)
+    if asset.storage_backend != store.backend:
+        raise ServiceError(
+            ErrorCode.INVALID_CONFIG,
+            "Document asset backend does not match the configured asset store.",
+            {"asset_backend": asset.storage_backend, "configured_backend": store.backend},
+        )
+    content = store.get(asset.storage_key)
+    return Response(content=content, media_type=asset.mime_type, headers={"X-Document-Asset-Id": asset.asset_id})
+
+
+@app.get("/assets")
+def list_document_assets(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    ensure_kb_access(api_key, kb_name)
+    manifest = load_asset_manifest(kb_name, settings)
+    return {
+        "kb_name": kb_name,
+        "schema_version": manifest.schema_version,
+        "assets": [
+            {
+                "asset_id": asset.asset_id,
+                "doc_id": asset.doc_id,
+                "source_file": asset.source_file,
+                "type": asset.type,
+                "status": asset.status,
+                "mime_type": asset.mime_type,
+                "page_number": asset.page_number,
+                "storage_backend": asset.storage_backend,
+                "failure_reason": asset.failure_reason,
+            }
+            for asset in sorted(manifest.assets.values(), key=lambda row: row.asset_id)
+        ],
+        "stats": manifest.to_dict()["stats"],
+    }
+
+
 @app.get("/manuals")
 def list_manuals(
     kb_name: str = "default",
@@ -923,7 +1631,7 @@ def list_manuals(
                 "product_model": str(metadata.get("product_model", "")),
                 "language": str(metadata.get("language", "")),
                 "version": str(metadata.get("version", "")),
-                "tags": list(metadata.get("tags", [])) if isinstance(metadata.get("tags", []), list) else [],
+                "tags": public_tags_from_metadata(metadata),
                 "chunk_count": 0,
             },
         )
@@ -932,9 +1640,7 @@ def list_manuals(
             value = str(metadata.get(field, "")).strip()
             if value:
                 facets[field].add(value)
-        tags = metadata.get("tags", [])
-        if isinstance(tags, list):
-            facets["tags"].update(str(tag) for tag in tags if str(tag).strip())
+        facets["tags"].update(tag for tag in public_tags_from_metadata(metadata) if tag.strip())
     return {
         "kb_name": state.kb_name,
         "build_id": state.build_id,
@@ -1421,6 +2127,94 @@ def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_s
         return {"cleared_count": cleared}
 
 
+def _resolve_indexgen_target_versions(req: IndexGenBuildShadowRequest) -> dict[str, object]:
+    diff: dict[str, object] = {}
+    if req.embedding_model_id is not None:
+        diff["embedding_model_id"] = req.embedding_model_id
+    if req.embedding_model_version is not None:
+        diff["embedding_model_version"] = req.embedding_model_version
+    if req.parser_version is not None:
+        diff["parser_version"] = req.parser_version
+    if req.chunker_version is not None:
+        diff["chunker_version"] = req.chunker_version
+    if req.index_schema_version is not None:
+        diff["index_schema_version"] = req.index_schema_version
+    return diff
+
+
+@app.post("/admin/generation/build-shadow")
+def admin_build_shadow(
+    request: IndexGenBuildShadowRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    target_versions = _resolve_indexgen_target_versions(request)
+    if not target_versions:
+        raise ServiceError(
+            ErrorCode.INDEXGEN_NO_VERSION_DIFF,
+            "build-shadow requires at least one version field different from active.",
+            {"kb_name": request.kb_name},
+        )
+    docs_dir = request.docs_dir or settings.manual_library.root_dir
+    task = app_state.start_shadow_rebuild(
+        docs_dir,
+        request.kb_name,
+        settings,
+        target_versions=target_versions,
+        embedder=embedder,
+    )
+    meta = app_state.get_generation_meta(request.kb_name)
+    return {
+        "kb_name": request.kb_name,
+        "shadow_generation": meta.shadow_generation if meta else None,
+        "task_id": task.task_id,
+        "status": task.status,
+    }
+
+
+@app.post("/admin/generation/cancel-shadow")
+def admin_cancel_shadow(
+    request: IndexGenCancelShadowRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.cancel_shadow_rebuild(request.kb_name, settings)
+
+
+@app.post("/admin/generation/swap")
+def admin_swap_generation(
+    request: IndexGenSwapRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.swap_generation(request.kb_name, settings)
+
+
+@app.post("/admin/generation/retire")
+def admin_retire_generation(
+    request: IndexGenRetireRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    return app_state.retire_generation(
+        request.kb_name, request.generation, settings, force=request.force
+    )
+
+
+@app.get("/admin/generation/status")
+def admin_generation_status(
+    kb_name: str = "default",
+    _api_key: ApiKey = Depends(require_scope("admin")),
+):
+    from .indexgen import read_meta
+
+    kb_root = Path(settings.storage.data_dir) / kb_name
+    meta = app_state.get_generation_meta(kb_name) or read_meta(kb_root)
+    if meta is None:
+        raise ServiceError(
+            ErrorCode.INDEXGEN_NO_SUCH_KB,
+            "KB has no index.json.",
+            {"kb_name": kb_name},
+        )
+    return meta.to_dict()
+
+
 def _parse_metadata_form(metadata: str) -> dict[str, object]:
     try:
         parsed = json.loads(metadata)
@@ -1454,6 +2248,20 @@ def _governed_filter_dict(kb_name: str, filters: SearchFilters | None) -> dict[s
         policy = load_tag_policy(kb_name, settings)
         filter_dict["tags"] = resolve_tags_for_search([str(tag) for tag in tags], policy)
     return filter_dict
+
+
+def _resolved_filter_dict(request: SearchRequest, state: GraphState) -> tuple[dict[str, object], NarrowingDecision]:
+    explicit_filters = _governed_filter_dict(request.kb_name, request.filters)
+    narrowing = infer_metadata_narrowing(
+        query_text=request.question,
+        graph=state.graph,
+        explicit_filters=explicit_filters,
+        enabled=settings.search.metadata_narrowing_enabled,
+        category_policy=settings.search.metadata_narrowing_category_policy,
+        brand_policy=settings.search.metadata_narrowing_brand_policy,
+        min_candidates=settings.search.metadata_narrowing_min_candidates,
+    )
+    return merge_inferred_filters(explicit_filters, narrowing), narrowing
 
 
 async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:

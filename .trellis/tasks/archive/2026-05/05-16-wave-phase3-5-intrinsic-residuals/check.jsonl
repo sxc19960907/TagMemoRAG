@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test coverage, compatibility, and forbidden patterns."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Registry persistence checks."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Metrics label contract checks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify data flow across producer and consumers."}

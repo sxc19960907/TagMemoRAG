@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/index.md","reason":"Loaded backend pre-development checklist for config/search/test/docs changes."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Confirmed dependency direction and module placement before adding diagnostics/tests."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Applied config centralization, deterministic tests, and no ad-hoc parser guidance."}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Confirmed diagnostics avoid raw vectors and production logging changes."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Searched existing dynamic boost/EPA/test helpers before adding focused code."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Mapped config to EPA projector to apply_tag_boost and docs/test contracts."}

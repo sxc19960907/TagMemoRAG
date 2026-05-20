@@ -64,6 +64,136 @@ def test_metric_label_contract_blocks_sensitive_dimensions():
     assert not (metrics.ALLOWED_LABEL_NAMES & metrics.FORBIDDEN_LABEL_NAMES)
 
 
+def test_phase1_cooccurrence_and_spike_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.set_tag_cooccurrence_edges(kb_name="default", count=24)
+    collector.record_tag_cooccurrence_rebuild(kb_name="default", outcome="success", duration=0.12)
+    collector.record_tag_cooccurrence_rebuild(kb_name="default", outcome="failed", duration=0.05)
+    collector.record_tag_spike_propagation(kb_name="default", outcome="applied")
+    collector.record_tag_spike_propagation(kb_name="default", outcome="skipped")
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_tag_cooccurrence_edges{kb_name="default"} 24.0' in body
+    assert 'tagmemorag_tag_cooccurrence_rebuild_duration_seconds_bucket' in body
+    assert 'kb_name="default"' in body and 'outcome="success"' in body
+    assert 'tagmemorag_tag_spike_propagations_total{kb_name="default",outcome="applied"} 1.0' in body
+    assert 'tagmemorag_tag_spike_propagations_total{kb_name="default",outcome="skipped"} 1.0' in body
+
+
+def test_phase2b1_pyramid_dynamic_factor_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_dynamic_factor(kb_name="default", strategy="constant", value=1.0)
+    collector.record_tag_dynamic_factor(kb_name="default", strategy="pyramid", value=0.42)
+    collector.record_tag_pyramid(
+        kb_name="default",
+        levels=2,
+        explained_energy=0.85,
+        tag_memo_activation=0.31,
+        coverage=0.85,
+        coherence=0.42,
+    )
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert "tagmemorag_tag_dynamic_factor_bucket" in body
+    assert 'kb_name="default"' in body and 'strategy="constant"' in body
+    assert 'strategy="pyramid"' in body
+    assert "tagmemorag_tag_pyramid_levels_bucket" in body
+    assert "tagmemorag_tag_pyramid_explained_energy_bucket" in body
+    assert 'tagmemorag_tag_pyramid_features{feature="tag_memo_activation",kb_name="default"} 0.31' in body
+    assert 'tagmemorag_tag_pyramid_features{feature="coverage",kb_name="default"} 0.85' in body
+    assert 'tagmemorag_tag_pyramid_features{feature="coherence",kb_name="default"} 0.42' in body
+
+
+def test_phase2b2_modulator_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="unknown")
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="unknown")
+    collector.record_tag_lang_penalty_applied(kb_name="default", query_world_kind="social")
+    collector.record_tag_core_tags_resolved(kb_name="default", count=3)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="hard", count=2)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="soft", count=1)
+    collector.record_tag_ghosts_injected(kb_name="default", kind="skipped_dim", count=1)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    # Counter samples are exposed as `..._total`.
+    assert "tagmemorag_tag_lang_penalty_applied_total" in body
+    assert 'query_world_kind="unknown"' in body
+    assert 'query_world_kind="social"' in body
+    assert "tagmemorag_tag_core_tags_resolved_bucket" in body
+    assert "tagmemorag_tag_ghosts_injected_bucket" in body
+    assert 'kind="hard"' in body
+    assert 'kind="soft"' in body
+    assert 'kind="skipped_dim"' in body
+    # Label contract still passes after we register all new label names.
+    metrics.assert_label_contract()
+
+
+def test_phase3_resonance_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_resonance_value(kb_name="default", value=0.5)
+    collector.record_tag_resonance_value(kb_name="default", value=1.2)
+    collector.record_tag_resonance_bridges_count(kb_name="default", count=2)
+    collector.record_tag_resonance_bridges_count(kb_name="default", count=0)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert "tagmemorag_tag_resonance_value_bucket" in body
+    assert "tagmemorag_tag_resonance_bridges_count_bucket" in body
+    assert 'kb_name="default"' in body
+    metrics.assert_label_contract()
+
+
+def test_phase35_intrinsic_residual_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_tag_intrinsic_residual_missing(kb_name="default", consumer="wormhole", count=2)
+    collector.record_tag_pyramid_residual_prior_applied(kb_name="default")
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_tag_intrinsic_residual_missing_total{consumer="wormhole",kb_name="default"} 2.0' in body
+    assert 'tagmemorag_tag_pyramid_residual_prior_applied_total{kb_name="default"} 1.0' in body
+    metrics.assert_label_contract()
+
+
+def test_phase4_geodesic_rerank_metrics_register_custom_series():
+    collector = metrics.reset_metrics_for_tests()
+
+    collector.record_geodesic_rerank_applied(kb_name="default")
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="spike_disabled")
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="max_geo_zero")
+    # Unknown reason is clamped to the literal "unknown" bucket — no high cardinality.
+    collector.record_geodesic_rerank_skipped(kb_name="default", reason="something_new")
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="rank_changed", count=2)
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="new_entry", count=1)
+    # Unknown kind is dropped silently to keep label cardinality fixed.
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="evil_label", count=5)
+    # Zero / negative counts are no-ops.
+    collector.record_geodesic_rerank_swap(kb_name="default", kind="lost_entry", count=0)
+    collector.record_geodesic_rerank_hit_count(kb_name="default", hit_count=3)
+
+    body = generate_latest(metrics.get_registry()).decode("utf-8")
+
+    assert 'tagmemorag_geodesic_rerank_applied_total{kb_name="default"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="spike_disabled"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="max_geo_zero"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_skipped_total{kb_name="default",reason="unknown"} 1.0' in body
+    assert 'tagmemorag_geodesic_rerank_swap_total{kb_name="default",kind="rank_changed"} 2.0' in body
+    assert 'tagmemorag_geodesic_rerank_swap_total{kb_name="default",kind="new_entry"} 1.0' in body
+    # Evil label and lost_entry=0 must not appear.
+    assert 'kind="evil_label"' not in body
+    assert 'kind="lost_entry"' not in body
+    assert 'tagmemorag_geodesic_rerank_hit_count_observed_bucket' in body
+    metrics.assert_label_contract()
+
+
 def test_noop_metrics_when_disabled():
     collector = metrics.reset_metrics_for_tests(enabled=False)
 

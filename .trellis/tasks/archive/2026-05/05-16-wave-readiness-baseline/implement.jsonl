@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "HTTP Embedding Provider 段约束 (env-only API key / EmbeddingError 错误码 / normalize 默认开)."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "API key 不进 log；env 命名约定 TAGMEMORAG__MODEL__API_KEY_ENV。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "EmbeddingError 与 ServiceError 错误传播。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "脚本改动跨 build_eval_baseline + run_eval_ci + tests + docs。"}

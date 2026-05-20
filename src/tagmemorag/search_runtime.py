@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+import math
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 from .config import Settings
 from .errors import ServiceError
 from .lexical_search import lexical_score_map, lexical_search
+from .observability.metrics import get_metrics
 from .state import _vector_store
 from .types import GraphState
+from .wave_geodesic_rerank import geodesic_rerank
 from .wave_searcher import filter_node_ids, wave_search
+from .wave_tag_spike import GhostTag, TagBoostInfo, apply_tag_boost
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,8 @@ class SearchExecution:
     lexical_candidate_count: int = 0
     lexical_source_count: int = 0
     lexical_profile: str = "disabled"
+    tag_boost_info: TagBoostInfo | None = None
+    legacy_tag_boost_disabled: bool = False
 
 
 def execute_search(
@@ -37,7 +43,10 @@ def execute_search(
     amplitude_cutoff: float,
     aggregate: str,
     filters: Mapping[str, Any] | None = None,
+    boost_filters: Mapping[str, Any] | None = None,
     query_text: str = "",
+    core_tags: Sequence[str] = (),
+    ghost_tags: Sequence[GhostTag] = (),
 ) -> SearchExecution:
     filter_dict = dict(filters or {})
     filtered_node_ids = filter_node_ids(state.graph, filter_dict)
@@ -61,6 +70,42 @@ def execute_search(
             if strategy == "ann_preselect_then_wave" and lexical_candidate_ids:
                 eligible_node_ids = set(eligible_node_ids) | lexical_candidate_ids
 
+    boost_info: TagBoostInfo | None = None
+    legacy_tag_boost_disabled = False
+    phase1 = settings.wave_phase1
+    if phase1.enabled and phase1.spike_enabled:
+        boosted_vec, boost_info = apply_tag_boost(
+            query_vec=query_vec,
+            kb_name=state.kb_name,
+            settings=settings,
+            base_tag_boost=float(settings.search.tag_boost),
+            core_tags=tuple(core_tags),
+            ghost_tags=tuple(ghost_tags),
+        )
+        get_metrics().record_tag_spike_propagation(
+            kb_name=state.kb_name,
+            outcome=_spike_outcome(boost_info),
+        )
+        if boost_info.boost_factor_applied > 0.0:
+            query_vec = boosted_vec
+            legacy_tag_boost_disabled = not phase1.legacy_chunk_tag_boost
+
+    # Phase 4 V8 geodesicRerank — only oversample when V8 will actually run.
+    v8_should_run = (
+        phase1.enabled
+        and phase1.spike_enabled
+        and phase1.geodesic_rerank_enabled
+        and boost_info is not None
+        and not boost_info.skipped_reason
+        and bool(boost_info.accumulated_energy)
+    )
+    rerank_pool_size: int | None = None
+    if v8_should_run:
+        rerank_pool_size = max(
+            int(top_k),
+            int(math.ceil(int(top_k) * float(phase1.geodesic_oversample_factor))),
+        )
+
     results = wave_search(
         query_vec,
         state.graph,
@@ -74,11 +119,51 @@ def execute_search(
         aggregate=aggregate,  # type: ignore[arg-type]
         eligible_node_ids=eligible_node_ids,
         filters=filter_dict,
+        boost_filters=boost_filters,
         metadata_field_boost=settings.search.metadata_field_boost,
         tag_boost=settings.search.tag_boost,
         lexical_scores=lexical_scores,
         lexical_source_k=int(settings.search.lexical_source_k) if settings.search.lexical_enabled else 0,
+        disable_legacy_tag_boost=legacy_tag_boost_disabled,
+        rerank_pool_size=rerank_pool_size,
     )
+
+    if v8_should_run:
+        rerank_result = geodesic_rerank(
+            results,
+            energy_field=boost_info.accumulated_energy if boost_info is not None else None,
+            graph=state.graph,
+            kb_name=state.kb_name,
+            settings=settings,
+            top_k=top_k,
+        )
+        metrics = get_metrics()
+        if rerank_result.applied:
+            metrics.record_geodesic_rerank_applied(kb_name=state.kb_name)
+            for kind, count in rerank_result.swap_kinds.items():
+                metrics.record_geodesic_rerank_swap(
+                    kb_name=state.kb_name, kind=kind, count=int(count)
+                )
+            for hits in rerank_result.hit_count_observed:
+                metrics.record_geodesic_rerank_hit_count(
+                    kb_name=state.kb_name, hit_count=int(hits)
+                )
+        else:
+            metrics.record_geodesic_rerank_skipped(
+                kb_name=state.kb_name,
+                reason=rerank_result.skipped_reason or "unknown",
+            )
+        results = list(rerank_result.candidates[:top_k])
+    elif phase1.geodesic_rerank_enabled:
+        # Flag-on but a precondition prevented V8 from running — surface why
+        # so dashboards can localize ops issues (config off vs missing data
+        # vs lexical-only path).
+        get_metrics().record_geodesic_rerank_skipped(
+            kb_name=state.kb_name,
+            reason=_classify_geodesic_skipped_reason(
+                phase1=phase1, boost_info=boost_info
+            ),
+        )
     return SearchExecution(
         results=results,
         eligible_node_ids=eligible_node_ids,
@@ -93,6 +178,8 @@ def execute_search(
         if settings.search.lexical_enabled
         else 0,
         lexical_profile=_lexical_profile(settings),
+        tag_boost_info=boost_info,
+        legacy_tag_boost_disabled=legacy_tag_boost_disabled,
     )
 
 
@@ -119,7 +206,7 @@ def search_debug_payload(
     *,
     ann_enabled: bool,
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "search_strategy": execution.strategy,
         "ann_enabled": bool(ann_enabled),
         "ann_candidate_count": int(execution.ann_candidate_count),
@@ -132,7 +219,58 @@ def search_debug_payload(
         "steps": int(params["steps"]),
         "aggregate": str(params["aggregate"]),
         "eligible_node_count": len(execution.eligible_node_ids),
+        "legacy_tag_boost_disabled": bool(execution.legacy_tag_boost_disabled),
     }
+    if execution.tag_boost_info is not None:
+        payload["tag_boost"] = execution.tag_boost_info.to_dict()
+        # Phase 3: bridges list is debug-only — `to_dict` keeps the canonical
+        # shape, while `tag_boost_debug.cross_domain_bridges` exposes per-pair
+        # diagnostics for operators (only present when resonance triggered).
+        bridges = getattr(execution.tag_boost_info, "_cross_domain_bridges", ())
+        if bridges:
+            payload["tag_boost_debug"] = {
+                "cross_domain_bridges": [dict(b) for b in bridges]
+            }
+    return payload
+
+
+def _spike_outcome(info: TagBoostInfo) -> str:
+    if info.skipped_reason:
+        return "skipped"
+    if info.boost_factor_applied > 0.0:
+        return "applied"
+    return "skipped"
+
+
+def _classify_geodesic_skipped_reason(
+    *, phase1, boost_info: TagBoostInfo | None
+) -> str:
+    """Map runtime state to a fixed-cardinality reason for V8 skipped metric.
+
+    Called only when `geodesic_rerank_enabled=true` AND V8 didn't actually run
+    (i.e. v8_should_run was False). Mirrors `Metrics.GEODESIC_RERANK_REASONS`.
+    """
+    if not phase1.spike_enabled:
+        return "spike_disabled"
+    if boost_info is None:
+        # Phase 1 spike branch wasn't entered at all (e.g. phase1.enabled=False
+        # while flag-on, or some upstream lexical-only fallback path).
+        return "lexical_only_path"
+    reason = boost_info.skipped_reason or ""
+    if reason in {
+        "matrix_missing",
+        "no_tag_vectors",
+        "no_seeds",
+        "no_candidates",
+        "degenerate_context",
+        "zero_alpha",
+        "degenerate_fused",
+        "spike_disabled",
+    }:
+        return reason
+    if not boost_info.accumulated_energy:
+        return "energy_field_empty"
+    return "unknown"
 
 
 def _ann_enabled(state: GraphState, settings: Settings) -> bool:

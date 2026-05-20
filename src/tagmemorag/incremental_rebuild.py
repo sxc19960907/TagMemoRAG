@@ -9,6 +9,7 @@ import numpy as np
 
 from .chunk_identity import ChunkIdentityMap, entry_from_chunk, entry_from_node, load_chunk_identity
 from .config import Settings
+from .document_metadata import manual_node_attrs
 from .errors import RebuildFailedError
 from .epa_basis import retrain_report
 from .graph_builder import build_graph
@@ -42,6 +43,10 @@ class RebuildDetail:
     epa_basis_K: int = 0
     epa_basis_tag_count: int = 0
     epa_train_error: str = ""
+    tag_cooccurrence_edges: int = 0
+    tag_cooccurrence_error: str = ""
+    tag_intrinsic_residual_rows: int = 0
+    tag_intrinsic_residual_error: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +68,10 @@ class RebuildDetail:
             "epa_basis_K": self.epa_basis_K,
             "epa_basis_tag_count": self.epa_basis_tag_count,
             "epa_train_error": self.epa_train_error,
+            "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": self.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": self.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": self.tag_intrinsic_residual_error,
         }
 
 
@@ -109,6 +118,17 @@ def build_kb_incremental(
 
     try:
         identity, identity_fallback_reason = load_chunk_identity(kb_name, cfg)
+        if identity_fallback_reason == "parser_config_changed":
+            return IncrementalBuildResult(
+                None,
+                RebuildDetail(
+                    requested_mode,
+                    "full",
+                    dirty_count,
+                    identity_fallback_reason,
+                    chunk_identity_fallback_reason=identity_fallback_reason,
+                ),
+            )
         plan = _build_plan(Path(docs_dir), kb_name, cfg, old_state, manifest, identity, identity_fallback_reason)
         dirty_vectors = _embed_dirty_chunks(plan.dirty_chunks, cfg, embedder)
         final_chunks, final_vectors = _assemble_final_inputs(plan, dirty_vectors, cfg.model.dim)
@@ -166,6 +186,10 @@ def build_kb_incremental(
             epa_basis_K=int(epa_report.get("epa_basis_K", 0) or 0),
             epa_basis_tag_count=int(epa_report.get("epa_basis_tag_count", 0) or 0),
             epa_train_error=str(epa_report.get("epa_train_error", "") or ""),
+            tag_cooccurrence_edges=tag_report.tag_cooccurrence_edges,
+            tag_cooccurrence_error=tag_report.tag_cooccurrence_error,
+            tag_intrinsic_residual_rows=tag_report.tag_intrinsic_residual_rows,
+            tag_intrinsic_residual_error=tag_report.tag_intrinsic_residual_error,
         )
         meta = {
             "schema_version": cfg.storage.schema_version,
@@ -191,6 +215,10 @@ def build_kb_incremental(
             "epa_basis_K": detail.epa_basis_K,
             "epa_basis_tag_count": detail.epa_basis_tag_count,
             "epa_train_error": detail.epa_train_error,
+            "tag_cooccurrence_edges": tag_report.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": tag_report.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": tag_report.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
             "impact_summary": impact_report.summary,
         }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
@@ -291,8 +319,11 @@ def _build_plan(
             path,
             cfg.parser.max_chars,
             cfg.parser.min_chars,
+            overlap_chars=cfg.parser.overlap_chars,
             root_dir=docs_root,
-            metadata=metadata.to_node_attrs(),
+            metadata=manual_node_attrs(metadata),
+            pdf_profile=cfg.parser.pdf_profile,
+            pdf_heading_hints=cfg.parser.pdf_heading_hints,
         ):
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)

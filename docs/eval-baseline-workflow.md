@@ -7,7 +7,7 @@ The `tests/fixtures/eval/` suites are gated by per-suite baselines under `tests/
 | File | Embedder | Used by |
 |---|---|---|
 | `baselines/hashing.json` | `HashingEmbedder` (dim=64, deterministic, no network) | **Quality CI** (gate) |
-| `baselines/siliconflow.json` | `BAAI/bge-small-zh-v1.5` via SiliconFlow HTTP API | local sanity only |
+| `baselines/siliconflow.json` | `Qwen/Qwen3-Embedding-8B` via SiliconFlow HTTP API | local sanity only |
 
 The hashing baseline is the only one CI consumes. SiliconFlow is a smoke check for divergence between the test embedder and what production-like deployments use.
 
@@ -40,6 +40,54 @@ git diff -- tests/fixtures/eval/baselines/siliconflow.json
 ```
 
 The shell script wraps `build_eval_baseline.py --embedder siliconflow` with the env-var check.
+
+## Diagnosing production-embedder reauthoring
+
+Before editing any fixture JSONL, generate the offline reauthoring diagnosis:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py --format markdown
+```
+
+Use `--informational-suites` when you want the report to keep known stress-test suites visible without counting them as blocking in downstream pilot summaries:
+
+```bash
+uv run python scripts/diagnose_eval_reauthoring.py \
+  --format markdown \
+  --informational-suites cross_kb_negatives.jsonl,fault_codes.jsonl,model_numbers.jsonl,tag_cooccurrence.jsonl \
+  --accepted-suites product_manuals.jsonl,mixed_language.jsonl,tag_rerank_edge.jsonl
+```
+
+Use `--accepted-suites` only for suites that already had human review and are good enough for the current pilot. It does not rewrite the diagnosis to `ok`; it only removes accepted divergence from blocking summaries.
+
+The diagnostic compares `baselines/hashing.json` with `baselines/siliconflow.json`, sorts suites by severity, and recommends `ok`, `monitor`, `reauthor`, or `investigate`. It is intentionally offline: it reads only committed aggregate baseline metrics and does not call SiliconFlow, refresh baselines, rewrite fixtures, or promote SiliconFlow to a CI gate.
+
+Use the report as the queue for human fixture review:
+
+- `investigate`: production metrics are too low or suite coverage is missing; inspect retrieval/model behavior before changing expected answers.
+- `reauthor`: production aggregate deltas are large enough to justify case-level inspection and possible fixture edits.
+- `monitor`: divergence exists but should not trigger fixture edits without case-level evidence.
+- `ok`: no immediate fixture reauthoring is indicated.
+
+After choosing a suite, create a full eval report and summarize its case-level review queue:
+
+```bash
+uv run python -m tagmemorag eval run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --eval-data-dir .tmp/eval-review/data \
+  --output .tmp/eval-review/coffee.json \
+  --min-recall-at-k 1.0 \
+  --min-mrr 1.0 \
+  --min-hit-at-k 1.0
+
+uv run python scripts/summarize_eval_case_review.py \
+  --report .tmp/eval-review/coffee.json \
+  --format markdown
+```
+
+The case review summary is bounded by default. It includes case ids, metrics, failure reasons, negative-hit summaries, and top result source/header pairs. It omits raw queries and snippets unless `--include-query` is explicitly passed for local review.
 
 ## Reading a baseline diff
 

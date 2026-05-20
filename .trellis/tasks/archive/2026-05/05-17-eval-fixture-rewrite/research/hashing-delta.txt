@@ -1,0 +1,14 @@
+wrote tests/fixtures/eval/baselines/hashing.json with 8 suite(s)
+
+=== Delta: hashing - hashing ===
+suite                                  hit_at_k                mrr     precision_at_k        recall_at_k
+--------------------------------------------------------------------------------------------------------
+coffee.jsonl                 +           0.0000 +           0.0000 +           0.1000           -0.1905
+cross_kb_negatives.jsonl     +           0.0000 +           0.0000 +           0.0000 +           0.0000
+fault_codes.jsonl            +           0.0000 +           0.0000 +           0.0000 +           0.0000
+mixed_language.jsonl         +           0.0000 +           0.0000 +           0.0000 +           0.0000
+model_numbers.jsonl          +           0.0000 +           0.0000 +           0.0000 +           0.0000
+product_manuals.jsonl        +           0.0000 +           0.0000 +           0.0000 +           0.0000
+tag_cooccurrence.jsonl       +           0.0000 +           0.0000 +           0.0000 +           0.0000
+tag_rerank_edge.jsonl        +           0.0000 +           0.0000 +           0.0000 +           0.0000
+

@@ -51,7 +51,7 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 - `VectorStore.search(query_vec, k)` is the abstraction boundary for future Faiss/Qdrant/pgvector backends.
 - Keep search inputs explicit. Do not hide query embedding, graph lookup, or anchor lookup inside the vector store.
 - Search result ordering should be deterministic for equal scores by using a stable tie-breaker such as node id.
-- When query-time ANN preselection is enabled for Qdrant, treat it as candidate generation only. Final search ranking must remain local WAVE-RAG over the loaded graph and vectors unless a future task explicitly changes the ranking contract.
+- When query-time ANN preselection is enabled for Qdrant, treat it as candidate generation only. Final search ranking must remain local and deterministic over the loaded graph and vectors unless a future task explicitly changes the ranking contract.
 
 ---
 
@@ -214,6 +214,138 @@ registry.upsert(kb_name, metadata, blob_ref, operation="upsert")
 ```
 
 Keep object storage behind `ManualBlobStore`, store only the safe object key in the registry, and commit registry state only after the object write succeeds.
+
+## Scenario: Tag Intrinsic Residuals
+
+### 1. Scope / Trigger
+
+- Trigger: Phase 3.5 activates `tag_intrinsic_residuals` as a rebuild-produced registry table consumed by tag spike and ResidualPyramid.
+- Applies when changing tag rebuild, cooccurrence, pyramid candidate ranking, or online tag boost residual handling.
+
+### 2. Signatures
+
+- Config: `wave_phase1.intrinsic_residuals_enabled: bool = False`, `wave_phase1.intrinsic_residual_top_n: int | None = None`.
+- Trainer: `train_intrinsic_residuals_for_kb(kb_name, conn, matrix, expected_dim, top_n) -> IntrinsicResidualTrainReport`.
+- CLI: `python -m tagmemorag retrain-residuals --kb=<name> --config=<path>`.
+- DB: `tag_intrinsic_residuals(tag_id PRIMARY KEY, residual_energy REAL, neighbor_count INTEGER, computed_at TEXT)`.
+
+### 3. Contracts
+
+- Producer runs after cooccurrence rebuild when `wave_phase1.enabled` and `cooccurrence_enabled` are true, regardless of `intrinsic_residuals_enabled`.
+- Consumer is gated only by `intrinsic_residuals_enabled`; default false must preserve baseline search behavior.
+- Neighbor basis for tag T is cooccurrence outgoing plus incoming neighbors, ordered by max bidirectional weight desc then tag id asc, limited by `intrinsic_residual_top_n` or `pyramid_top_k`.
+- Stored formula is `||T - projection(T, neighbor_basis)||^2 / ||T||^2`, clamped to `[0, 1]`; no usable basis or zero vector stores `1.0`.
+- Missing online residual rows fall back to `1.0`.
+
+### 4. Validation & Error Matrix
+
+- Missing cooccurrence matrix in CLI -> exit code 2 with a concise stderr error.
+- Trainer exception during rebuild -> fail-soft: graph rebuild continues and `tag_intrinsic_residual_error` records the exception type.
+- Trainer exception during CLI -> exit code 2; do not hide the failure as success.
+
+### 5. Good/Base/Bad Cases
+
+- Good: rebuild writes cooccurrence, trains residual rows, and meta includes `tag_intrinsic_residual_rows`.
+- Base: `intrinsic_residuals_enabled=false` still writes rows but online spike and pyramid behavior remain unchanged.
+- Bad: making residual training block graph rebuild, or enabling consumers by default.
+
+### 6. Tests Required
+
+- Unit: residual formula, incoming+outgoing Top-N selection, no-basis fallback.
+- Rebuild: rows written on success; trainer failure does not fail rebuild and records error type.
+- CLI: `retrain-residuals` reports row counts and returns non-zero for missing inputs.
+- Online: enabled-on passes residuals to spike and pyramid; default-off baseline invariance remains green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+residual = residuals[tag_id]
+```
+
+This turns partially trained or newly created tags into search-time failures.
+
+#### Correct
+
+```python
+residual = residuals.get(tag_id, 1.0)
+```
+
+Fallback preserves compatibility while metrics expose missing training coverage.
+
+---
+
+## Phase 4 — V8 geodesicRerank
+
+### 1. Scope / Trigger
+
+- Trigger: Phase 4 ports VCPToolBox V8 `TagMemoEngine.geodesicRerank` so wave_search candidates are reranked by mean tag energy from Phase 1 spike.
+- Applies when changing wave_search, search_runtime, TagBoostInfo shape, spike output, or any candidate-pool plumbing.
+
+### 2. Signatures
+
+- Config: `wave_phase1.geodesic_rerank_enabled: bool = False`, `wave_phase1.geodesic_alpha: float = 0.3` (clamped to `[0, 1]`), `wave_phase1.geodesic_oversample_factor: float = 2.0` (≥ 1.0), `wave_phase1.geodesic_min_geo_samples: int = 2` (≥ 1).
+- Algorithm: `geodesic_rerank(candidates, *, energy_field, graph, kb_name, settings, top_k, alpha=None, min_geo_samples=None) -> GeodesicRerankResult`.
+- Pool plumbing: `wave_search(..., rerank_pool_size: int | None = None)`. None ⇒ existing top_k truncation; non-None ⇒ pool returned for caller-side rerank.
+- Spike transport: `TagBoostInfo.accumulated_energy: Mapping[int, float] | None`. Filled on spike-success path; None on every `skipped_reason` early return.
+
+### 3. Contracts
+
+- Hard dependency: V8 runs only when `phase1.enabled && phase1.spike_enabled && geodesic_rerank_enabled && boost_info.skipped_reason == "" && bool(boost_info.accumulated_energy)`. All other paths silent-noop.
+- L0 (`energy_field` empty) / L1 (`hits < min_geo_samples`) / L2 (`max_geo == 0`) all preserve input order verbatim with classified `skipped_reason`.
+- chunk → tag_id resolution reuses `metadata_from_node(graph.nodes[node_id])["tags"]` + `tag_store.lookup_tag_id`. No new schema or persistence table is introduced.
+- Skipped-reason whitelist (fixed cardinality): `spike_disabled / matrix_missing / no_tag_vectors / no_seeds / no_candidates / degenerate_context / zero_alpha / degenerate_fused / energy_field_empty / max_geo_zero / lexical_only_path / unknown`.
+- Default-off path is byte-equivalent to baseline (8 hashing eval suites + e2e baseline invariance must stay green).
+
+### 4. Validation & Error Matrix
+
+- Settings validation: `geodesic_alpha ∈ [0, 1]`, `geodesic_oversample_factor ≥ 1.0`, `geodesic_min_geo_samples ≥ 1` enforced via pydantic `Field`. Out-of-range values raise `ValidationError` at load time.
+- V8 internal exceptions never propagate; the algorithm catches and returns `GeodesicRerankResult(skipped_reason="unknown", applied=False)`.
+- `record_geodesic_rerank_swap` drops unrecognized `kind` labels silently; `record_geodesic_rerank_skipped` clamps unknown reasons to `"unknown"`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: flag-on + spike-success + non-empty energy field + at least one candidate has tags ⇒ `applied=True`, swap_total / hit_count_observed metrics populated.
+- Base: flag-off ⇒ `wave_search(rerank_pool_size=None)`, no metric registration, byte-equivalent to baseline.
+- Bad: introducing implicit cache for `accumulated_energy` outside of `TagBoostInfo`; mutating input candidates; bypassing `metadata_from_node` to read `chunk.tags` directly (fragile across legacy node shape variants); recording a non-whitelisted reason or kind.
+
+### 6. Tests Required
+
+- Unit: three-layer fallback (L0/L1/L2), α=0/1 extremes, swap classification, diagnostic fields on `Result.metadata`, input not mutated, unknown tags silently dropped.
+- Integration: flag-off byte equivalence (e2e baseline invariance), flag-on + spike-off skip metric, flag-on + spike-success applied path, filter-strict pool < pool_size.
+- Lexical compat: V8 reads `metadata.tags` regardless of candidate provenance; hybrid pool (lexical + ANN) classifies swap kinds correctly.
+- Diag: `scripts/diag_geodesic_rerank.py` reports `applied_pct > 0` and `max_geo_zero_pct < 50` on the product-manual fixture set.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+energy = some_module.GLOBAL_ENERGY_CACHE[kb_name]   # implicit side channel
+results = wave_search(...)                          # no oversampling
+reranked = geodesic_rerank(results, energy_field=energy, ...)
+```
+
+Implicit globals leak across requests and break determinism; reranking the
+already-truncated top_k can only swap positions inside that slice and
+cannot promote a high-energy candidate from the pool tail.
+
+#### Correct
+
+```python
+boost_info = apply_tag_boost(...)                   # populates info.accumulated_energy
+pool = max(top_k, ceil(top_k * factor)) if v8_should_run else None
+results = wave_search(..., rerank_pool_size=pool)
+if v8_should_run:
+    reranked = geodesic_rerank(
+        results, energy_field=boost_info.accumulated_energy, ..., top_k=top_k,
+    )
+    results = list(reranked.candidates[:top_k])
+```
+
+The energy field rides on `TagBoostInfo` (explicit data flow); oversampling
+gives V8 a chance to pull genuinely better candidates into top_k.
 
 ---
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import json
 import threading
 import time
@@ -14,6 +14,17 @@ import structlog
 
 from .chunk_identity import build_chunk_identity_map, entry_from_node, identity_path, load_chunk_identity, save_chunk_identity
 from .config import Settings
+from .document_assets import (
+    AssetExtractionSummary,
+    AssetManifest,
+    asset_inventory_summary,
+    extract_document_assets,
+    load_asset_manifest,
+    remove_document_assets,
+    replace_document_assets,
+    save_asset_manifest,
+)
+from .document_metadata import manual_node_attrs
 from .embedder import create_embedder
 from .epa_basis import retrain_report
 from .errors import ErrorCode, KbNotLoadedError, RebuildFailedError, RebuildInProgressError, ServiceError, ShuttingDownError, StorageSchemaMismatchError
@@ -23,7 +34,8 @@ from .manual_library import clear_pending_after_success, is_active_status, load_
 from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document
+from .ocr import OCRSummary, create_ocr_provider
+from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document, parse_document_with_ocr_summary
 from .rebuild_impact import ManualImpact, RebuildImpactReport, impact_path, make_impact_report, save_rebuild_impact
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
@@ -32,6 +44,9 @@ from .storage.npz_vector import NpzVectorStore
 from .storage.qdrant_vector import QdrantVectorStore
 from .tag_rebuild import sync_rebuild_tags
 from .types import Anchor, GraphState
+
+if TYPE_CHECKING:
+    from .indexgen import KbMeta
 
 
 @dataclass
@@ -62,6 +77,10 @@ class RebuildTask:
     epa_basis_K: int = 0
     epa_basis_tag_count: int = 0
     epa_train_error: str = ""
+    tag_cooccurrence_edges: int = 0
+    tag_cooccurrence_error: str = ""
+    tag_intrinsic_residual_rows: int = 0
+    tag_intrinsic_residual_error: str = ""
     cancel_requested: bool = False
 
     def to_dict(self) -> dict:
@@ -93,6 +112,10 @@ class RebuildTask:
             "epa_basis_K": self.epa_basis_K,
             "epa_basis_tag_count": self.epa_basis_tag_count,
             "epa_train_error": self.epa_train_error,
+            "tag_cooccurrence_edges": self.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": self.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": self.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": self.tag_intrinsic_residual_error,
             "cancel_requested": self.cancel_requested,
         }
         summary = getattr(self, "operations_summary", None)
@@ -105,6 +128,8 @@ class RebuildTask:
 class AppState:
     current: GraphState | None = None
     kbs: dict[str, GraphState] = field(default_factory=dict)
+    shadow_kbs: dict[str, GraphState] = field(default_factory=dict)
+    generation_meta: dict[str, "KbMeta"] = field(default_factory=dict)
     rebuild_locks: dict[str, threading.Lock] = field(default_factory=dict)
     rebuild_tasks: dict[str, RebuildTask] = field(default_factory=dict)
     embedder_ready: bool = False
@@ -138,6 +163,784 @@ class AppState:
             self.kbs[kb_name] = new_state
             if kb_name == "default" or self.current is None or self.current.kb_name == kb_name:
                 self.current = new_state
+
+    def get_shadow_kb(self, kb_name: str) -> GraphState | None:
+        """Return the shadow GraphState for a KB, or None if no shadow exists.
+
+        Read paths (/retrieve, /search) MUST NOT call this. Shadow state is
+        only addressable by build-shadow / cancel-shadow / swap workflows.
+        """
+        with self._lock:
+            return self.shadow_kbs.get(kb_name)
+
+    def install_shadow(self, kb_name: str, shadow_state: GraphState) -> None:
+        """Install a freshly-built shadow GraphState.
+
+        Called by the shadow-build worker when its build completes. Does NOT
+        touch active state; swap is a separate operation.
+        """
+        with self._lock:
+            self.shadow_kbs[kb_name] = shadow_state
+
+    def clear_shadow(self, kb_name: str) -> GraphState | None:
+        """Remove and return the shadow GraphState (cancel/retire path)."""
+        with self._lock:
+            return self.shadow_kbs.pop(kb_name, None)
+
+    def get_generation_meta(self, kb_name: str) -> "KbMeta | None":
+        with self._lock:
+            return self.generation_meta.get(kb_name)
+
+    def set_generation_meta(self, kb_name: str, meta: "KbMeta") -> None:
+        with self._lock:
+            self.generation_meta[kb_name] = meta
+
+    def migrate_kb_for_indexgen(
+        self, kb_name: str, cfg: Settings, *, create_qdrant_alias: bool = True
+    ) -> dict[str, Any]:
+        """Idempotent IndexGeneration migration step for a single KB.
+
+        1. Calls migrate_kb_to_g1_if_needed() — moves legacy artifacts into g1/
+           and writes meta.json (no-op if already migrated).
+        2. Loads meta.json into the in-memory generation_meta cache.
+        3. Detects orphan shadow: meta.json says shadow.status=building but
+           shadow_kbs dict has no entry → mark status=failed and persist.
+
+        Safe to call multiple times. Idempotent.
+
+        Returns the migration status dict for logging.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            ShadowGeneration,
+            migrate_kb_to_g1_if_needed,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        result = migrate_kb_to_g1_if_needed(
+            kb_root, cfg, create_qdrant_alias=create_qdrant_alias
+        )
+        meta = read_meta(kb_root)
+        if meta is None:
+            return result
+
+        orphan_detected = False
+        if meta.shadow_generation is not None:
+            shadow_entry = meta.get_shadow()
+            in_memory_shadow = self.get_shadow_kb(kb_name)
+            if (
+                shadow_entry is not None
+                and shadow_entry.status == GenerationStatus.BUILDING
+                and in_memory_shadow is None
+            ):
+                orphan_detected = True
+                replaced = ShadowGeneration(
+                    status=GenerationStatus.FAILED,
+                    progress=shadow_entry.progress,
+                    build_started_at=shadow_entry.build_started_at,
+                    trigger_diff=shadow_entry.trigger_diff,
+                    task_id=shadow_entry.task_id,
+                    requested_by=shadow_entry.requested_by,
+                    error={
+                        "type": "OrphanedShadow",
+                        "message": "process restarted during shadow build",
+                    },
+                )
+                new_generations = dict(meta.generations)
+                new_generations[meta.shadow_generation] = replaced
+                meta = type(meta)(
+                    schema_version=meta.schema_version,
+                    kb_name=meta.kb_name,
+                    active_generation=meta.active_generation,
+                    shadow_generation=meta.shadow_generation,
+                    generations=new_generations,
+                )
+                write_meta(kb_root, meta)
+
+        self.set_generation_meta(kb_name, meta)
+        result["orphan_shadow_detected"] = orphan_detected
+        return result
+
+    def validate_settings_against_index(
+        self, kb_name: str, cfg: Settings
+    ) -> dict[str, Any]:
+        """Verify cfg matches the active generation snapshot in index.json.
+
+        Architecture v2 § A4 / Decisions D8 + D12: index.json is the truth
+        source for active generation versions; the in-process Settings should
+        agree at startup. Disagreement means either the operator changed the
+        yaml without going through swap, or shadow_build/swap left state in a
+        partial form. Either way the operator must reconcile manually before
+        serving traffic.
+
+        Returns a status dict:
+        - status="ok" if matched (or KB has no active generation yet, e.g.
+          freshly migrated empty KB)
+        - status="not_migrated" if KB has no index.json at all
+        Raises ServiceError(INDEXGEN_SETTINGS_META_MISMATCH) on disagreement.
+        """
+        from .indexgen import read_meta
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = self.get_generation_meta(kb_name) or read_meta(kb_root)
+        if meta is None:
+            return {"kb_name": kb_name, "status": "not_migrated"}
+        if meta.active_generation is None:
+            return {"kb_name": kb_name, "status": "no_active_generation"}
+        active = meta.get_active()
+        if active is None:
+            return {"kb_name": kb_name, "status": "no_active_generation"}
+
+        mismatches: list[dict[str, Any]] = []
+        checks = [
+            (
+                "embedding_model_id",
+                cfg.model.effective_embedding_model_id,
+                active.embedding_model_id,
+            ),
+            (
+                "embedding_model_version",
+                cfg.model.embedding_model_version,
+                active.embedding_model_version,
+            ),
+            (
+                "index_schema_version",
+                int(_safe_int(cfg.storage.schema_version, 1)),
+                active.index_schema_version,
+            ),
+        ]
+        for name, settings_value, meta_value in checks:
+            if str(settings_value) != str(meta_value):
+                mismatches.append(
+                    {"field": name, "settings": settings_value, "index_json": meta_value}
+                )
+
+        if mismatches:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_SETTINGS_META_MISMATCH,
+                "Settings disagree with active generation. "
+                "Operator must reconcile yaml config or swap to a matching generation.",
+                {
+                    "kb_name": kb_name,
+                    "active_generation": meta.active_generation,
+                    "mismatches": mismatches,
+                },
+            )
+        return {
+            "kb_name": kb_name,
+            "status": "ok",
+            "active_generation": meta.active_generation,
+        }
+
+    def start_shadow_rebuild(
+        self,
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        *,
+        target_versions: dict[str, Any] | None = None,
+        embedder: Any = None,
+    ) -> "RebuildTask":
+        """Kick off a shadow build for kb_name into a fresh generation directory.
+
+        Returns the RebuildTask immediately; the build runs in a background
+        thread. The caller may poll task.status / consult index.json for
+        progress, or cancel via task.cancel_requested = True.
+
+        Concurrency rules (Architecture v2 § A4 design § 5.4):
+        - Only one shadow build per KB at a time. A second call while one is
+          in progress raises ShadowBuildInProgressError (added in Slice 7).
+        - Active rebuilds and shadow builds use SEPARATE locks (`kb` vs
+          `kb:shadow`) so they can run concurrently.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            KbPaths,
+            ShadowGeneration,
+            build_shadow_kb,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = self.get_generation_meta(kb_name) or read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "Cannot start shadow build: KB has not been migrated. "
+                "Call migrate_kb_for_indexgen first.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is not None:
+            shadow_entry = meta.get_shadow()
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "A shadow build is already in progress or pending.",
+                {
+                    "kb_name": kb_name,
+                    "shadow_generation": meta.shadow_generation,
+                    "status": shadow_entry.status.value if shadow_entry else None,
+                    "progress": shadow_entry.progress if shadow_entry else None,
+                },
+            )
+        target_gen = (meta.active_generation or 0) + 1
+        if target_gen <= 0:
+            raise ServiceError(
+                ErrorCode.REBUILD_FAILED,
+                "Cannot start shadow build: KB has no active generation.",
+                {"kb_name": kb_name},
+            )
+
+        shadow_lock_key = f"{kb_name}:shadow"
+        shadow_lock = self.lock_for(shadow_lock_key)
+        if not shadow_lock.acquire(blocking=False):
+            raise RebuildInProgressError(kb_name)
+
+        task_id = str(uuid.uuid4())
+        task = RebuildTask(
+            task_id=task_id,
+            status="running",
+            kb_name=kb_name,
+            started_at=_now(),
+            requested_mode="shadow",
+            effective_mode="shadow",
+        )
+        self.rebuild_tasks[task_id] = task
+        get_metrics().record_rebuild_started(kb_name=kb_name)
+
+        # Persist shadow_generation slot in index.json with status=building.
+        trigger_diff: list[str] = []
+        if target_versions:
+            active = meta.get_active()
+            if active is not None:
+                for key in (
+                    "embedding_model_id",
+                    "embedding_model_version",
+                    "parser_version",
+                    "chunker_version",
+                    "index_schema_version",
+                ):
+                    if key not in target_versions:
+                        continue
+                    current = getattr(active, key, None)
+                    requested = target_versions[key]
+                    if current is None or str(current) != str(requested):
+                        trigger_diff.append(key)
+        shadow_entry = ShadowGeneration(
+            status=GenerationStatus.BUILDING,
+            progress=0.0,
+            build_started_at=_now(),
+            trigger_diff=tuple(trigger_diff),
+            task_id=task_id,
+        )
+        new_generations = dict(meta.generations)
+        new_generations[target_gen] = shadow_entry
+        meta_with_shadow = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=target_gen,
+            generations=new_generations,
+        )
+        write_meta(kb_root, meta_with_shadow)
+        self.set_generation_meta(kb_name, meta_with_shadow)
+
+        paths = KbPaths(kb_name, cfg, generation=target_gen)
+
+        thread = threading.Thread(
+            target=self._shadow_build_worker,
+            args=(task, docs_dir, kb_name, cfg, paths, target_versions, embedder, shadow_lock, target_gen),
+            daemon=True,
+        )
+        thread.start()
+        return task
+
+    def _shadow_build_worker(
+        self,
+        task: "RebuildTask",
+        docs_dir: str | Path,
+        kb_name: str,
+        cfg: Settings,
+        paths: "KbPaths",  # noqa: F821
+        target_versions: dict[str, Any] | None,
+        embedder: Any,
+        shadow_lock: threading.Lock,
+        target_gen: int,
+    ) -> None:
+        from .indexgen import (
+            GenerationStatus,
+            ShadowGeneration,
+            build_shadow_kb,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        t0 = time.perf_counter()
+
+        def progress_cb(progress: float, stage: str) -> None:
+            if task.cancel_requested:
+                raise RebuildCancelledError(task.task_id)
+            current = read_meta(kb_root)
+            if current is None or current.shadow_generation != target_gen:
+                return
+            entry = current.generations.get(target_gen)
+            if not isinstance(entry, ShadowGeneration):
+                return
+            updated = ShadowGeneration(
+                status=entry.status,
+                progress=float(progress),
+                build_started_at=entry.build_started_at,
+                trigger_diff=entry.trigger_diff,
+                task_id=entry.task_id,
+                requested_by=entry.requested_by,
+                error=entry.error,
+            )
+            new_generations = dict(current.generations)
+            new_generations[target_gen] = updated
+            write_meta(
+                kb_root,
+                type(current)(
+                    schema_version=current.schema_version,
+                    kb_name=current.kb_name,
+                    active_generation=current.active_generation,
+                    shadow_generation=current.shadow_generation,
+                    generations=new_generations,
+                ),
+            )
+            self.set_generation_meta(kb_name, read_meta(kb_root))
+
+        try:
+            shadow_state = build_shadow_kb(
+                docs_dir,
+                kb_name,
+                cfg,
+                paths=paths,
+                target_versions=target_versions,
+                embedder=embedder,
+                progress_cb=progress_cb,
+            )
+            self.install_shadow(kb_name, shadow_state)
+
+            current = read_meta(kb_root)
+            if current is not None and current.shadow_generation == target_gen:
+                entry = current.generations.get(target_gen)
+                if isinstance(entry, ShadowGeneration):
+                    updated = ShadowGeneration(
+                        status=GenerationStatus.READY,
+                        progress=1.0,
+                        build_started_at=entry.build_started_at,
+                        trigger_diff=entry.trigger_diff,
+                        task_id=entry.task_id,
+                        requested_by=entry.requested_by,
+                    )
+                    new_generations = dict(current.generations)
+                    new_generations[target_gen] = updated
+                    write_meta(
+                        kb_root,
+                        type(current)(
+                            schema_version=current.schema_version,
+                            kb_name=current.kb_name,
+                            active_generation=current.active_generation,
+                            shadow_generation=current.shadow_generation,
+                            generations=new_generations,
+                        ),
+                    )
+                    self.set_generation_meta(kb_name, read_meta(kb_root))
+            task.status = "done"
+            task.build_id = shadow_state.build_id
+            get_metrics().record_rebuild_done(kb_name=kb_name, duration=time.perf_counter() - t0)
+        except RebuildCancelledError:
+            task.status = "cancelled"
+            self._mark_shadow_failed(kb_root, target_gen, {"type": "Cancelled", "message": "shadow build cancelled"})
+        except Exception as exc:  # pragma: no cover -- exception path is logged
+            task.status = "failed"
+            task.error = {"type": type(exc).__name__, "message": str(exc)}
+            self._mark_shadow_failed(kb_root, target_gen, {"type": type(exc).__name__, "message": str(exc)})
+            get_metrics().record_rebuild_failed(kb_name=kb_name, duration=time.perf_counter() - t0)
+        finally:
+            task.finished_at = _now()
+            shadow_lock.release()
+
+    def _mark_shadow_failed(self, kb_root: Path, target_gen: int, error: dict) -> None:
+        from .indexgen import GenerationStatus, ShadowGeneration, read_meta, write_meta
+
+        current = read_meta(kb_root)
+        if current is None or current.shadow_generation != target_gen:
+            return
+        entry = current.generations.get(target_gen)
+        if not isinstance(entry, ShadowGeneration):
+            return
+        updated = ShadowGeneration(
+            status=GenerationStatus.FAILED,
+            progress=entry.progress,
+            build_started_at=entry.build_started_at,
+            trigger_diff=entry.trigger_diff,
+            task_id=entry.task_id,
+            requested_by=entry.requested_by,
+            error=error,
+        )
+        new_generations = dict(current.generations)
+        new_generations[target_gen] = updated
+        write_meta(
+            kb_root,
+            type(current)(
+                schema_version=current.schema_version,
+                kb_name=current.kb_name,
+                active_generation=current.active_generation,
+                shadow_generation=current.shadow_generation,
+                generations=new_generations,
+            ),
+        )
+        self.set_generation_meta(kb_root.name, read_meta(kb_root))
+
+    def swap_generation(self, kb_name: str, cfg: Settings) -> dict[str, Any]:
+        """Atomically promote shadow → active.
+
+        Preconditions:
+        - shadow exists and is in READY status (not BUILDING / not FAILED).
+        - active rebuild is not in progress for this KB.
+
+        Postconditions:
+        - index.json: active becomes shadow's id; shadow_generation cleared;
+          new active gets a fresh swap_at; shadow's snapshot fields are copied
+          into a ReadyGeneration entry under the new active id.
+        - In-process Settings (cfg.model embedding_model_id/version, cfg.storage
+          schema_version) updated to match new active per D12.
+        - AppState.kbs[kb_name] = AppState.shadow_kbs[kb_name]; shadow slot cleared.
+
+        Returns dict with previous_active and new_active for logging.
+        """
+        from .indexgen import (
+            GenerationStatus,
+            ReadyGeneration,
+            ShadowGeneration,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json; cannot swap.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SHADOW,
+                "No shadow generation exists for this KB.",
+                {"kb_name": kb_name},
+            )
+        shadow_entry = meta.get_shadow()
+        if shadow_entry is None or shadow_entry.status != GenerationStatus.READY:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_READY_SHADOW,
+                "Shadow generation is not ready.",
+                {
+                    "kb_name": kb_name,
+                    "shadow_generation": meta.shadow_generation,
+                    "status": shadow_entry.status.value if shadow_entry else None,
+                },
+            )
+
+        active_lock = self.lock_for(kb_name)
+        if not active_lock.acquire(blocking=False):
+            raise ServiceError(
+                ErrorCode.INDEXGEN_ACTIVE_REBUILD_IN_PROGRESS,
+                "Active rebuild in progress; cannot swap now.",
+                {"kb_name": kb_name},
+            )
+        try:
+            previous_active = meta.active_generation
+            new_active = meta.shadow_generation
+            shadow_state = self.get_shadow_kb(kb_name)
+
+            # Build the new ReadyGeneration entry for the new active id.
+            now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            chunk_count = (
+                shadow_state.graph.number_of_nodes() if shadow_state is not None else 0
+            )
+            build_id = shadow_state.build_id if shadow_state is not None else ""
+            new_ready = ReadyGeneration(
+                created_at=shadow_entry.build_started_at or now_iso,
+                swap_at=now_iso,
+                retired_at=None,
+                parser_version=str(getattr(cfg.parser, "pdf_profile", "default")),
+                chunker_version="legacy",
+                embedding_model_id=cfg.model.effective_embedding_model_id,
+                embedding_model_version=cfg.model.embedding_model_version,
+                index_schema_version=int(_safe_int(cfg.storage.schema_version, 1)),
+                chunk_count=chunk_count,
+                build_id=build_id,
+            )
+            # Apply target_versions overlay from trigger_diff snapshot.
+            # The new active's version fields should reflect what shadow built with.
+            # If trigger_diff names a field, we know cfg has the new value.
+            # (D8/D12: shadow built using overlaid cfg; active swap inherits those values.)
+
+            new_generations = dict(meta.generations)
+            new_generations[new_active] = new_ready
+            new_meta = type(meta)(
+                schema_version=meta.schema_version,
+                kb_name=meta.kb_name,
+                active_generation=new_active,
+                shadow_generation=None,
+                generations=new_generations,
+            )
+            write_meta(kb_root, new_meta)
+            self.set_generation_meta(kb_name, new_meta)
+
+            # In-process AppState pointer flip.
+            if shadow_state is not None:
+                self.swap_kb(kb_name, shadow_state)
+            self.clear_shadow(kb_name)
+
+            # Per D12: mutate in-process Settings, not the yaml file.
+            # The shadow build used the overlaid cfg; the values already match
+            # what we want active to be, IF the caller passed cfg correctly.
+            # No-op here: cfg is already in the desired state.
+
+            return {
+                "kb_name": kb_name,
+                "previous_active": previous_active,
+                "new_active": new_active,
+            }
+        finally:
+            active_lock.release()
+
+    def cancel_shadow_rebuild(self, kb_name: str, cfg: Settings) -> dict[str, Any]:
+        """Cancel a shadow build (whether building or already ready).
+
+        - If a shadow rebuild task is running, sets cancel_requested = True.
+          The worker thread observes the flag at the next progress callback.
+        - If the shadow is already READY (or FAILED), this acts as
+          "un-promote": clears shadow_kbs slot, removes shadow entry from
+          index.json, and deletes the g{N}/ directory.
+
+        Distinct from retire_generation, which only operates on retired-or-old
+        ReadyGeneration entries.
+        """
+        from .indexgen import KbPaths, read_meta, write_meta
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json.",
+                {"kb_name": kb_name},
+            )
+        if meta.shadow_generation is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SHADOW,
+                "No shadow generation to cancel.",
+                {"kb_name": kb_name},
+            )
+        target_gen = meta.shadow_generation
+        shadow_entry = meta.get_shadow()
+
+        # Find the running RebuildTask if any
+        cancelled_task_id = None
+        if shadow_entry and shadow_entry.task_id:
+            task = self.rebuild_tasks.get(shadow_entry.task_id)
+            if task is not None and task.status == "running":
+                task.cancel_requested = True
+                cancelled_task_id = task.task_id
+
+        # Wait briefly for the worker to release the lock if it was running.
+        if cancelled_task_id is not None:
+            shadow_lock = self.lock_for(f"{kb_name}:shadow")
+            for _ in range(50):  # up to ~5s
+                if shadow_lock.acquire(blocking=False):
+                    shadow_lock.release()
+                    break
+                time.sleep(0.1)
+
+        # Clear in-memory shadow slot.
+        self.clear_shadow(kb_name)
+
+        # Remove shadow entry from index.json (the failure path of the worker
+        # marks status=FAILED; this call removes the entry entirely).
+        new_generations = dict(meta.generations)
+        new_generations.pop(target_gen, None)
+        new_meta = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=None,
+            generations=new_generations,
+        )
+        write_meta(kb_root, new_meta)
+        self.set_generation_meta(kb_name, new_meta)
+
+        # Delete the shadow generation directory + Qdrant collection.
+        gen_paths = KbPaths(kb_name, cfg, generation=target_gen)
+        gen_dir = gen_paths.generation_root
+        if gen_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(gen_dir)
+
+        if cfg.vector_store.provider == "qdrant":
+            try:
+                from qdrant_client import QdrantClient
+
+                from .storage.qdrant_vector import collection_name
+
+                client = QdrantClient(
+                    url=cfg.vector_store.qdrant_url,
+                    timeout=cfg.vector_store.timeout_seconds,
+                )
+                target_coll = collection_name(
+                    cfg.vector_store.collection_prefix, kb_name, generation=target_gen
+                )
+                try:
+                    client.delete_collection(collection_name=target_coll)
+                except Exception:  # noqa: BLE001
+                    pass
+            except ImportError:
+                pass
+
+        return {
+            "kb_name": kb_name,
+            "cancelled_generation": target_gen,
+            "cancelled_task_id": cancelled_task_id,
+        }
+
+    def retire_generation(
+        self,
+        kb_name: str,
+        generation: int,
+        cfg: Settings,
+        *,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Mark a generation retired, deleting its on-disk products.
+
+        Refuses to retire the active generation (use swap first), the shadow
+        generation (use cancel-shadow first), or a generation whose swap_at is
+        within `cfg.storage.retire_min_hours_after_swap` (24h default).
+        ``force=True`` bypasses the time window only.
+        """
+        from .indexgen import (
+            ReadyGeneration,
+            read_meta,
+            write_meta,
+        )
+
+        kb_root = _kb_dir(kb_name, cfg)
+        meta = read_meta(kb_root)
+        if meta is None:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_KB,
+                "KB has no index.json; cannot retire.",
+                {"kb_name": kb_name},
+            )
+        if generation == meta.active_generation:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_RETIRE_ACTIVE,
+                "Cannot retire the active generation.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+        if generation == meta.shadow_generation:
+            raise ServiceError(
+                ErrorCode.INDEXGEN_RETIRE_SHADOW,
+                "Cannot retire the shadow generation; use cancel-shadow.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+        entry = meta.generations.get(generation)
+        if entry is None or not isinstance(entry, ReadyGeneration):
+            raise ServiceError(
+                ErrorCode.INDEXGEN_NO_SUCH_GENERATION,
+                "No such ready generation.",
+                {"kb_name": kb_name, "generation": generation},
+            )
+
+        if not force:
+            min_hours = float(cfg.storage.retire_min_hours_after_swap)
+            min_seconds = min_hours * 3600.0
+            try:
+                swap_dt = datetime.fromisoformat(entry.swap_at.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                swap_dt = None
+            if swap_dt is not None:
+                now = datetime.now(timezone.utc)
+                elapsed = (now - swap_dt).total_seconds()
+                if elapsed < min_seconds:
+                    retry_after = int(min_seconds - elapsed)
+                    raise ServiceError(
+                        ErrorCode.INDEXGEN_RETIRE_TOO_EARLY,
+                        f"Retire requires {min_hours:.1f}h after swap; "
+                        f"{retry_after}s remaining.",
+                        {
+                            "kb_name": kb_name,
+                            "generation": generation,
+                            "retry_after_seconds": retry_after,
+                        },
+                    )
+
+        # Delete generation directory.
+        from .indexgen import KbPaths
+
+        gen_paths = KbPaths(kb_name, cfg, generation=generation)
+        gen_dir = gen_paths.generation_root
+        if gen_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(gen_dir)
+
+        # Delete Qdrant collection if applicable.
+        if cfg.vector_store.provider == "qdrant":
+            try:
+                from qdrant_client import QdrantClient
+
+                from .storage.qdrant_vector import collection_name
+
+                client = QdrantClient(
+                    url=cfg.vector_store.qdrant_url,
+                    timeout=cfg.vector_store.timeout_seconds,
+                )
+                target_coll = collection_name(
+                    cfg.vector_store.collection_prefix, kb_name, generation=generation
+                )
+                try:
+                    client.delete_collection(collection_name=target_coll)
+                except Exception:  # noqa: BLE001
+                    pass  # best-effort; alias / orphan handling left to ops
+            except ImportError:
+                pass
+
+        # Update index.json: mark retired_at on the entry.
+        retired_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_entry = ReadyGeneration(
+            created_at=entry.created_at,
+            swap_at=entry.swap_at,
+            retired_at=retired_iso,
+            parser_version=entry.parser_version,
+            chunker_version=entry.chunker_version,
+            embedding_model_id=entry.embedding_model_id,
+            embedding_model_version=entry.embedding_model_version,
+            index_schema_version=entry.index_schema_version,
+            chunk_count=entry.chunk_count,
+            build_id=entry.build_id,
+        )
+        new_generations = dict(meta.generations)
+        new_generations[generation] = new_entry
+        new_meta = type(meta)(
+            schema_version=meta.schema_version,
+            kb_name=meta.kb_name,
+            active_generation=meta.active_generation,
+            shadow_generation=meta.shadow_generation,
+            generations=new_generations,
+        )
+        write_meta(kb_root, new_meta)
+        self.set_generation_meta(kb_name, new_meta)
+
+        return {"kb_name": kb_name, "retired_generation": generation, "force": force}
 
     def list_kbs(self) -> list[str]:
         with self._lock:
@@ -334,6 +1137,10 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         )
         chunks = []
         manual_tags_by_id: dict[str, tuple[str, ...]] = {}
+        asset_manifest = load_asset_manifest(kb_name, cfg) if cfg.assets.enabled else AssetManifest(kb_name=kb_name)
+        asset_summary = AssetExtractionSummary()
+        ocr_provider = create_ocr_provider(cfg)
+        ocr_summary = OCRSummary()
         document_paths = (
             p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
         )
@@ -341,17 +1148,30 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         for path in sorted(document_paths):
             metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
             if not is_active_status(metadata.status):
+                if cfg.assets.enabled:
+                    asset_manifest = remove_document_assets(asset_manifest, metadata.manual_id, mark_deleted=True)
                 continue
             manual_tags_by_id[metadata.manual_id] = metadata.tags
-            chunks.extend(
-                parse_document(
-                    path,
-                    cfg.parser.max_chars,
-                    cfg.parser.min_chars,
-                    root_dir=docs_root,
-                    metadata=metadata.to_node_attrs(),
-                )
+            parsed = parse_document_with_ocr_summary(
+                path,
+                cfg.parser.max_chars,
+                cfg.parser.min_chars,
+                overlap_chars=cfg.parser.overlap_chars,
+                root_dir=docs_root,
+                metadata=manual_node_attrs(metadata),
+                pdf_profile=cfg.parser.pdf_profile,
+                pdf_heading_hints=cfg.parser.pdf_heading_hints,
+                ocr_provider=ocr_provider,
+                ocr_enabled=cfg.ocr.enabled,
+                ocr_strict=cfg.ocr.strict_extraction,
+                kb_name=kb_name,
             )
+            chunks.extend(parsed.chunks)
+            ocr_summary = ocr_summary.merge(parsed.ocr_summary)
+            if cfg.assets.enabled:
+                document_assets, document_asset_summary = extract_document_assets(path, metadata, kb_name, cfg)
+                asset_manifest = replace_document_assets(asset_manifest, metadata.manual_id, document_assets)
+                asset_summary = _merge_asset_extraction_summary(asset_summary, document_asset_summary)
         texts = [chunk.text for chunk in chunks]
         emb_t0 = time.perf_counter()
         try:
@@ -395,7 +1215,21 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             "epa_basis_K": int(epa_report.get("epa_basis_K", 0) or 0),
             "epa_basis_tag_count": int(epa_report.get("epa_basis_tag_count", 0) or 0),
             "epa_train_error": str(epa_report.get("epa_train_error", "") or ""),
+            "tag_cooccurrence_edges": tag_report.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": tag_report.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": tag_report.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
         }
+        if cfg.assets.enabled:
+            meta["assets"] = asset_inventory_summary(asset_manifest, asset_summary)
+        if cfg.ocr.enabled or ocr_summary.attempted or ocr_summary.failed:
+            meta["ocr"] = {
+                "enabled": bool(cfg.ocr.enabled),
+                "provider": cfg.ocr.provider,
+                "version": cfg.ocr.version,
+                "trigger": cfg.ocr.trigger,
+                **ocr_summary.to_dict(),
+            }
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
         return GraphState(
@@ -405,6 +1239,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             build_id=build_id,
             kb_name=kb_name,
             meta=meta,
+            asset_manifest=asset_manifest if cfg.assets.enabled else None,
             unresolved_anchors=unresolved,
             anchors_version=anchors_version,
         )
@@ -475,6 +1310,10 @@ def _build_for_rebuild(
             epa_basis_K=result.detail.epa_basis_K,
             epa_basis_tag_count=result.detail.epa_basis_tag_count,
             epa_train_error=result.detail.epa_train_error,
+            tag_cooccurrence_edges=result.detail.tag_cooccurrence_edges,
+            tag_cooccurrence_error=result.detail.tag_cooccurrence_error,
+            tag_intrinsic_residual_rows=result.detail.tag_intrinsic_residual_rows,
+            tag_intrinsic_residual_error=result.detail.tag_intrinsic_residual_error,
         )
         _apply_rebuild_detail(task, detail)
         if result.state is not None:
@@ -500,6 +1339,10 @@ def _build_for_rebuild(
             "epa_basis_K": int(new_state.meta.get("epa_basis_K", 0) or 0),
             "epa_basis_tag_count": int(new_state.meta.get("epa_basis_tag_count", 0) or 0),
             "epa_train_error": str(new_state.meta.get("epa_train_error", "") or ""),
+            "tag_cooccurrence_edges": int(new_state.meta.get("tag_cooccurrence_edges", 0) or 0),
+            "tag_cooccurrence_error": str(new_state.meta.get("tag_cooccurrence_error", "") or ""),
+            "tag_intrinsic_residual_rows": int(new_state.meta.get("tag_intrinsic_residual_rows", 0) or 0),
+            "tag_intrinsic_residual_error": str(new_state.meta.get("tag_intrinsic_residual_error", "") or ""),
         }
     )
     detail = RebuildDetail(
@@ -509,6 +1352,7 @@ def _build_for_rebuild(
         fallback_reason=fallback_reason,
         embedded_chunk_count=new_state.graph.number_of_nodes(),
         auto_decision_reason=auto_decision_reason,
+        chunk_identity_fallback_reason=task.chunk_identity_fallback_reason,
         impact_report=impact_report,
         tag_embeddings_added=int(new_state.meta.get("tag_embeddings_added", 0) or 0),
         tag_embeddings_skipped=int(new_state.meta.get("tag_embeddings_skipped", 0) or 0),
@@ -519,6 +1363,10 @@ def _build_for_rebuild(
         epa_basis_K=int(new_state.meta.get("epa_basis_K", 0) or 0),
         epa_basis_tag_count=int(new_state.meta.get("epa_basis_tag_count", 0) or 0),
         epa_train_error=str(new_state.meta.get("epa_train_error", "") or ""),
+        tag_cooccurrence_edges=int(new_state.meta.get("tag_cooccurrence_edges", 0) or 0),
+        tag_cooccurrence_error=str(new_state.meta.get("tag_cooccurrence_error", "") or ""),
+        tag_intrinsic_residual_rows=int(new_state.meta.get("tag_intrinsic_residual_rows", 0) or 0),
+        tag_intrinsic_residual_error=str(new_state.meta.get("tag_intrinsic_residual_error", "") or ""),
     )
     new_state.meta.update(
         {
@@ -539,6 +1387,10 @@ def _build_for_rebuild(
             "epa_basis_K": detail.epa_basis_K,
             "epa_basis_tag_count": detail.epa_basis_tag_count,
             "epa_train_error": detail.epa_train_error,
+            "tag_cooccurrence_edges": detail.tag_cooccurrence_edges,
+            "tag_cooccurrence_error": detail.tag_cooccurrence_error,
+            "tag_intrinsic_residual_rows": detail.tag_intrinsic_residual_rows,
+            "tag_intrinsic_residual_error": detail.tag_intrinsic_residual_error,
             "impact_summary": impact_report.get("summary") if isinstance(impact_report, dict) else None,
         }
     )
@@ -565,6 +1417,10 @@ def _apply_rebuild_detail(task: RebuildTask, detail: RebuildDetail) -> None:
     task.epa_basis_K = detail.epa_basis_K
     task.epa_basis_tag_count = detail.epa_basis_tag_count
     task.epa_train_error = detail.epa_train_error
+    task.tag_cooccurrence_edges = detail.tag_cooccurrence_edges
+    task.tag_cooccurrence_error = detail.tag_cooccurrence_error
+    task.tag_intrinsic_residual_rows = detail.tag_intrinsic_residual_rows
+    task.tag_intrinsic_residual_error = detail.tag_intrinsic_residual_error
 
 
 def _auto_incremental_decision(docs_dir: str | Path, kb_name: str, cfg: Settings, manifest) -> tuple[bool, str]:
@@ -594,7 +1450,18 @@ def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, ma
         metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
         if not is_active_status(metadata.status):
             continue
-        total += len(parse_document(path, cfg.parser.max_chars, cfg.parser.min_chars, root_dir=docs_root, metadata=metadata.to_node_attrs()))
+        total += len(
+            parse_document(
+                path,
+                cfg.parser.max_chars,
+                cfg.parser.min_chars,
+                overlap_chars=cfg.parser.overlap_chars,
+                root_dir=docs_root,
+                metadata=manual_node_attrs(metadata),
+                pdf_profile=cfg.parser.pdf_profile,
+                pdf_heading_hints=cfg.parser.pdf_heading_hints,
+            )
+        )
     return total
 
 
@@ -636,6 +1503,8 @@ def save_kb(state: GraphState, cfg: Settings) -> None:
     else:
         vector_store.add(ids, state.vectors)
     JsonAnchorStore(root / "anchors.json").save(list(state.anchors.values()), version=state.anchors_version)
+    if cfg.assets.enabled and state.asset_manifest is not None:
+        save_asset_manifest(state.asset_manifest, cfg)
     _save_meta(root, state.meta)
 
 
@@ -683,6 +1552,19 @@ def _kb_dir(kb_name: str, cfg: Settings) -> Path:
 
 def _anchor_store(kb_name: str, cfg: Settings) -> JsonAnchorStore:
     return JsonAnchorStore(_kb_dir(kb_name, cfg) / "anchors.json")
+
+
+def _merge_asset_extraction_summary(left: AssetExtractionSummary, right: AssetExtractionSummary) -> AssetExtractionSummary:
+    reasons = dict(left.failure_reasons)
+    for reason, count in right.failure_reasons.items():
+        reasons[reason] = reasons.get(reason, 0) + int(count)
+    return AssetExtractionSummary(
+        attempted=left.attempted + right.attempted,
+        created=left.created + right.created,
+        skipped=left.skipped + right.skipped,
+        failed=left.failed + right.failed,
+        failure_reasons=reasons,
+    )
 
 
 def _vector_store(kb_name: str, cfg: Settings, *, dim: int):
@@ -805,13 +1687,17 @@ def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[in
     for node_id in selected_ids:
         entry = by_node_id.get(node_id)
         node = state.graph.nodes[node_id] if node_id in state.graph else {}
+        metadata = dict(node.get("metadata") or {})
+        entry_manual_id = entry.manual_id if entry is not None else ""
         payloads.append(
             {
                 "kb_name": state.kb_name,
                 "node_id": node_id,
                 "build_id": state.build_id,
+                "doc_id": str(metadata.get("doc_id") or node.get("doc_id") or entry_manual_id),
+                "chunk_id": str(metadata.get("chunk_id") or ""),
                 "chunk_identity_key": entry.identity_key if entry is not None else "",
-                "manual_id": entry.manual_id if entry is not None else str(node.get("manual_id") or ""),
+                "manual_id": entry_manual_id if entry is not None else str(node.get("manual_id") or ""),
                 "source_file": entry.source_file if entry is not None else str(node.get("source_file") or ""),
                 "text_hash": entry.text_hash if entry is not None else "",
             }
@@ -821,6 +1707,13 @@ def _qdrant_payloads(state: GraphState, cfg: Settings, ids: np.ndarray | list[in
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 class RebuildCancelledError(ServiceError):

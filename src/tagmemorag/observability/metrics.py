@@ -16,6 +16,16 @@ ALLOWED_LABEL_NAMES = {
     "error_code",
     "operation",
     "outcome",
+    # Phase 2b-1 / 2b-2 tag-boost telemetry labels.
+    "strategy",
+    "feature",
+    "query_world_kind",
+    "kind",
+    "consumer",
+    # Phase 4 V8 geodesicRerank skipped-reason telemetry. Bounded to a
+    # fixed-cardinality whitelist enforced at the recorder boundary
+    # (`Metrics.GEODESIC_RERANK_REASONS`).
+    "reason",
 }
 FORBIDDEN_LABEL_NAMES = {"question", "query", "trace_id", "task_id", "api_key", "api_key_id", "build_id", "path"}
 
@@ -158,6 +168,137 @@ class Metrics:
             registry=registry,
             buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
         )
+        self.tag_cooccurrence_edges = Gauge(
+            "tagmemorag_tag_cooccurrence_edges",
+            "Directed cooccurrence edge count by KB.",
+            ["kb_name"],
+            registry=registry,
+        )
+        self.tag_cooccurrence_rebuild_duration = Histogram(
+            "tagmemorag_tag_cooccurrence_rebuild_duration_seconds",
+            "Cooccurrence matrix rebuild duration by KB and outcome.",
+            ["kb_name", "outcome"],
+            registry=registry,
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+        )
+        self.tag_spike_propagations = Counter(
+            "tagmemorag_tag_spike_propagations_total",
+            "Spike propagation invocations by KB and outcome.",
+            ["kb_name", "outcome"],
+            registry=registry,
+        )
+        # Phase 2b-1 (D7): dynamic boost factor + ResidualPyramid telemetry
+        self.tag_dynamic_factor = Histogram(
+            "tagmemorag_tag_dynamic_factor",
+            "Dynamic boost factor (post-clamp) per tag-boost call, by strategy.",
+            ["kb_name", "strategy"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0),
+        )
+        self.tag_pyramid_levels = Histogram(
+            "tagmemorag_tag_pyramid_levels",
+            "ResidualPyramid: number of levels actually computed.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 4, 5),
+        )
+        self.tag_pyramid_explained_energy = Histogram(
+            "tagmemorag_tag_pyramid_explained_energy",
+            "ResidualPyramid: total explained energy ratio (0..1).",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0),
+        )
+        self.tag_pyramid_features = Gauge(
+            "tagmemorag_tag_pyramid_features",
+            "ResidualPyramid: latest feature values per KB (tag_memo_activation/coverage/coherence).",
+            ["kb_name", "feature"],
+            registry=registry,
+        )
+        # Phase 2b-2 (D8): external modulator telemetry.
+        self.tag_lang_penalty_applied = Counter(
+            "tagmemorag_tag_lang_penalty_applied",
+            "Counter incremented each time langPenalty fires (< 1.0) on a candidate.",
+            ["kb_name", "query_world_kind"],
+            registry=registry,
+        )
+        self.tag_core_tags_resolved = Histogram(
+            "tagmemorag_tag_core_tags_resolved",
+            "Number of caller-supplied core_tags surviving synonym resolve + dedup.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8, 13),
+        )
+        self.tag_ghosts_injected = Histogram(
+            "tagmemorag_tag_ghosts_injected",
+            "Ghost tag injection counts per call, by kind (hard/soft/skipped_dim).",
+            ["kb_name", "kind"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8, 13),
+        )
+        # Phase 3: V6 detectCrossDomainResonance signal. `value` is the scalar
+        # fed to dynamicBoostFactor as log(1+resonance); `bridges_count` is the
+        # number of bridge entries (axes co-activated above 0.15). Buckets cover
+        # the log-domain reference table from the PRD (0 / 0.3 / 0.5 / 1.0 / 2.0).
+        self.tag_resonance_value = Histogram(
+            "tagmemorag_tag_resonance_value",
+            "Cross-domain resonance scalar (V6 detectCrossDomainResonance) per spike-on call.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0.0, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2, 2.0, 4.0),
+        )
+        self.tag_resonance_bridges_count = Histogram(
+            "tagmemorag_tag_resonance_bridges_count",
+            "Number of resonance bridges (axes pairs above co-activation threshold) per call.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 5, 8),
+        )
+        self.tag_intrinsic_residual_missing = Counter(
+            "tagmemorag_tag_intrinsic_residual_missing_total",
+            "Intrinsic residual lookups that fell back to 1.0 by consumer.",
+            ["kb_name", "consumer"],
+            registry=registry,
+        )
+        self.plan_log_events = Counter(
+            "tagmemorag_plan_log_events_total",
+            "QueryPlan log events (insert / update / overflow / drop).",
+            ["kb_name", "event"],
+            registry=registry,
+        )
+        self.tag_pyramid_residual_prior_applied = Counter(
+            "tagmemorag_tag_pyramid_residual_prior_applied_total",
+            "ResidualPyramid analyze calls using intrinsic residual prior weighting.",
+            ["kb_name"],
+            registry=registry,
+        )
+        # Phase 4: V8 geodesicRerank — applied / skipped / swap kinds / hit count.
+        # All four are recorded only when `geodesic_rerank_enabled=true`.
+        self.geodesic_rerank_applied = Counter(
+            "tagmemorag_geodesic_rerank_applied_total",
+            "V8 geodesicRerank invocations that produced a real reranking (applied=True).",
+            ["kb_name"],
+            registry=registry,
+        )
+        self.geodesic_rerank_skipped = Counter(
+            "tagmemorag_geodesic_rerank_skipped_total",
+            "V8 geodesicRerank invocations that fell through without rerank, by reason.",
+            ["kb_name", "reason"],
+            registry=registry,
+        )
+        self.geodesic_rerank_swap = Counter(
+            "tagmemorag_geodesic_rerank_swap_total",
+            "Top-K membership swaps caused by V8 geodesicRerank, by kind.",
+            ["kb_name", "kind"],
+            registry=registry,
+        )
+        self.geodesic_rerank_hit_count = Histogram(
+            "tagmemorag_geodesic_rerank_hit_count_observed",
+            "Per-candidate tag-energy hit counts observed during V8 geodesicRerank.",
+            ["kb_name"],
+            registry=registry,
+            buckets=(0, 1, 2, 3, 4, 6, 10),
+        )
 
     def record_http_request(self, *, method: str, route: str, status_code: str | int, duration: float) -> None:
         self.http_requests.labels(method=method, route=route, status_code=str(status_code)).inc()
@@ -240,6 +381,101 @@ class Metrics:
         self.epa_basis_retrain.labels(outcome=outcome).inc()
         self.epa_basis_retrain_duration.labels(outcome=outcome).observe(max(duration, 0.0))
 
+    def record_plan_log_event(self, *, kb_name: str, event: str, count: int = 1) -> None:
+        self.plan_log_events.labels(kb_name=kb_name, event=event).inc(int(count))
+
+    def set_tag_cooccurrence_edges(self, *, kb_name: str, count: int) -> None:
+        self.tag_cooccurrence_edges.labels(kb_name=kb_name).set(max(int(count), 0))
+
+    def record_tag_cooccurrence_rebuild(self, *, kb_name: str, outcome: str, duration: float) -> None:
+        self.tag_cooccurrence_rebuild_duration.labels(kb_name=kb_name, outcome=outcome).observe(max(duration, 0.0))
+
+    def record_tag_spike_propagation(self, *, kb_name: str, outcome: str) -> None:
+        self.tag_spike_propagations.labels(kb_name=kb_name, outcome=outcome).inc()
+
+    def record_tag_dynamic_factor(self, *, kb_name: str, strategy: str, value: float) -> None:
+        self.tag_dynamic_factor.labels(kb_name=kb_name, strategy=strategy).observe(max(float(value), 0.0))
+
+    def record_tag_pyramid(
+        self,
+        *,
+        kb_name: str,
+        levels: int,
+        explained_energy: float,
+        tag_memo_activation: float,
+        coverage: float,
+        coherence: float,
+    ) -> None:
+        self.tag_pyramid_levels.labels(kb_name=kb_name).observe(max(int(levels), 0))
+        self.tag_pyramid_explained_energy.labels(kb_name=kb_name).observe(
+            max(min(float(explained_energy), 1.0), 0.0)
+        )
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="tag_memo_activation").set(float(tag_memo_activation))
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="coverage").set(float(coverage))
+        self.tag_pyramid_features.labels(kb_name=kb_name, feature="coherence").set(float(coherence))
+
+    def record_tag_lang_penalty_applied(self, *, kb_name: str, query_world_kind: str) -> None:
+        self.tag_lang_penalty_applied.labels(
+            kb_name=kb_name, query_world_kind=query_world_kind
+        ).inc()
+
+    def record_tag_core_tags_resolved(self, *, kb_name: str, count: int) -> None:
+        self.tag_core_tags_resolved.labels(kb_name=kb_name).observe(max(int(count), 0))
+
+    def record_tag_ghosts_injected(self, *, kb_name: str, kind: str, count: int = 1) -> None:
+        self.tag_ghosts_injected.labels(kb_name=kb_name, kind=kind).observe(max(int(count), 0))
+
+    def record_tag_resonance_value(self, *, kb_name: str, value: float) -> None:
+        self.tag_resonance_value.labels(kb_name=kb_name).observe(max(float(value), 0.0))
+
+    def record_tag_resonance_bridges_count(self, *, kb_name: str, count: int) -> None:
+        self.tag_resonance_bridges_count.labels(kb_name=kb_name).observe(max(int(count), 0))
+
+    def record_tag_intrinsic_residual_missing(self, *, kb_name: str, consumer: str, count: int = 1) -> None:
+        if count <= 0:
+            return
+        self.tag_intrinsic_residual_missing.labels(kb_name=kb_name, consumer=consumer).inc(int(count))
+
+    def record_tag_pyramid_residual_prior_applied(self, *, kb_name: str) -> None:
+        self.tag_pyramid_residual_prior_applied.labels(kb_name=kb_name).inc()
+
+    # Phase 4: V8 geodesicRerank metric recorders. `reason` and `kind` labels
+    # are clamped to a fixed allow-list to keep cardinality bounded.
+    GEODESIC_RERANK_REASONS: ClassVar[frozenset[str]] = frozenset({
+        "spike_disabled",
+        "matrix_missing",
+        "no_tag_vectors",
+        "no_seeds",
+        "no_candidates",
+        "degenerate_context",
+        "zero_alpha",
+        "degenerate_fused",
+        "energy_field_empty",
+        "max_geo_zero",
+        "lexical_only_path",
+        "unknown",
+    })
+    GEODESIC_RERANK_SWAP_KINDS: ClassVar[frozenset[str]] = frozenset({
+        "rank_changed", "new_entry", "lost_entry"
+    })
+
+    def record_geodesic_rerank_applied(self, *, kb_name: str) -> None:
+        self.geodesic_rerank_applied.labels(kb_name=kb_name).inc()
+
+    def record_geodesic_rerank_skipped(self, *, kb_name: str, reason: str) -> None:
+        safe_reason = reason if reason in self.GEODESIC_RERANK_REASONS else "unknown"
+        self.geodesic_rerank_skipped.labels(kb_name=kb_name, reason=safe_reason).inc()
+
+    def record_geodesic_rerank_swap(self, *, kb_name: str, kind: str, count: int) -> None:
+        if int(count) <= 0:
+            return
+        if kind not in self.GEODESIC_RERANK_SWAP_KINDS:
+            return
+        self.geodesic_rerank_swap.labels(kb_name=kb_name, kind=kind).inc(int(count))
+
+    def record_geodesic_rerank_hit_count(self, *, kb_name: str, hit_count: int) -> None:
+        self.geodesic_rerank_hit_count.labels(kb_name=kb_name).observe(max(int(hit_count), 0))
+
 
 _metrics: Metrics | NoopMetrics = NoopMetrics()
 _registry: CollectorRegistry = REGISTRY
@@ -311,6 +547,12 @@ def assert_label_contract() -> None:
         "error_code",
         "operation",
         "outcome",
+        "strategy",
+        "feature",
+        "query_world_kind",
+        "kind",
+        "consumer",
+        "reason",
     }
     forbidden_used = used & FORBIDDEN_LABEL_NAMES
     if forbidden_used:

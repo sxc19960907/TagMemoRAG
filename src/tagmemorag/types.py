@@ -106,5 +106,6 @@ class GraphState:
     build_id: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f"))
     kb_name: str = "default"
     meta: dict[str, Any] = field(default_factory=dict)
+    asset_manifest: Any | None = None
     unresolved_anchors: list[Anchor] = field(default_factory=list)
     anchors_version: int = 0

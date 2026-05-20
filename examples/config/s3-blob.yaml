@@ -1,0 +1,23 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-s3/data
+vector_store:
+  provider: npz
+manual_library:
+  root_dir: .tmp/tagmemorag-s3/manuals
+  registry_backend: sqlite
+  registry_path: .tmp/tagmemorag-s3/manual_registry.sqlite3
+  blob_backend: s3
+  s3_bucket: tagmemorag-manuals
+  s3_prefix: manuals/prod
+  s3_endpoint_url: http://localhost:9000
+  s3_region: us-east-1
+  s3_access_key_env: TAGMEMORAG_S3_ACCESS_KEY
+  s3_secret_key_env: TAGMEMORAG_S3_SECRET_KEY
+  s3_addressing_style: path
+logging:
+  level: INFO
+  format: json
