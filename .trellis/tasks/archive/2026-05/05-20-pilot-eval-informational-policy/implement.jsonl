@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Production pilot command contract, sanitized report constraints, and focused unit-test expectations."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "This change threads one CLI policy through script, shared service, report summary, and pilot aggregation."}
+{"file": "docs/wave-phase1-architecture.md", "reason": "Source context for existing run_eval_ci informational-suites semantics and known stress-test suite names."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Operator-facing pilot command documentation that must reflect the new policy flag."}

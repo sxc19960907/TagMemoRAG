@@ -1,0 +1,7 @@
+{"file": "src/tagmemorag/eval_reauthoring.py", "reason": "Core diagnosis schema and summary semantics must preserve original severity while adding blocking-only aggregation."}
+{"file": "src/tagmemorag/production_pilot.py", "reason": "Pilot stage status must depend on blocking-only diagnosis severity and keep sanitized details."}
+{"file": "src/tagmemorag/cli.py", "reason": "CLI argument parsing must pass the comma-separated informational policy to the service."}
+{"file": "scripts/diagnose_eval_reauthoring.py", "reason": "Standalone diagnosis CLI should expose the same policy as pilot and run_eval_ci."}
+{"file": "tests/unit/test_diagnose_eval_reauthoring.py", "reason": "Unit coverage for shared diagnosis and script CLI behavior."}
+{"file": "tests/unit/test_production_pilot.py", "reason": "Unit coverage for pilot stage status and report detail."}
+{"file": "tests/unit/test_cli.py", "reason": "Unit coverage for tagmemorag pilot CLI wiring."}
