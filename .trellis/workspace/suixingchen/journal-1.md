@@ -1525,3 +1525,36 @@ Ran the merged production-provider verify CLI against live SiliconFlow/DeepSeek 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: Add MVP delivery guide
+
+**Date**: 2026-05-20
+**Task**: Add MVP delivery guide
+**Branch**: `codex/mvp-delivery-guide`
+
+### Summary
+
+Added the primary MVP handoff guide covering status, prerequisites, live-provider verification, managed PDF ingestion, retrieve/search/answer usage, pilot gate, report retention, troubleshooting, and deferred production gaps. Verified command help and sanitization checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e1ba109` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

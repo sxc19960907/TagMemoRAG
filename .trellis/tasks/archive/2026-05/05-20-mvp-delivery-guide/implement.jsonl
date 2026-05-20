@@ -1,0 +1,5 @@
+{"file": "docs/production-deployment-operations.md", "reason": "Detailed operations and deployment guide to link and summarize."}
+{"file": "docs/production-provider-smoke-runbook.md", "reason": "Unified live provider verification commands."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Pilot gate details and eval diagnosis policy."}
+{"file": "docs/unified-verify-cli-live-verification.md", "reason": "Latest live verification evidence and follow-ups."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Current shipped/deferred capability status."}
