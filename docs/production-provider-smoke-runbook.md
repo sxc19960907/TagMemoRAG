@@ -23,13 +23,48 @@ export TAGMEMORAG_S3_SECRET_KEY=tagmemorag-secret
 
 Secret values must stay in the shell or secret manager. Do not write provider keys into YAML, docs, command logs, or reports.
 
-## One-Command Smoke
+## Unified Verify Command
+
+Prefer the product CLI for new operator workflows:
+
+```bash
+uv run python -m tagmemorag production-provider verify --level smoke
+```
+
+By default the smoke level:
+
+1. Checks required environment variable names without printing values.
+2. Starts local Docker provider services with `docker compose --profile providers up -d qdrant minio`.
+3. Ensures the configured MinIO bucket exists.
+4. Runs the nested production-provider smoke command with the ASKO W6564 manual and a reset Qdrant verification collection.
+
+Write the top-level verify summary separately from the nested smoke report:
+
+```bash
+uv run python -m tagmemorag production-provider verify \
+  --level smoke \
+  --verify-output .tmp/production-provider-verification/verify-summary.json
+```
+
+For the pre-pilot gate, run smoke first and then the retained pilot report:
+
+```bash
+uv run python -m tagmemorag production-provider verify \
+  --level pilot \
+  --pilot-suite tests/fixtures/eval/coffee.jsonl \
+  --pilot-docs tests/fixtures \
+  --pilot-output .tmp/production-provider-verification/pilot-report.json
+```
+
+`--level pilot` only runs the pilot stage if the smoke gate passes.
+
+## Compatibility Smoke Script
 
 ```bash
 uv run python scripts/run_production_provider_smoke.py
 ```
 
-By default the runner:
+The script remains for existing automation and delegates to `production-provider verify --level smoke`. By default the compatibility runner:
 
 1. Checks required environment variable names without printing values.
 2. Starts local Docker provider services with `docker compose --profile providers up -d qdrant minio`.
@@ -54,22 +89,25 @@ The generated smoke report stays under `.tmp/` and is not committed.
 
 ```bash
 # Check env/service setup without running the RAG smoke.
-uv run python scripts/run_production_provider_smoke.py --check-only
+uv run python -m tagmemorag production-provider verify --level smoke --check-only
 
 # Use another manual.
-uv run python scripts/run_production_provider_smoke.py \
+uv run python -m tagmemorag production-provider verify --level smoke \
   --manual 'product_manuals/oven/HISENSE BSA5221.pdf'
 
 # Keep existing provider services untouched.
-uv run python scripts/run_production_provider_smoke.py --skip-docker
+uv run python -m tagmemorag production-provider verify --level smoke --skip-docker
 
 # Do not reset Qdrant collection before rebuild.
-uv run python scripts/run_production_provider_smoke.py --no-reset-qdrant
+uv run python -m tagmemorag production-provider verify --level smoke --no-reset-qdrant
 
-# Write markdown output.
-uv run python scripts/run_production_provider_smoke.py \
+# Write markdown verify summary and nested smoke output.
+uv run python -m tagmemorag production-provider verify \
+  --level smoke \
   --format markdown \
-  --output .tmp/production-provider-verification/operator-smoke-report.md
+  --output .tmp/production-provider-verification/operator-smoke-report.md \
+  --verify-format markdown \
+  --verify-output .tmp/production-provider-verification/verify-summary.md
 ```
 
 ## Expected Passing Evidence

@@ -1,0 +1,5 @@
+{"file": "src/tagmemorag/cli.py", "reason": "Existing argparse structure and production-provider command wiring."}
+{"file": "scripts/run_production_provider_smoke.py", "reason": "Compatibility wrapper to delegate to shared verify implementation."}
+{"file": "src/tagmemorag/production_provider_smoke.py", "reason": "Nested smoke command and report contracts reused by verify smoke level."}
+{"file": "src/tagmemorag/production_pilot.py", "reason": "Pilot runner and report writer reused by verify pilot level."}
+{"file": "docs/production-provider-smoke-runbook.md", "reason": "Operator docs for unified verify command."}

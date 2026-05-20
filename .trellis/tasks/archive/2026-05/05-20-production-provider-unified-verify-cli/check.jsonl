@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Secrets and raw provider/document data must not appear in reports or tests."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "CLI orchestration belongs in entry-point/shared operator modules, not lower algorithm layers."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The task exists to consolidate wrapper logic and avoid drift."}
