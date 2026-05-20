@@ -110,6 +110,94 @@ Pass condition:
 
 Stop if embedding, storage, or required answer/reranker providers fail for the target pilot profile.
 
+## Local Verified Provider Profile
+
+The local production-provider verification profile captures the provider mix verified on 2026-05-20:
+
+- Qdrant via local Docker.
+- MinIO as the local S3-compatible blob store.
+- SiliconFlow for HTTP embeddings and reranker.
+- DeepSeek OpenAI-compatible chat completions for answer generation.
+
+Start the local provider dependencies:
+
+```bash
+docker compose --profile providers up -d qdrant minio
+```
+
+The compose file uses `quay.io/minio/minio:latest` for MinIO because Docker Hub can be unavailable or slow in some local networks. Qdrant remains `qdrant/qdrant:latest`.
+
+Create the MinIO bucket before running the S3 probe:
+
+```bash
+export TAGMEMORAG_S3_ACCESS_KEY=tagmemorag
+export TAGMEMORAG_S3_SECRET_KEY=tagmemorag-secret
+
+uv run python - <<'PY'
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+
+client = boto3.client(
+    "s3",
+    endpoint_url="http://localhost:9000",
+    region_name="us-east-1",
+    aws_access_key_id="tagmemorag",
+    aws_secret_access_key="tagmemorag-secret",
+    config=Config(s3={"addressing_style": "path"}, connect_timeout=5, read_timeout=5),
+)
+try:
+    client.create_bucket(Bucket="tagmemorag-verify")
+except ClientError as exc:
+    code = exc.response.get("Error", {}).get("Code")
+    if code not in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+        raise
+PY
+```
+
+Set live-provider secrets only in the shell or secret manager:
+
+```bash
+export TMR_CONFIG=examples/config/production-provider-verification.yaml
+export SILICONFLOW_API_KEY=...
+export DEEPSEEK_API_KEY=...
+```
+
+Run static validation and the full provider probe:
+
+```bash
+uv sync --extra dev --extra qdrant --extra s3
+uv run python -m tagmemorag config validate --config "$TMR_CONFIG"
+uv run python -m tagmemorag provider probe --config "$TMR_CONFIG" --all
+```
+
+Expected provider-probe result:
+
+- `embedding`: `passed` with `Qwen/Qwen3-Embedding-8B` and `4096` dimensions.
+- `reranker`: `passed` with SiliconFlow.
+- `answer`: `passed` with `deepseek-v4-flash`.
+- `qdrant`: `passed` once the configured verification collection exists or after a rebuild creates it.
+- `s3`: `passed` once the MinIO bucket exists.
+
+For a standalone Qdrant connectivity probe before any rebuild, create the empty verification collection:
+
+```bash
+uv run python - <<'PY'
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
+
+client = QdrantClient(url="http://localhost:6333", timeout=10)
+collection = "tagmemorag_verify_default"
+if not client.collection_exists(collection):
+    client.create_collection(
+        collection_name=collection,
+        vectors_config=VectorParams(size=4096, distance=Distance.COSINE),
+    )
+PY
+```
+
+Keep the profile file secret-free. Do not replace `api_key_env` values with raw keys.
+
 ## Local Composition Smoke
 
 This command is deterministic and isolated; it does not prove live provider health:

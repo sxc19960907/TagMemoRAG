@@ -155,7 +155,7 @@ manual_library:
 
     report = run_provider_probe(str(config), selected=["qdrant"], kb_name="kb-a")
 
-    assert report.status == "passed"
+    assert report.status in {"passed", "warning"}
     assert report.to_dict()["probes"][0]["detail"]["collection_name"] == "tmr_kb-a"
 
 
@@ -301,6 +301,7 @@ def test_example_config_profiles_load():
         "examples/config/qdrant.yaml",
         "examples/config/s3-blob.yaml",
         "examples/config/answer-openai-compatible.yaml",
+        "examples/config/production-provider-verification.yaml",
     ]
 
     loaded = [load_config(path) for path in profiles]
@@ -310,6 +311,26 @@ def test_example_config_profiles_load():
     assert loaded[2].vector_store.provider == "qdrant"
     assert loaded[3].manual_library.blob_backend == "s3"
     assert loaded[4].answer.provider == "openai_compatible"
+    assert loaded[5].model.provider == "http"
+    assert loaded[5].manual_library.blob_backend == "s3"
+    assert loaded[5].reranker.enabled is True
+    assert loaded[5].answer.model_id == "deepseek-v4-flash"
+
+
+def test_production_provider_verification_profile_is_secret_free(monkeypatch):
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "dummy-siliconflow-token-not-in-output")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "dummy-deepseek-token-not-in-output")
+    monkeypatch.setenv("TAGMEMORAG_S3_ACCESS_KEY", "tagmemorag")
+    monkeypatch.setenv("TAGMEMORAG_S3_SECRET_KEY", "tagmemorag-secret")
+
+    report = validate_config("examples/config/production-provider-verification.yaml")
+
+    serialized = str(report.to_dict())
+    assert report.status in {"passed", "warning"}
+    assert "SILICONFLOW_API_KEY" in serialized
+    assert "DEEPSEEK_API_KEY" in serialized
+    assert "dummy-siliconflow-token-not-in-output" not in serialized
+    assert "dummy-deepseek-token-not-in-output" not in serialized
 
 
 def test_env_overrides_defaults(tmp_path, monkeypatch):

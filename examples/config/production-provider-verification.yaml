@@ -1,0 +1,42 @@
+model:
+  provider: http
+  name: Qwen/Qwen3-Embedding-8B
+  dim: 4096
+  base_url: https://api.siliconflow.cn/v1
+  api_key_env: SILICONFLOW_API_KEY
+  timeout_seconds: 30
+  dimensions: 4096
+  normalize: true
+storage:
+  data_dir: .tmp/production-provider-verification/data
+vector_store:
+  provider: qdrant
+  qdrant_url: http://localhost:6333
+  collection_prefix: tagmemorag_verify
+manual_library:
+  root_dir: .tmp/production-provider-verification/manuals
+  registry_backend: sqlite
+  registry_path: .tmp/production-provider-verification/manual_registry.sqlite3
+  blob_backend: s3
+  s3_bucket: tagmemorag-verify
+  s3_prefix: manuals/dev
+  s3_endpoint_url: http://localhost:9000
+  s3_region: us-east-1
+  s3_access_key_env: TAGMEMORAG_S3_ACCESS_KEY
+  s3_secret_key_env: TAGMEMORAG_S3_SECRET_KEY
+  s3_addressing_style: path
+reranker:
+  enabled: true
+  provider: siliconflow
+  model_id: Qwen/Qwen3-Reranker-0.6B
+  api_key_env: SILICONFLOW_API_KEY
+  base_url: https://api.siliconflow.cn/v1
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: deepseek-v4-flash
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
+logging:
+  level: INFO
+  format: json

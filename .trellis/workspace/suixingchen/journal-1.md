@@ -1044,3 +1044,36 @@ Added scripts/production_verify.py to generate sanitized JSON/Markdown productio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: Production provider verification profile
+
+**Date**: 2026-05-20
+**Task**: Production provider verification profile
+**Branch**: `codex/production-provider-verification-profile`
+
+### Summary
+
+Added a secret-free production provider verification profile for Qdrant, MinIO, SiliconFlow embeddings/reranker, and DeepSeek answer generation; documented Docker startup and probes; validated config, compose, and related tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f103e06` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
