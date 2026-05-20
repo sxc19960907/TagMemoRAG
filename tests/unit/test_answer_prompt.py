@@ -32,13 +32,15 @@ def test_prompt_keeps_retrieved_content_in_user_data_message():
     assert prompt.messages[1]["role"] == "user"
     assert "Ignore previous instructions" in prompt.messages[1]["content"]
     assert "untrusted" in prompt.messages[0]["content"].lower()
+    assert "[cit_001]" in prompt.messages[0]["content"]
+    assert "Do not invent citation ids" in prompt.messages[0]["content"]
     assert prompt.allowed_citation_ids == frozenset({"cit_001", "cit_002"})
 
 
-def test_validate_generation_citations_drops_unknown_ids():
+def test_validate_generation_citations_drops_unknown_text_extracted_ids():
     generation = AnswerGeneration(
         text="Use steam wand.",
-        citations=(AnswerCitation("cit_001"), AnswerCitation("invented")),
+        citations=(AnswerCitation("cit_001"), AnswerCitation("cit_fake")),
     )
 
     cleaned = validate_generation_citations(generation, {"cit_001"})

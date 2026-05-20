@@ -84,6 +84,37 @@ def test_openai_compatible_chat_completion(monkeypatch):
     assert [c.citation_id for c in generation.citations] == ["cit_001"]
 
 
+def test_openai_compatible_extracts_text_citations(monkeypatch):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Check the drain hose [cit_001]. Then clean the filter [cit_002]. Unknown [cit_fake].",
+                        }
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setenv("ANSWER_KEY", "secret")
+    cfg = Settings(
+        answer=AnswerConfig(
+            provider="openai_compatible",
+            model_id="chat-model",
+            api_key_env="ANSWER_KEY",
+            base_url="https://example.test/v1",
+        )
+    )
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    generation = OpenAICompatibleAnswerGenerator(cfg, http_client=client).generate(_context())
+
+    assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002", "cit_fake"]
+
+
 def test_openai_compatible_rejects_empty_content(monkeypatch):
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"choices": [{"message": {"content": ""}}]})
