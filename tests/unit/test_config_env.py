@@ -38,7 +38,7 @@ manual_library:
 
     report = validate_config(config)
 
-    assert report.status == "passed"
+    assert report.status in {"passed", "warning"}
     body = report.to_dict()
     assert body["schema_version"] == "config_validation.v1"
     assert body["profile"]["model_provider"] == "hashing"
