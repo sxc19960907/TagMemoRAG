@@ -1,0 +1,3 @@
+{"file": "docs/production-provider-smoke-runbook.md", "reason": "Unified verify operator command and report retention guidance."}
+{"file": "src/tagmemorag/production_provider_verify.py", "reason": "Unified verify report schema and stage names to inspect."}
+{"file": "docs/production-provider-smoke-runner-live-verification.md", "reason": "Prior sanitized live verification report style and metrics."}
