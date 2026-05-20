@@ -1176,3 +1176,36 @@ Reran the production-provider profile on real ASKO/HISENSE PDFs with local MinIO
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: DeepSeek real PDF answer rerun
+
+**Date**: 2026-05-20
+**Task**: DeepSeek real PDF answer rerun
+**Branch**: `codex/deepseek-real-pdf-answer-rerun`
+
+### Summary
+
+Validated /answer on the real ASKO/HISENSE PDF KB with SiliconFlow embeddings/reranker, Qdrant vectors, and DeepSeek answer generation. Confirmed 1024-token budget returns a non-empty answer while 128-token budget fails safely, and recorded the remaining citation compliance gap.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `075a722` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
