@@ -139,6 +139,76 @@ answer:
     assert body["probes"][0]["detail"]["env"] == "TMR_ABSENT_PROVIDER_PROBE_KEY"
 
 
+def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "smoke.json"
+    captured = {}
+
+    class FakeReport:
+        status = "passed"
+
+        def to_json(self):
+            return json.dumps({"status": self.status})
+
+        def to_markdown(self):
+            return "# ok\n"
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return FakeReport()
+
+    def fake_write(report, path, *, fmt):
+        captured["written"] = (report.status, path, fmt)
+
+    monkeypatch.setattr(cli, "run_production_provider_smoke", fake_run)
+    monkeypatch.setattr(cli, "write_provider_smoke_report", fake_write)
+
+    exit_code = cli.main(
+        [
+            "production-provider",
+            "smoke",
+            "--config",
+            "cfg.yaml",
+            "--kb",
+            "kb-live",
+            "--manual",
+            "a.pdf",
+            "--manual",
+            "b.pdf",
+            "--metadata",
+            "manuals.json",
+            "--metadata-format",
+            "json",
+            "--workdir",
+            str(tmp_path / "work"),
+            "--output",
+            str(output),
+            "--format",
+            "markdown",
+            "--question",
+            "怎么排水？",
+            "--rebuild-mode",
+            "incremental",
+            "--answer-top-k",
+            "4",
+            "--answer-source-k",
+            "5",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["config_path"] == "cfg.yaml"
+    assert captured["kb_name"] == "kb-live"
+    assert captured["manual_paths"] == ["a.pdf", "b.pdf"]
+    assert captured["metadata_path"] == "manuals.json"
+    assert captured["metadata_format"] == "json"
+    assert captured["question"] == "怎么排水？"
+    assert captured["rebuild_mode"] == "incremental"
+    assert captured["answer_top_k"] == 4
+    assert captured["answer_source_k"] == 5
+    assert captured["written"] == ("passed", str(output), "markdown")
+    assert capsys.readouterr().out == ""
+
+
 def test_cli_readiness_smoke_succeeds_and_keeps_workdir(tmp_path, capsys):
     workdir = tmp_path / "smoke"
 
