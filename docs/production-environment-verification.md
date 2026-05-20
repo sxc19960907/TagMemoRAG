@@ -60,6 +60,30 @@ Pass condition:
 
 Stop if required env var names, local writable paths, optional dependencies, or auth posture are wrong.
 
+## Local Aggregate Report
+
+For a repeatable local artifact over the deterministic parts of this checklist, run:
+
+```bash
+uv run python scripts/production_verify.py \
+  --config "$TMR_CONFIG" \
+  --workdir "$TMR_VERIFY_DIR/local-report" \
+  --output "$TMR_VERIFY_DIR/production-verification.json"
+```
+
+This script runs static config validation, readiness smoke, and a retained pilot report. It does not run live provider probes unless you explicitly pass `--probe`, for example:
+
+```bash
+uv run python scripts/production_verify.py \
+  --config "$TMR_CONFIG" \
+  --probe embedding \
+  --probe qdrant \
+  --workdir "$TMR_VERIFY_DIR/live-report" \
+  --output "$TMR_VERIFY_DIR/production-verification-live.json"
+```
+
+Use the script output as the summary artifact, and keep the step-specific files below when you need more detailed operator evidence.
+
 ## Live Provider Probes
 
 These commands may call external systems. Run only the probes for providers enabled in the target profile:

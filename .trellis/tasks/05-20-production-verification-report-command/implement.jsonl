@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Production pilot privacy and focused test requirements."}
+{"file": "docs/production-environment-verification.md", "reason": "Checklist this command operationalizes."}
+{"file": "src/tagmemorag/config_validation.py", "reason": "Static config report contract to reuse."}
+{"file": "src/tagmemorag/readiness.py", "reason": "Readiness smoke report contract to reuse."}
+{"file": "src/tagmemorag/provider_probe.py", "reason": "Optional live probe contract to reuse."}
+{"file": "src/tagmemorag/production_pilot.py", "reason": "Pilot report contract to reuse safely."}

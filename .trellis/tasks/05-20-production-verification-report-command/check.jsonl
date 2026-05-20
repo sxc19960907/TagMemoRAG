@@ -1,0 +1,3 @@
+{"file": "scripts/production_verify.py", "reason": "New operator command must keep reports safe and deterministic by default."}
+{"file": "tests/unit/test_production_verify.py", "reason": "Unit coverage for report shape, status aggregation, and optional probe behavior."}
+{"file": "docs/production-environment-verification.md", "reason": "Docs must match the executable command."}
