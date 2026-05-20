@@ -1492,3 +1492,36 @@ Added the canonical production-provider verify command with smoke and pilot leve
 ### Next Steps
 
 - None - task complete
+
+
+## Session 39: Verify unified production-provider CLI live path
+
+**Date**: 2026-05-20
+**Task**: Verify unified production-provider CLI live path
+**Branch**: `codex/unified-verify-cli-live-verification`
+
+### Summary
+
+Ran the merged production-provider verify CLI against live SiliconFlow/DeepSeek and local Qdrant/MinIO services. The default Docker-starting path exposed a Docker diagnostics follow-up, while the already-running-provider path passed with nested smoke parity 185/185, missing vectors 0, and DeepSeek answer smoke with 5 citations.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f2bea2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
