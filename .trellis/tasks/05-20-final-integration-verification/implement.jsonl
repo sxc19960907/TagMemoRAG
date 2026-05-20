@@ -1,0 +1,2 @@
+{"file": ".github/workflows/quality.yml", "reason": "Defines the deterministic CI pytest command to mirror locally."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Final verification should align with backend quality expectations."}
