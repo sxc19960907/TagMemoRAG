@@ -879,3 +879,36 @@ Added optional hashing-vs-production baseline diagnosis to pilot reports, shared
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: Pilot eval informational policy
+
+**Date**: 2026-05-20
+**Task**: Pilot eval informational policy
+**Branch**: `feat/wave-phase1-cooccurrence-spike`
+
+### Summary
+
+Added informational suite policy for eval reauthoring diagnosis, exposed it through diagnose_eval_reauthoring.py and tagmemorag pilot run, updated pilot/docs/tests, and verified focused unit tests plus a real local pilot run.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0d86391` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
