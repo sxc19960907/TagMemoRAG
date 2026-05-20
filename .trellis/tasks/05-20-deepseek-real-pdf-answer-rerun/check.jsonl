@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and sanitization checks."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check report avoids raw provider output and secrets."}
