@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -72,6 +73,7 @@ def _parse_chat_completion(data: dict[str, Any], *, model_id: str, model_version
     if not text.strip():
         raise AnswerGenerationError("answer generation response missing content")
     citations = []
+    seen_citations: set[str] = set()
     raw_citations = message.get("citations") or data.get("citations") or []
     if isinstance(raw_citations, list):
         for item in raw_citations:
@@ -79,8 +81,13 @@ def _parse_chat_completion(data: dict[str, Any], *, model_id: str, model_version
                 cid = str(item.get("citation_id") or "")
             else:
                 cid = str(item or "")
-            if cid:
+            if cid and cid not in seen_citations:
+                seen_citations.add(cid)
                 citations.append(AnswerCitation(cid))
+    for cid in _extract_text_citation_ids(text):
+        if cid not in seen_citations:
+            seen_citations.add(cid)
+            citations.append(AnswerCitation(cid))
     return AnswerGeneration(
         text=text,
         citations=tuple(citations),
@@ -88,6 +95,12 @@ def _parse_chat_completion(data: dict[str, Any], *, model_id: str, model_version
         model_version=model_version,
         prompt_version=prompt_version,
     )
+
+
+def _extract_text_citation_ids(text: str) -> list[str]:
+    # Accept the citation ids emitted by build_retrieve_response, while leaving
+    # allowlist enforcement to validate_generation_citations.
+    return re.findall(r"\[(cit_[A-Za-z0-9_-]+)\]", text)
 
 
 __all__ = ["OpenAICompatibleAnswerGenerator"]

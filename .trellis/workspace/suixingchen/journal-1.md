@@ -1209,3 +1209,36 @@ Validated /answer on the real ASKO/HISENSE PDF KB with SiliconFlow embeddings/re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: DeepSeek answer budget citation compliance
+
+**Date**: 2026-05-20
+**Task**: DeepSeek answer budget citation compliance
+**Branch**: `codex/deepseek-answer-budget-citation-compliance`
+
+### Summary
+
+Raised the production-provider DeepSeek answer budget to 1024, strengthened answer prompt citation instructions, extracted bracketed cit_* ids from OpenAI-compatible answer text, and kept allowlist validation for invented citations.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f6f960c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

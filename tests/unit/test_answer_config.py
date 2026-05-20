@@ -35,3 +35,11 @@ answer:
     assert cfg.answer.model_id == "gpt-test"
     assert cfg.answer.api_key_env == "ANSWER_KEY"
     assert cfg.answer.max_output_tokens == 123
+
+
+def test_production_provider_profile_uses_deepseek_safe_answer_budget():
+    cfg = load_config("examples/config/production-provider-verification.yaml")
+
+    assert cfg.answer.provider == "openai_compatible"
+    assert cfg.answer.model_id == "deepseek-v4-flash"
+    assert cfg.answer.max_output_tokens == 1024

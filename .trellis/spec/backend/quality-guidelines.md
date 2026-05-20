@@ -251,6 +251,61 @@ for batch in batches:
     client.upsert(collection_name=collection, points=batch)
 ```
 
+## Scenario: Answer Citation Compliance
+
+### 1. Scope / Trigger
+
+- Trigger: OpenAI-compatible answer providers may return citation ids in generated answer text instead of structured `message.citations`.
+
+### 2. Signatures
+
+- `build_answer_prompt(question, retrieve_payload, prompt_version) -> AnswerPrompt`
+- `OpenAICompatibleAnswerGenerator.generate(context: AnswerRequestContext) -> AnswerGeneration`
+- `validate_generation_citations(generation, allowed_citation_ids) -> AnswerGeneration`
+
+### 3. Contracts
+
+- The answer prompt must tell providers to use exact `citation_id` values in square brackets, e.g. `[cit_001]`.
+- OpenAI-compatible parsing may extract bracketed `cit_*` ids from answer text.
+- Extracted ids are candidates only; `validate_generation_citations` must still drop any id not present in `AnswerPrompt.allowed_citation_ids`.
+- Provider profiles for reasoning-style answer models may set a larger `answer.max_output_tokens` than the global default; the production-provider DeepSeek profile uses 1024.
+- Committed reports and logs must not include raw generated answer text, raw retrieval snippets, provider bodies, or secrets.
+
+### 4. Validation & Error Matrix
+
+- Provider returns structured citations -> keep them if allowlisted.
+- Provider returns bracketed text citations -> extract them, then validate against the allowlist.
+- Provider returns invented citation ids -> drop them and emit `answer_dropped_invalid_citations`.
+- Provider returns empty content -> `AnswerGenerationError`, degraded by `/answer` as `answer.kind=error`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: answer text contains `[cit_001]`; retrieve allowed ids include `cit_001`; final answer citations include `cit_001`.
+- Base: provider returns no citations; answer may still be non-empty but citation count is zero and remains a quality gap.
+- Bad: accepting arbitrary bracketed ids without checking the retrieve allowlist.
+
+### 6. Tests Required
+
+- Prompt test asserts square-bracket citation instructions are present.
+- OpenAI-compatible parser test extracts citation ids from text-only responses.
+- Validation test drops unknown text-extracted ids.
+- Profile config test guards DeepSeek-safe answer budget.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+citations = [AnswerCitation(cid) for cid in re.findall(r"\\[(.*?)\\]", text)]
+```
+
+#### Correct
+
+```python
+generation = parse_provider_response(data)
+generation = validate_generation_citations(generation, prompt.allowed_citation_ids)
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger
