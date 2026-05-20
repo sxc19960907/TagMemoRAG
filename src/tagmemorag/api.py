@@ -1258,7 +1258,12 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
     rerank_log_entry: dict | None = None
     if rerank_active:
         guard = BudgetGuard(plan)
-        rerank_outcome = _rerank_dispatcher().rerank(plan, list(execution.results), guard)
+        rerank_outcome = _rerank_dispatcher().rerank(
+            plan,
+            list(execution.results),
+            guard,
+            query_text=request.question,
+        )
         if rerank_outcome.warnings:
             warnings.extend(rerank_outcome.warnings)
         candidates_used = _reorder_results(execution.results, rerank_outcome)

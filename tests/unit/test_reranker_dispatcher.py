@@ -173,6 +173,20 @@ def test_dispatcher_calls_vendor_and_calibrates():
     assert result.items[-1].calibrated_score == 0.0
 
 
+def test_dispatcher_uses_runtime_query_text_without_storing_raw_query():
+    s = _enabled_settings()
+    fake = _FakeReranker()
+    d = RerankerDispatcher(s, primary=fake)
+    plan = _plan_with_tier(s, "tier1")
+    guard = BudgetGuard(plan)
+
+    d.rerank(plan, _candidates(), guard, query_text="E21 washer cannot drain")
+
+    assert fake.calls[0]["query"] == "E21 washer cannot drain"
+    assert not hasattr(plan, "query_text")
+    assert "E21 washer cannot drain" not in plan.to_basic_dict()["query_hash"]
+
+
 def test_dispatcher_passes_instruction_from_plan():
     s = _enabled_settings()
     fake = _FakeReranker()

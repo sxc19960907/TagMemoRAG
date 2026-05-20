@@ -172,6 +172,8 @@ class RerankerDispatcher:
         plan: "QueryPlan",
         candidates: list,
         guard: "BudgetGuard",
+        *,
+        query_text: str = "",
     ) -> RerankResult:
         s = self.settings.reranker
 
@@ -223,7 +225,7 @@ class RerankerDispatcher:
         t0 = time.perf_counter()
         try:
             outcome: RerankerOutcome = self.primary.rerank(
-                query=getattr(plan, "query_text", "") or "",
+                query=str(query_text or ""),
                 docs=docs,
                 instruction=instruction,
                 budget_ms=budget_ms,

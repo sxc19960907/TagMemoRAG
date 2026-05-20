@@ -69,6 +69,8 @@ def _parse_chat_completion(data: dict[str, Any], *, model_id: str, model_version
         text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
     else:
         text = str(content or "")
+    if not text.strip():
+        raise AnswerGenerationError("answer generation response missing content")
     citations = []
     raw_citations = message.get("citations") or data.get("citations") or []
     if isinstance(raw_citations, list):
