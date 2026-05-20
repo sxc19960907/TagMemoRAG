@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from urllib.error import HTTPError
+from urllib.error import URLError
 
 import numpy as np
 import pytest
@@ -127,6 +128,64 @@ def test_http_embedder_wraps_http_error(monkeypatch):
 
     assert exc.value.code == "EMBEDDING_FAILED"
     assert exc.value.detail["status_code"] == 429
+
+
+def test_http_embedder_splits_failed_multi_item_batch(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_KEY", "secret")
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        body = json.loads(request.data.decode("utf-8"))
+        inputs = body["input"]
+        calls.append(inputs)
+        if len(inputs) == 4:
+            raise HTTPError(request.full_url, 413, "payload too large", hdrs=None, fp=None)
+        return _FakeResponse(
+            {
+                "data": [
+                    {"index": index, "embedding": [float(len(text)), float(index + 1)]}
+                    for index, text in enumerate(inputs)
+                ]
+            }
+        )
+
+    monkeypatch.setattr("tagmemorag.embedder.urlopen", fake_urlopen)
+    embedder = HttpEmbedder("model", api_key_env="EMBEDDING_KEY", batch_size=4, normalize=False)
+
+    vectors = embedder.encode_batch(["a", "bb", "ccc", "dddd"])
+
+    assert calls == [["a", "bb", "ccc", "dddd"], ["a", "bb"], ["ccc", "dddd"]]
+    np.testing.assert_allclose(
+        vectors,
+        np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 1.0], [4.0, 2.0]], dtype=np.float32),
+    )
+
+
+def test_http_embedder_failure_detail_is_sanitized_after_split(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_KEY", "secret")
+    sensitive_text = "ASKO private drain procedure raw manual text"
+
+    def fake_urlopen(request, timeout):
+        raise URLError("provider timeout with request object")
+
+    monkeypatch.setattr("tagmemorag.embedder.urlopen", fake_urlopen)
+    embedder = HttpEmbedder("model", api_key_env="EMBEDDING_KEY", batch_size=2)
+
+    with pytest.raises(EmbeddingError) as exc:
+        embedder.encode_batch([sensitive_text, "short"])
+
+    detail = exc.value.detail
+    assert detail["endpoint"] == "https://api.siliconflow.cn/v1/embeddings"
+    assert detail["error_type"] == "URLError"
+    assert detail["batch_size"] == 1
+    assert detail["min_text_chars"] in {len(sensitive_text), len("short")}
+    assert detail["max_text_chars"] in {len(sensitive_text), len("short")}
+    assert detail["total_text_chars"] in {len(sensitive_text), len("short")}
+    assert detail["split_attempted"] is True
+
+    serialized_detail = json.dumps(detail, ensure_ascii=False)
+    assert sensitive_text not in serialized_detail
+    assert "secret" not in serialized_detail
 
 
 def test_create_embedder_http_provider(monkeypatch):

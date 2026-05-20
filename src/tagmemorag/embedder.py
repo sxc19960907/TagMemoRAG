@@ -105,7 +105,7 @@ class HttpEmbedder:
     def encode_batch(self, texts: Sequence[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
-        batches = [self._request_batch(texts[i : i + self.batch_size]) for i in range(0, len(texts), self.batch_size)]
+        batches = [self._request_batch_with_split(texts[i : i + self.batch_size]) for i in range(0, len(texts), self.batch_size)]
         vecs = np.vstack(batches).astype(np.float32)
         if self.normalize:
             norms = np.linalg.norm(vecs, axis=1, keepdims=True)
@@ -115,7 +115,23 @@ class HttpEmbedder:
     def encode_query(self, text: str) -> np.ndarray:
         return self.encode_batch([text])[0]
 
-    def _request_batch(self, texts: Sequence[str]) -> np.ndarray:
+    def _request_batch_with_split(self, texts: Sequence[str]) -> np.ndarray:
+        try:
+            return self._request_batch(texts, split_attempted=False)
+        except EmbeddingError as exc:
+            if len(texts) <= 1:
+                raise
+            midpoint = len(texts) // 2
+            try:
+                left = self._request_batch_with_split(texts[:midpoint])
+                right = self._request_batch_with_split(texts[midpoint:])
+            except EmbeddingError as nested:
+                nested.detail["split_attempted"] = True
+                raise
+            exc.detail["split_attempted"] = True
+            return np.vstack([left, right]).astype(np.float32)
+
+    def _request_batch(self, texts: Sequence[str], *, split_attempted: bool = False) -> np.ndarray:
         payload: dict[str, object] = {
             "model": self.model_name,
             "input": list(texts),
@@ -139,20 +155,37 @@ class HttpEmbedder:
                 response_body = response.read().decode("utf-8")
                 response_payload = json.loads(response_body)
         except HTTPError as exc:
-            detail = {"status_code": exc.code, "endpoint": self.endpoint}
-            try:
-                error_body = exc.read().decode("utf-8")
-                if error_body:
-                    detail["body"] = error_body[:500]
-            except Exception:
-                pass
+            detail = self._failure_detail(texts, split_attempted=split_attempted, status_code=exc.code)
             raise EmbeddingError("Embedding API returned an error.", detail) from exc
         except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             raise EmbeddingError(
                 "Embedding API request failed.",
-                {"endpoint": self.endpoint, "error_type": type(exc).__name__, "message": str(exc)},
+                self._failure_detail(texts, split_attempted=split_attempted, error_type=type(exc).__name__),
             ) from exc
         return _extract_embeddings(response_payload, expected_count=len(texts))
+
+    def _failure_detail(
+        self,
+        texts: Sequence[str],
+        *,
+        split_attempted: bool,
+        status_code: int | None = None,
+        error_type: str | None = None,
+    ) -> dict[str, object]:
+        lengths = [len(text) for text in texts]
+        detail: dict[str, object] = {
+            "endpoint": self.endpoint,
+            "batch_size": len(texts),
+            "min_text_chars": min(lengths) if lengths else 0,
+            "max_text_chars": max(lengths) if lengths else 0,
+            "total_text_chars": sum(lengths),
+            "split_attempted": split_attempted,
+        }
+        if status_code is not None:
+            detail["status_code"] = status_code
+        if error_type is not None:
+            detail["error_type"] = error_type
+        return detail
 
 
 def create_embedder(
