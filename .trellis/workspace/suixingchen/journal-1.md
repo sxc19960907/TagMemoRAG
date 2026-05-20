@@ -1143,3 +1143,36 @@ Hardened OpenAI-compatible HTTP embedding rebuilds by recursively splitting fail
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: Production provider real PDF rerun
+
+**Date**: 2026-05-20
+**Task**: Production provider real PDF rerun
+**Branch**: `codex/production-provider-real-pdf-rerun`
+
+### Summary
+
+Reran the production-provider profile on real ASKO/HISENSE PDFs with local MinIO/Qdrant and SiliconFlow embeddings. Confirmed embedding succeeds, diagnosed Qdrant 32MB JSON payload failure, added batched Qdrant upserts, and verified rebuild, Qdrant inspect, and search smoke pass.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dac262b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
