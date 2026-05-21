@@ -19,6 +19,9 @@ from .plan import QueryPlan
 class BudgetGuard:
     def __init__(self, plan: QueryPlan):
         self.plan = plan
+        self._iterations_used = 0
+        self._agent_tokens_used = 0
+        self._tool_calls_used = 0
 
     def remaining_ms(self) -> int:
         deadline = self.plan.budget.deadline_at
@@ -29,6 +32,33 @@ class BudgetGuard:
 
     def exhausted(self) -> bool:
         return self.remaining_ms() <= 0
+
+    def iterations_left(self) -> int:
+        return max(0, int(self.plan.budget.max_iterations) - self._iterations_used)
+
+    def tokens_left(self) -> int:
+        return max(0, int(self.plan.budget.max_agent_tokens) - self._agent_tokens_used)
+
+    def tool_calls_left(self) -> int:
+        return max(0, int(self.plan.budget.max_tool_calls) - self._tool_calls_used)
+
+    def consume_iteration(self, count: int = 1) -> None:
+        self._iterations_used += max(0, int(count))
+
+    def consume_tokens(self, count: int) -> None:
+        self._agent_tokens_used += max(0, int(count))
+
+    def consume_tool_call(self, count: int = 1) -> None:
+        self._tool_calls_used += max(0, int(count))
+
+    def agent_exhausted(self) -> tuple[bool, str | None]:
+        if self.iterations_left() <= 0:
+            return True, "max_iterations"
+        if self.tokens_left() <= 0:
+            return True, "max_agent_tokens"
+        if self.tool_calls_left() <= 0:
+            return True, "max_tool_calls"
+        return False, None
 
 
 __all__ = ["BudgetGuard"]

@@ -157,6 +157,7 @@ def run_eval(
             "search": {"top_k": resolved_top_k, **search_params},
             "storage": storage_snapshot,
             "reuse_built_kb": reuse_built_kb,
+            "build_ids": {kb_name: states[kb_name].build_id for kb_name in sorted(states)},
         },
     )
 

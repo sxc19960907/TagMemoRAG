@@ -12,6 +12,8 @@ from tagmemorag.indexgen.meta import write_meta
 from tagmemorag.replay.generation import load_generation_state
 from tagmemorag.replay.models import ReplayPlan
 from tagmemorag.replay.runner import replay_plan, replay_plans
+from tagmemorag.agentic.state import GradeOutcome, StepRecord, ToolObservation
+from tagmemorag.queryplan import PlanLog
 from tagmemorag.storage.json_anchor import JsonAnchorStore
 from tagmemorag.storage.json_graph import JsonGraphStore
 from tagmemorag.storage.npz_vector import NpzVectorStore
@@ -150,3 +152,40 @@ def test_replay_plan_records_per_case_errors(replay_settings):
 
     assert result.query_replayed is False
     assert "offline boom" in result.error
+
+
+def test_replay_plan_uses_agentic_steps_when_present(replay_settings):
+    _seed_generation(replay_settings)
+    state = load_generation_state("kb-replay", replay_settings, 1)
+    plan = _plan("steam")
+    plan_log = PlanLog(plan.kb_name, replay_settings)
+    plan_log.append_step_async(
+        plan.plan_id,
+        StepRecord(
+            step_idx=0,
+            tool="retrieve",
+            args={"query": "steam"},
+            observation=ToolObservation({"result_count": 1}),
+            grade=GradeOutcome(signal="no_signal", reason="c1_stub"),
+            decision_source="rule",
+            rationale="initial_retrieve",
+            ts="2026-05-21T00:00:00Z",
+        ),
+    )
+    plan_log._writer.flush()
+
+    class BrokenEmbedder:
+        def encode_query(self, text):
+            raise AssertionError("classic replay should not run")
+
+    result = replay_plan(
+        plan=plan,
+        state=state,
+        settings=replay_settings,
+        generation=1,
+        embedder=BrokenEmbedder(),
+    )
+
+    assert result.query_replayed is True
+    assert result.result_count == 1
+    assert result.error == ""

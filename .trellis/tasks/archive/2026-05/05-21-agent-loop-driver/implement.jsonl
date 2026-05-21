@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-21-agent-loop-driver/prd.md", "reason": "C1 implementation scope, requirements, and out-of-scope boundaries."}
+{"file": ".trellis/tasks/05-21-agent-loop-driver/design.md", "reason": "Module layout and contracts for agentic state, tools, plan_steps, and replay."}
+{"file": ".trellis/tasks/05-21-agentic-rag-mode-toggle/design.md", "reason": "Parent decisions D1-D7 for agentic mode toggle architecture."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Current backend architecture, QueryPlan/Budget contracts, and agentic foundation note."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQLite persistence additions must remain additive and safe."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and layer-boundary rules for backend changes."}

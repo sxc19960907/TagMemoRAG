@@ -5,7 +5,7 @@
 ```yaml
 version: 2.0
 supersedes: .trellis/tasks/archive/2026-05/05-17-production-rag-architecture/design.md
-last_updated: 2026-05-17
+last_updated: 2026-05-21
 owner: suixingchen
 status: living
 related_tasks_archive: 05-17-architecture-v2
@@ -72,6 +72,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | Chunker (structure + sentence + table + hierarchical) | ✅ | Phase 2 production chunker. |
 | Text / lexical / metadata / graph / asset indexes | ✅ | Phase 2.5 indexing strategy; Qdrant payload schema versioned. |
 | QueryPlan + Budget layer | ✅ | T2 shipped 2026-05-18; rule-based planner + per-KB SQLite plan log + early-exit Budget. |
+| Agentic loop driver foundation | ✅ | C1 shipped 2026-05-21; isolated default-off `agentic/` package, `plan_steps` trajectory table, tool registry, stub retrieve/grade/rewrite/final tools, and replay branch. Public mode/config/API wiring remains deferred to the surface task. |
 | Retrieval Executor | ✅ | Hybrid (vector + lexical + metadata + graph). |
 | Reranker Tier | ✅ | T3 shipped 2026-05-18; SF Qwen3-Reranker-0.6B Tier-1; fallback to noop. Dormant by default (Settings.reranker.enabled=False). |
 | Evidence Builder (text) | ✅ | Phase 3 text evidence with citations. |

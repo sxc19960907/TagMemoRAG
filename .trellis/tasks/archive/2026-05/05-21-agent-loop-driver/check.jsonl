@@ -1,0 +1,8 @@
+{"file": ".trellis/tasks/05-21-agent-loop-driver/prd.md", "reason": "Primary acceptance criteria and C1 scope boundary for quality review."}
+{"file": ".trellis/tasks/05-21-agent-loop-driver/design.md", "reason": "Agentic package contracts, plan_steps schema, and default-off design."}
+{"file": ".trellis/tasks/05-21-agent-loop-driver/implement.md", "reason": "Implementation order and validation checklist for the C1 foundation."}
+{"file": ".trellis/tasks/05-21-agentic-rag-mode-toggle/design.md", "reason": "Parent D1-D7 decisions that C1 must preserve."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality check entrypoint and applicable project rules."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Living architecture contract for QueryPlan, Budget, and the new agentic foundation boundary."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Persistence safety rules for the additive SQLite plan_steps table."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, layer boundary, and provenance requirements."}

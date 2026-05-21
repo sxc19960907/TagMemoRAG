@@ -34,6 +34,7 @@ def test_run_eval_uses_isolated_storage_by_default(tmp_path, test_config):
     assert report.summary.passed
     assert (eval_data_dir / "default" / "meta.json").exists()
     assert not (Path(test_config.storage.data_dir) / "default").exists()
+    assert report.config_snapshot["build_ids"]["default"]
 
 
 def test_run_eval_product_manual_suite_is_reproducible(tmp_path, test_config):

@@ -50,6 +50,16 @@ def replay_plan(
 ) -> ReplayCaseResult:
     started = time.perf_counter()
     try:
+        agentic_verdict = _agentic_verdict_if_present(plan, settings)
+        if agentic_verdict is not None:
+            return ReplayCaseResult(
+                plan_id=plan.plan_id,
+                generation=int(generation),
+                query_replayed=agentic_verdict.overall == "match",
+                result_count=len(agentic_verdict.steps),
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                error="" if agentic_verdict.overall == "match" else f"agentic_replay:{agentic_verdict.overall}",
+            )
         query_vec = embedder.encode_query(plan.query)
         top_k = int(plan.budget.get("max_evidence") or settings.search.top_k or 5)
         execution = execute_search(
@@ -101,6 +111,16 @@ def replay_plan(
             latency_ms=(time.perf_counter() - started) * 1000.0,
             error=f"{type(exc).__name__}: {exc}",
         )
+
+
+def _agentic_verdict_if_present(plan: ReplayPlan, settings: "Settings"):
+    from ..agentic.replay import replay_steps
+    from ..queryplan import PlanLog
+
+    log = PlanLog(plan.kb_name, settings)
+    if not log.has_steps(plan.plan_id):
+        return None
+    return replay_steps(plan.plan_id, log.load_steps(plan.plan_id))
 
 
 __all__ = ["replay_plan", "replay_plans"]

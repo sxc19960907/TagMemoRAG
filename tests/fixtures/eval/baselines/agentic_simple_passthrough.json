@@ -1,0 +1,216 @@
+{
+  "build_id": "20260521021015332422",
+  "build_ids": {
+    "default": "20260521021015332422"
+  },
+  "cases": [
+    {
+      "actual_top_k": [
+        {
+          "header": "冷藏室温度",
+          "matched_expectations": [],
+          "node_id": 26,
+          "rank": 1,
+          "score": 0.535942,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "蒸汽功能",
+          "matched_expectations": [],
+          "node_id": 6,
+          "rank": 2,
+          "score": 0.534628,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "制作咖啡",
+          "matched_expectations": [],
+          "node_id": 5,
+          "rank": 3,
+          "score": 0.449073,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "Compressor Noise",
+          "matched_expectations": [],
+          "node_id": 27,
+          "rank": 4,
+          "score": 0.32781,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "Drum Clean Maintenance",
+          "matched_expectations": [],
+          "node_id": 33,
+          "rank": 5,
+          "score": 0.272456,
+          "source_file": "product_manuals/washer/washer_wm8.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-simple-steam",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 0.5,
+        "precision_at_k": 0.2,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    },
+    {
+      "actual_top_k": [
+        {
+          "header": "水箱安装",
+          "matched_expectations": [],
+          "node_id": 3,
+          "rank": 1,
+          "score": 0.643193,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "Compressor Noise",
+          "matched_expectations": [],
+          "node_id": 27,
+          "rank": 2,
+          "score": 0.557773,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "冷藏室温度",
+          "matched_expectations": [],
+          "node_id": 26,
+          "rank": 3,
+          "score": 0.530183,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "Door Alarm",
+          "matched_expectations": [],
+          "node_id": 28,
+          "rank": 4,
+          "score": 0.390441,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "电源连接",
+          "matched_expectations": [],
+          "node_id": 2,
+          "rank": 5,
+          "score": 0.347979,
+          "source_file": "coffee_machine.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-simple-water-tank",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.2,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    },
+    {
+      "actual_top_k": [
+        {
+          "header": "E01 不出咖啡",
+          "matched_expectations": [],
+          "node_id": 12,
+          "rank": 1,
+          "score": 0.834811,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "制作咖啡",
+          "matched_expectations": [],
+          "node_id": 5,
+          "rank": 2,
+          "score": 0.597085,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "洗衣机震动",
+          "matched_expectations": [],
+          "node_id": 34,
+          "rank": 3,
+          "score": 0.459679,
+          "source_file": "product_manuals/washer/washer_wm8.md"
+        },
+        {
+          "header": "蒸汽功能",
+          "matched_expectations": [],
+          "node_id": 6,
+          "rank": 4,
+          "score": 0.417959,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "E05 蒸汽异常",
+          "matched_expectations": [],
+          "node_id": 13,
+          "rank": 5,
+          "score": 0.368817,
+          "source_file": "coffee_machine.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-simple-e01",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.2,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    }
+  ],
+  "docs": "tests/fixtures",
+  "generated_at": "2026-05-21T00:00:00Z",
+  "kb_names": [
+    "default"
+  ],
+  "mode": "classic",
+  "model": {
+    "dim": 64,
+    "name": "hashing",
+    "provider": "hashing"
+  },
+  "schema": "agentic_baseline.v1",
+  "search": {
+    "aggregate": "max",
+    "amplitude_cutoff": 0.01,
+    "decay": 0.7,
+    "lexical_boost": 0.2,
+    "lexical_candidate_k": 32,
+    "lexical_enabled": true,
+    "lexical_exact_code_boost": 0.15,
+    "lexical_min_token_chars": 2,
+    "lexical_model_boost": 0.12,
+    "lexical_source_k": 3,
+    "metadata_field_boost": 0.05,
+    "metadata_narrowing_brand_policy": "boost_if_not_unique",
+    "metadata_narrowing_category_policy": "hard_filter_product_manual",
+    "metadata_narrowing_enabled": true,
+    "metadata_narrowing_min_candidates": 1,
+    "source_k": 3,
+    "steps": 3,
+    "tag_boost": 0.03,
+    "top_k": 5
+  },
+  "suite": "tests/fixtures/eval/agentic_simple_passthrough.jsonl",
+  "summary": {
+    "cases": 3,
+    "hit_at_k": 1.0,
+    "mrr": 0.833333,
+    "passed": true,
+    "precision_at_k": 0.2,
+    "recall_at_k": 1.0
+  },
+  "top_k": 5
+}

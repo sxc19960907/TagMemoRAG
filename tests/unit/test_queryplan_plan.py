@@ -9,6 +9,7 @@ import pytest
 
 from tagmemorag.queryplan import (
     Budget,
+    BudgetGuard,
     Intent,
     QueryPlan,
     make_deadline_at,
@@ -66,6 +67,42 @@ def test_budget_from_dict_handles_missing_fields():
     assert b.rerank_tier == "off"
     assert b.max_evidence == 8
     assert b.allow_external_reranker is True
+    assert b.max_iterations == 3
+    assert b.max_agent_tokens == 4096
+    assert b.max_tool_calls == 12
+
+
+def test_budget_agentic_fields_serialize_only_when_non_default():
+    default_encoded = _budget().to_dict()
+    assert "max_iterations" not in default_encoded
+    assert "max_agent_tokens" not in default_encoded
+    assert "max_tool_calls" not in default_encoded
+
+    encoded = _budget(max_iterations=4, max_agent_tokens=2048, max_tool_calls=9).to_dict()
+    assert encoded["max_iterations"] == 4
+    assert encoded["max_agent_tokens"] == 2048
+    assert encoded["max_tool_calls"] == 9
+    assert Budget.from_dict(encoded).max_iterations == 4
+
+
+def test_budget_guard_tracks_agentic_counters():
+    guard = BudgetGuard(_plan(budget=_budget(max_iterations=2, max_agent_tokens=10, max_tool_calls=3)))
+
+    assert guard.iterations_left() == 2
+    assert guard.tokens_left() == 10
+    assert guard.tool_calls_left() == 3
+    assert guard.agent_exhausted() == (False, None)
+
+    guard.consume_iteration()
+    guard.consume_tokens(4)
+    guard.consume_tool_call(2)
+
+    assert guard.iterations_left() == 1
+    assert guard.tokens_left() == 6
+    assert guard.tool_calls_left() == 1
+
+    guard.consume_iteration()
+    assert guard.agent_exhausted() == (True, "max_iterations")
 
 
 def test_budget_is_frozen():
