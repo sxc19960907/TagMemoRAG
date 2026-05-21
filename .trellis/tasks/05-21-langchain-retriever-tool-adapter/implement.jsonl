@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/capability-audit.md", "reason": "Retriever and agentic adapter gaps."}
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/library-reuse-matrix.md", "reason": "LangChain retriever/tool adapter recommendation."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "QueryPlan/PlanLog and retrieval invariants."}
+{"file": ".codebase-memory/adr.md", "reason": "Self-built agentic loop decision and adapter boundary."}

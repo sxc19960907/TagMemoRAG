@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/capability-audit.md", "reason": "Parent audit evidence and capability gaps."}
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/library-reuse-matrix.md", "reason": "LangChain loader/splitter reuse recommendation."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Chunk identity, parser, storage, and replay invariants."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Dependency and eval-gate discipline."}

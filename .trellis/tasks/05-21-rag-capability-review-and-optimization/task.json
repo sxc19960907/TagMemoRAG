@@ -1,0 +1,32 @@
+{
+  "id": "rag-capability-review-and-optimization",
+  "name": "rag-capability-review-and-optimization",
+  "title": "RAG Capability Review and Optimization",
+  "description": "Parent task to reassess TagMemoRAG end-to-end RAG capability after the agentic MVP: identify optimization gaps, library/framework reuse opportunities such as LangChain integrations, validation gates, and child task roadmap.",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "suixingchen",
+  "assignee": "suixingchen",
+  "createdAt": "2026-05-21",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "codex/agent-loop-driver",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-21-langchain-loader-splitter-adapter",
+    "05-21-rag-answer-quality-diagnostics",
+    "05-21-langchain-retriever-tool-adapter",
+    "05-21-agentic-production-tool-wiring",
+    "05-21-prompt-context-pack-quality-review"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

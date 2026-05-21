@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend source-of-truth and pre-development checklist."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Current RAG capability map and known architectural gaps."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Default-off, testing, dependency, and forbidden-pattern guidance."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and reuse thinking guide index."}
+{"file": "README.md", "reason": "User-facing feature surface and operational documentation."}

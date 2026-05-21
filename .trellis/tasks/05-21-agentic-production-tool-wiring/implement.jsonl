@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-rag-mode-toggle/prd.md", "reason": "Agentic parent requirements and eval slices."}
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/capability-audit.md", "reason": "Agentic productionization gap."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Agentic, QueryPlan, retrieval, and answer contracts."}
+{"file": ".codebase-memory/adr.md", "reason": "Self-built agent loop replay decision."}
