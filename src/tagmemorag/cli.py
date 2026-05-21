@@ -118,6 +118,15 @@ def main(argv: list[str] | None = None) -> int:
     config_validate.add_argument("--config", default="config.yaml")
     config_validate.add_argument("--format", choices=["json"], default="json")
 
+    langchain_cmd = sub.add_parser("langchain")
+    langchain_sub = langchain_cmd.add_subparsers(dest="langchain_command", required=True)
+    langchain_compare = langchain_sub.add_parser("compare")
+    langchain_compare.add_argument("--file", required=True)
+    langchain_compare.add_argument("--root-dir", default=None)
+    langchain_compare.add_argument("--max-chars", type=int, default=500)
+    langchain_compare.add_argument("--min-chars", type=int, default=50)
+    langchain_compare.add_argument("--overlap-chars", type=int, default=0)
+
     residuals = sub.add_parser("retrain-residuals")
     residuals.add_argument("--kb", default="default")
     residuals.add_argument("--config", default="config.yaml")
@@ -446,6 +455,24 @@ def main(argv: list[str] | None = None) -> int:
         report = validate_config(args.config)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
         return 1 if report.status == "failed" else 0
+    if args.command == "langchain" and args.langchain_command == "compare":
+        from .langchain_adapter import LangChainAdapterUnavailable, LangChainParseConfig, compare_langchain_to_native
+
+        config = LangChainParseConfig(
+            max_chars=args.max_chars,
+            min_chars=args.min_chars,
+            overlap_chars=args.overlap_chars,
+        )
+        try:
+            report = compare_langchain_to_native(args.file, config=config, root_dir=args.root_dir)
+        except LangChainAdapterUnavailable as exc:
+            print(f"langchain compare error: {exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"langchain compare error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0
     if args.command == "retrain-residuals":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

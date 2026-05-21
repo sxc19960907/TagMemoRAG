@@ -2,7 +2,8 @@
 
 ## Goal
 
-Evaluate optional LangChain loaders/text splitters behind an adapter while preserving chunk identity, metadata, and eval gates. Planning only until approved.
+Evaluate optional LangChain loaders/text splitters behind an adapter while
+preserving chunk identity, metadata, and eval gates.
 
 ## Requirements
 
@@ -15,13 +16,20 @@ Evaluate optional LangChain loaders/text splitters behind an adapter while prese
 
 ## Acceptance Criteria
 
-- [ ] Optional dependency is isolated behind an extra or adapter boundary.
-- [ ] Fixture comparison covers Markdown, TXT, PDF, and at least one new
+- [x] Optional dependency is isolated behind an extra or adapter boundary.
+- [x] Fixture comparison covers Markdown, TXT, PDF, and at least one new
       loader type if added.
-- [ ] `coffee.jsonl` and `product_manuals.jsonl` gates are named before
+- [x] `coffee.jsonl` and `product_manuals.jsonl` gates are named before
       implementation.
-- [ ] No raw text leakage in logs/debug artifacts.
-- [ ] Rollback is deleting the adapter and optional dependency.
+- [x] No raw text leakage in logs/debug artifacts.
+- [x] Rollback is deleting the adapter and optional dependency.
+
+## Completion Notes
+
+- Implemented as optional `langchain` extra and `tagmemorag.langchain_adapter`.
+- Added `tagmemorag langchain compare` for sanitized native-vs-LangChain
+  chunk statistics.
+- Default parser/chunker and rebuild paths remain native.
 
 ## Notes
 
