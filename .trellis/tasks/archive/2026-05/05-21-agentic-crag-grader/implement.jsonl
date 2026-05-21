@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-21-agentic-crag-grader/prd.md", "reason": "C4 grader requirements and acceptance criteria."}
+{"file": ".trellis/tasks/05-21-agentic-crag-grader/design.md", "reason": "Signal derivation rules and GradeTool integration design."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-iterative-multihop/design.md", "reason": "C3 low-signal loop behavior that C4 feeds."}
+{"file": ".trellis/tasks/05-21-agentic-rag-mode-toggle/design.md", "reason": "Parent D6 CRAG-lite grader contract."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Living architecture and reranker read-side boundary."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and forbidden-pattern rules."}

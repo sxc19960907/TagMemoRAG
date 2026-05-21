@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from ..grader import CragGradeThresholds, grade_rerank_result
 from ..state import AgentStepCtx, GradeOutcome, ToolObservation
 
 
@@ -12,6 +13,7 @@ class GradeTool:
     dispatcher: Any
     candidates: list[Any]
     query_text: str = ""
+    thresholds: CragGradeThresholds = CragGradeThresholds()
 
     name: str = "grade"
     description: str = "Grade retrieved evidence using the configured reranker signal."
@@ -33,7 +35,7 @@ class GradeTool:
             ctx.guard,
             query_text=str(args.get("query") or self.query_text),
         )
-        grade = GradeOutcome(signal="no_signal", reason="c1_stub")
+        grade = grade_rerank_result(rerank_result, self.thresholds)
         return ToolObservation(
             payload={"grade": grade.to_dict(), "rerank": rerank_result.to_dict()},
             latency_ms=int((time.perf_counter() - started) * 1000),

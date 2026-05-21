@@ -8,11 +8,13 @@ from tagmemorag.agentic import AgentStepCtx, ToolObservation, run_agent
 from tagmemorag.agentic.decision import RuleOnlyDecisionGenerator
 from tagmemorag.agentic.router import RouteDecision
 from tagmemorag.agentic.tools import AgentToolRegistry
+from tagmemorag.agentic.tools.grade import GradeTool
 from tagmemorag.answer.base import AnswerCitation, AnswerGeneration
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.queryplan import Budget, Intent, PlanLog, QueryPlan
 from tagmemorag.queryplan.budget import BudgetGuard
 from tagmemorag.queryplan.plan_log import _reset_shared_writer_for_tests
+from tagmemorag.reranker.base import RerankResult, RerankResultItem
 
 
 def _plan(**kwargs) -> QueryPlan:
@@ -122,6 +124,57 @@ def _iterative_registry(signals=(("low", "water tank"), ("no_signal", "c3_done")
     for tool in (retrieve, grade, rewrite, final):
         registry.register(tool)
     return registry, retrieve, grade, rewrite, final
+
+
+class _RerankDispatcher:
+    def __init__(self, scores):
+        self.scores = list(scores)
+
+    def rerank(self, plan, candidates, guard, *, query_text=""):
+        scores = self.scores.pop(0)
+        if scores is None:
+            return RerankResult(
+                items=(),
+                truncated_chunk_ids=(),
+                vendor_used="noop",
+                cache_status="skipped",
+                latency_ms=0,
+            )
+        return RerankResult(
+            items=tuple(
+                RerankResultItem(chunk_id=f"c{idx}", raw_score=score, calibrated_score=score)
+                for idx, score in enumerate(scores)
+            ),
+            truncated_chunk_ids=(),
+            vendor_used="qwen",
+            cache_status="miss",
+            latency_ms=0,
+        )
+
+
+def _grade_tool_registry():
+    registry = AgentToolRegistry()
+    retrieve = _Tool("retrieve", {"results": []})
+    dispatcher = _RerankDispatcher([(0.1, 0.05), None])
+    grade = GradeTool(dispatcher, candidates=["c1"], query_text="q")
+    rewrite = _Tool("rewrite", {"query": "q low_score", "changed": True})
+    final = _Tool(
+        "final",
+        {
+            "answer": {
+                "kind": "answer",
+                "text": "ok",
+                "citations": [],
+                "model_id": "stub",
+                "model_version": "",
+                "prompt_version": "p1",
+                "warnings": [],
+            }
+        },
+    )
+    for tool in (retrieve, grade, rewrite, final):
+        registry.register(tool)
+    return registry, retrieve, dispatcher, rewrite, final
 
 
 def test_runs_retrieve_grade_then_final_on_no_signal_stub():
@@ -301,6 +354,36 @@ def test_low_signal_budget_exhaustion_returns_classic_fallback():
     assert grade.calls
     assert rewrite.calls
     assert not final.calls
+
+
+def test_grade_tool_low_signal_drives_iterative_loop():
+    registry, retrieve, dispatcher, rewrite, final = _grade_tool_registry()
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=8, max_tool_calls=8))
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+    )
+
+    assert result.answer.text == "ok"
+    assert [record.tool for record in result.state.history] == [
+        "retrieve",
+        "grade",
+        "rewrite",
+        "retrieve",
+        "grade",
+        "final",
+    ]
+    assert result.state.history[1].grade is not None
+    assert result.state.history[1].grade.signal == "low"
+    assert retrieve.calls[1][0] == {"query": "q low_score"}
+    assert not dispatcher.scores
+    assert rewrite.calls
+    assert final.calls
 
 
 def test_writes_one_step_record_per_tool(tmp_path: Path):

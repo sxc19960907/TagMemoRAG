@@ -187,12 +187,13 @@ def _call_tool(
     )
     obs = registry.get(name)(args, ctx)
     guard.consume_tokens(obs.tokens_consumed)
+    record_grade = _extract_grade(obs) if name == "grade" else grade
     record = _build_step_record(
         step_idx=len(state.history),
         tool=name,
         args=args,
         observation=obs,
-        grade=grade,
+        grade=record_grade,
         rationale=rationale,
     )
     state.append(record)

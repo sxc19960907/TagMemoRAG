@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-21-agentic-crag-grader/prd.md", "reason": "C4 acceptance criteria for review."}
+{"file": ".trellis/tasks/05-21-agentic-crag-grader/design.md", "reason": "Expected grading thresholds and no-touch boundaries."}
+{"file": ".trellis/tasks/05-21-agentic-crag-grader/implement.md", "reason": "Validation commands and no-surface-diff gate."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-iterative-multihop/implement.md", "reason": "C3 regression baseline."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec checklist entrypoint."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test coverage and forbidden-pattern checklist."}
