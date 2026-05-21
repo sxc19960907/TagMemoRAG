@@ -1628,3 +1628,44 @@ Made production-provider verify keep Docker startup failures visible, attach san
 
 - None - task complete
 
+
+
+## Session 43: Record live provider pilot verification
+
+**Date**: 2026-05-21
+**Task**: Record live provider pilot verification
+**Branch**: `codex/live-pilot-provider-verification`
+
+### Summary
+
+Ran the unified live production-provider pilot path with local Qdrant/MinIO, SiliconFlow embedding/reranker, and DeepSeek answer. Smoke passed with 185 embedded chunks, 185 Qdrant points, zero missing vectors, and cited DeepSeek answer output; pilot remained failed because SiliconFlow coffee eval recall_at_k was 0.738095 below the 0.75 pilot threshold. Recorded sanitized evidence and next corrective decision.
+
+### Main Changes
+
+- Created sanitized live pilot evidence at `docs/live-pilot-provider-verification.md`.
+- Confirmed check-only env/Docker/S3 gate passed without exposing secret values.
+- Recorded that final `--skip-docker` smoke passed all provider, rebuild, Qdrant, reranker, and answer stages.
+- Recorded the blocking pilot eval result: `coffee.jsonl` recall@K `0.738095` below the `0.75` pilot threshold.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `877d0f8` | (see git log) |
+
+### Testing
+
+- [OK] `uv run python -m tagmemorag production-provider verify --level pilot --check-only ...`
+- [OK] `uv run python -m tagmemorag production-provider verify --level pilot --skip-docker ...` completed and wrote reports; expected nonzero because pilot eval failed.
+- [OK] `uv run python -m tagmemorag eval run --config examples/config/production-provider-verification.yaml --suite tests/fixtures/eval/coffee.jsonl --docs tests/fixtures ...` reproduced the recall failure.
+- [OK] `uv run pytest tests/unit/test_production_provider_verify.py tests/unit/test_cli_production_provider_verify.py tests/unit/test_production_provider_smoke.py tests/unit/test_run_production_provider_smoke.py`
+- [OK] `python3 -m py_compile src/tagmemorag/production_provider_verify.py src/tagmemorag/production_pilot.py src/tagmemorag/production_provider_smoke.py`
+- [OK] privacy grep for secrets/raw answer/snippet patterns.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Inspect or reauthor SiliconFlow `coffee.jsonl` eval expectations, or choose a pilot owner-approved suite/threshold policy.

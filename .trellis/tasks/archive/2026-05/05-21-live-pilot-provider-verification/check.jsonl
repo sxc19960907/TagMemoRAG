@@ -1,0 +1,4 @@
+{"path":"docs/production-provider-smoke-runbook.md","reason":"Ensure live pilot evidence matches documented operator command semantics."}
+{"path":"docs/production-pilot-runbook.md","reason":"Ensure retained report summary follows report privacy and diagnosis policy."}
+{"path":"tests/unit/test_production_provider_verify.py","reason":"Regression coverage for unified verify orchestration."}
+{"path":"tests/unit/test_production_provider_smoke.py","reason":"Regression coverage for provider smoke stages summarized by pilot verification."}

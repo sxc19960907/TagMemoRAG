@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/index.md","reason":"Backend workflow and quality guidelines index for verification task."}
+{"path":"docs/production-provider-smoke-runbook.md","reason":"Unified production-provider verify command and Docker/provider semantics."}
+{"path":"docs/production-pilot-runbook.md","reason":"Pilot stage contract, thresholds, diagnosis policy, and report privacy."}
+{"path":"src/tagmemorag/production_provider_verify.py","reason":"Unified smoke+pilot orchestration implementation."}
+{"path":"src/tagmemorag/production_pilot.py","reason":"Pilot stage implementation and report schema."}
