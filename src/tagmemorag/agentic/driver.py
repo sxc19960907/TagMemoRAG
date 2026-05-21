@@ -34,20 +34,33 @@ def run_agent(
 ) -> AgentRunResult:
     state = AgentState(plan=plan, classic_fallback_answer=classic_fallback)
 
+    if not getattr(plan, "persist", True):
+        return _terminate_with_fallback(
+            state,
+            "private_kb_classic",
+            plan_log=None,
+            record_step=False,
+        )
+
     if router is not None:
         route = router.route(plan=plan, query_text=initial_query)
         _append_route_step(state, route, plan_log)
         if route.route in {"single_shot", "no_retrieval"}:
-            return _terminate_with_classic_fallback(state, f"route_{route.route}")
+            return _terminate_with_fallback(
+                state,
+                f"route_{route.route}",
+                plan_log=plan_log,
+                record_step=False,
+            )
 
     exhausted, reason = guard.agent_exhausted()
     if exhausted:
-        return _terminate_with_classic_fallback(state, reason or "agent_budget_exhausted")
+        return _terminate_with_fallback(state, reason or "agent_budget_exhausted", plan_log=plan_log)
 
     current_query = initial_query
     latest_grade: GradeOutcome | None = None
     while True:
-        fallback = _fallback_if_exhausted(state, guard)
+        fallback = _fallback_if_exhausted(state, guard, plan_log)
         if fallback is not None:
             return fallback
         retrieve_obs = _call_tool(
@@ -64,7 +77,7 @@ def run_agent(
         )
         state.last_retrieve_obs = retrieve_obs
 
-        fallback = _fallback_if_exhausted(state, guard)
+        fallback = _fallback_if_exhausted(state, guard, plan_log)
         if fallback is not None:
             return fallback
         grade_obs = _call_tool(
@@ -88,7 +101,7 @@ def run_agent(
         if decision != "rewrite":
             raise NotImplementedError("agentic non-rewrite decisions are owned by later child tasks")
 
-        fallback = _fallback_if_exhausted(state, guard)
+        fallback = _fallback_if_exhausted(state, guard, plan_log)
         if fallback is not None:
             return fallback
         rewrite_obs = _call_tool(
@@ -105,6 +118,9 @@ def run_agent(
         )
         current_query = str(rewrite_obs.payload.get("query") or current_query)
 
+    fallback = _fallback_if_exhausted(state, guard, plan_log)
+    if fallback is not None:
+        return fallback
     final_obs = _call_tool(
         "final",
         {},
@@ -134,11 +150,15 @@ def run_agent(
     return AgentRunResult(answer=state.finalize(), state=state)
 
 
-def _fallback_if_exhausted(state: AgentState, guard: BudgetGuard) -> AgentRunResult | None:
+def _fallback_if_exhausted(
+    state: AgentState,
+    guard: BudgetGuard,
+    plan_log: PlanLog | None,
+) -> AgentRunResult | None:
     exhausted, reason = guard.agent_exhausted()
     if not exhausted:
         return None
-    return _terminate_with_classic_fallback(state, reason or "agent_budget_exhausted")
+    return _terminate_with_fallback(state, reason or "agent_budget_exhausted", plan_log=plan_log)
 
 
 def _append_route_step(
@@ -248,9 +268,27 @@ def _rewrite_args(query: str, grade: GradeOutcome) -> dict[str, Any]:
     return args
 
 
-def _terminate_with_classic_fallback(state: AgentState, reason: str) -> AgentRunResult:
+def _terminate_with_fallback(
+    state: AgentState,
+    reason: str,
+    *,
+    plan_log: PlanLog | None = None,
+    record_step: bool = True,
+) -> AgentRunResult:
     if state.classic_fallback_answer is None:
         raise RuntimeError(f"agentic fallback unavailable: {reason}")
+    if record_step and getattr(state.plan, "persist", True):
+        record = _build_step_record(
+            step_idx=len(state.history),
+            tool="fallback",
+            args={},
+            observation=ToolObservation(payload={"reason": reason, "history_len": len(state.history)}),
+            grade=GradeOutcome(signal="no_signal", reason=reason),
+            rationale=f"fallback:{reason}",
+        )
+        state.append(record)
+        if plan_log is not None:
+            plan_log.append_step_async(state.plan.plan_id, record)
     return AgentRunResult(
         answer=state.classic_fallback_answer,
         state=state,

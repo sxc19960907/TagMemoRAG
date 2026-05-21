@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-21-agentic-budget-and-fallback/prd.md", "reason": "C5 budget/fallback requirements and acceptance criteria."}
+{"file": ".trellis/tasks/05-21-agentic-budget-and-fallback/design.md", "reason": "Unified fallback step, private-KB guard, and safe payload design."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-crag-grader/design.md", "reason": "C4 computed grade signals feeding budgeted loops."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-iterative-multihop/design.md", "reason": "C3 loop budget checkpoints."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Living architecture and private/persistence boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and no-leak logging/storage rules."}

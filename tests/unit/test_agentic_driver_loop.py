@@ -48,6 +48,16 @@ class _Tool:
         return ToolObservation(self.payload)
 
 
+class _TokenTool(_Tool):
+    def __init__(self, name, payload, tokens):
+        super().__init__(name, payload)
+        self.tokens = tokens
+
+    def __call__(self, args: dict, ctx: AgentStepCtx) -> ToolObservation:
+        self.calls.append((args, ctx.step_idx))
+        return ToolObservation(self.payload, tokens_consumed=self.tokens)
+
+
 class _GradeTool(_Tool):
     def __init__(self, signals):
         super().__init__("grade", {})
@@ -349,7 +359,7 @@ def test_low_signal_budget_exhaustion_returns_classic_fallback():
 
     assert result.answer is fallback
     assert result.fallback_reason == "max_iterations"
-    assert [record.tool for record in result.state.history] == ["retrieve", "grade", "rewrite"]
+    assert [record.tool for record in result.state.history] == ["retrieve", "grade", "rewrite", "fallback"]
     assert retrieve.calls
     assert grade.calls
     assert rewrite.calls
@@ -428,11 +438,40 @@ def test_budget_iteration_exhaustion_triggers_classic_fallback():
     assert result.fallback_reason == "max_iterations"
 
 
+def test_initial_budget_exhaustion_writes_fallback_step(tmp_path: Path):
+    _reset_shared_writer_for_tests()
+    registry, *_tools = _registry()
+    settings = Settings(storage=StorageConfig(data_dir=str(tmp_path / "data")))
+    log = PlanLog("kb", settings)
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=0, max_tool_calls=5))
+    log.insert_basic(plan)
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=settings,
+        plan_log=log,
+        initial_query="secret query",
+        classic_fallback=AnswerGeneration("secret answer"),
+    )
+    log._writer.flush()
+
+    assert result.fallback_reason == "max_iterations"
+    steps = log.load_steps(plan.plan_id)
+    assert [step.tool for step in steps] == ["fallback"]
+    payload = steps[0].observation.payload
+    assert payload == {"reason": "max_iterations", "history_len": 0}
+    assert "secret query" not in str(payload)
+    assert "secret answer" not in str(payload)
+
+
 def test_budget_tool_call_exhaustion_stops_before_next_tool():
     registry, retrieve, grade, final = _registry()
     plan = _plan(budget=Budget(latency_ms=5000, max_iterations=5, max_tool_calls=2))
 
-    with pytest.raises(RuntimeError, match="before final: max_tool_calls"):
+    with pytest.raises(RuntimeError, match="fallback unavailable: max_tool_calls"):
         run_agent(
             plan=plan,
             registry=registry,
@@ -444,6 +483,54 @@ def test_budget_tool_call_exhaustion_stops_before_next_tool():
 
     assert retrieve.calls
     assert grade.calls
+    assert not final.calls
+
+
+def test_budget_tool_call_exhaustion_returns_fallback_when_available():
+    registry, retrieve, grade, final = _registry()
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=5, max_tool_calls=2))
+    fallback = AnswerGeneration("fallback")
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        classic_fallback=fallback,
+    )
+
+    assert result.answer is fallback
+    assert result.fallback_reason == "max_tool_calls"
+    assert [record.tool for record in result.state.history] == ["retrieve", "grade", "fallback"]
+    assert not final.calls
+
+
+def test_token_budget_exhaustion_returns_fallback():
+    registry = AgentToolRegistry()
+    retrieve = _TokenTool("retrieve", {"results": []}, tokens=3)
+    grade = _Tool("grade", {"grade": {"signal": "no_signal", "reason": "done"}})
+    final = _Tool("final", {"answer": {"text": "ok", "citations": []}})
+    for tool in (retrieve, grade, final):
+        registry.register(tool)
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=5, max_agent_tokens=3, max_tool_calls=5))
+    fallback = AnswerGeneration("fallback")
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        classic_fallback=fallback,
+    )
+
+    assert result.answer is fallback
+    assert result.fallback_reason == "max_agent_tokens"
+    assert [record.tool for record in result.state.history] == ["retrieve", "fallback"]
+    assert not grade.calls
     assert not final.calls
 
 
@@ -474,3 +561,29 @@ def test_router_short_circuit_without_fallback_is_error():
             settings=object(),
             router=_Router("single_shot"),
         )
+
+
+def test_private_kb_downgrades_before_router_or_tools():
+    registry, retrieve, grade, final = _registry()
+    router = _Router("multi_hop")
+    plan = _plan(persist=False)
+    fallback = AnswerGeneration("fallback")
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        classic_fallback=fallback,
+        router=router,
+    )
+
+    assert result.answer is fallback
+    assert result.fallback_reason == "private_kb_classic"
+    assert result.state.history == []
+    assert router.calls == []
+    assert not retrieve.calls
+    assert not grade.calls
+    assert not final.calls

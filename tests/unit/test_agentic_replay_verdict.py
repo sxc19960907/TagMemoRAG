@@ -47,6 +47,27 @@ def test_replay_steps_match_rule_driven_route_step():
     assert verdict.steps[0].verdict == "match"
 
 
+def test_replay_steps_match_rule_driven_fallback_step():
+    step = StepRecord(
+        step_idx=0,
+        tool="fallback",
+        args={},
+        observation=ToolObservation({"reason": "max_iterations", "history_len": 0}),
+        grade=GradeOutcome(signal="no_signal", reason="max_iterations"),
+        decision_source="rule",
+        rationale="fallback:max_iterations",
+        ts="2026-05-21T00:00:00Z",
+    )
+
+    verdict = replay_steps("plan-1", [step])
+
+    assert verdict.overall == "match"
+    assert verdict.steps[0].tool_match is True
+    assert verdict.steps[0].signal_match is True
+    assert verdict.steps[0].args_schema_match is True
+    assert verdict.steps[0].verdict == "match"
+
+
 def test_replay_steps_match_rewrite_sequence():
     steps = [
         StepRecord(
