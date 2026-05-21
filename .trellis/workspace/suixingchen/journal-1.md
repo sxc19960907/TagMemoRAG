@@ -1669,3 +1669,42 @@ Ran the unified live production-provider pilot path with local Qdrant/MinIO, Sil
 ### Next Steps
 
 - Inspect or reauthor SiliconFlow `coffee.jsonl` eval expectations, or choose a pilot owner-approved suite/threshold policy.
+
+
+## Session 44: Agentic RAG mode toggle MVP
+
+**Date**: 2026-05-21
+**Task**: Agentic RAG mode toggle MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Completed and archived the default-off agentic RAG mode toggle parent task across C1-C6: loop driver, router, iterative loop, CRAG-lite grader, budget fallback, public mode surface, provider verify decision check, final validation, architecture update, and ADR.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2340ca4` | (see git log) |
+| `d3b1e53` | (see git log) |
+| `0270af9` | (see git log) |
+| `3ea8eaf` | (see git log) |
+| `7ddff0b` | (see git log) |
+| `e9cb012` | (see git log) |
+| `f579488` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

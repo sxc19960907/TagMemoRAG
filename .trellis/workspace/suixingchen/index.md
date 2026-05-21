@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1663 | Active |
+| `journal-1.md` | ~1710 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-05-21 | Agentic RAG mode toggle MVP | `2340ca4`, `d3b1e53`, `0270af9`, `3ea8eaf`, `7ddff0b`, `e9cb012`, `f579488` | `codex/agent-loop-driver` |
 | 43 | 2026-05-21 | Record live provider pilot verification | `877d0f8` | `codex/live-pilot-provider-verification` |
 | 42 | 2026-05-20 | Harden verify Docker diagnostics | `1ac772b` | `codex/verify-docker-diagnostics-hardening` |
 | 41 | 2026-05-20 | Clean environment delivery verification | `20eaab9` | `codex/clean-env-delivery-verification` |
