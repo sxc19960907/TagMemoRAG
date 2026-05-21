@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-21-agentic-adaptive-router/prd.md", "reason": "C2 acceptance criteria for quality review."}
+{"file": ".trellis/tasks/05-21-agentic-adaptive-router/design.md", "reason": "Expected router, route-step, and replay behavior."}
+{"file": ".trellis/tasks/05-21-agentic-adaptive-router/implement.md", "reason": "Validation commands and no-surface-diff gate."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agent-loop-driver/implement.md", "reason": "C1 validation baseline that must remain green."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec checklist entrypoint."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test coverage and forbidden-pattern checklist."}

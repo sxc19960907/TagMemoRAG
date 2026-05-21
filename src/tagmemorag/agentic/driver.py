@@ -7,6 +7,7 @@ from ..answer.base import AnswerCitation, AnswerGeneration
 from ..queryplan import PlanLog, now_iso_utc
 from ..queryplan.budget import BudgetGuard
 from .decision import DecisionGenerator
+from .router import AdaptiveRouter, RouteDecision
 from .state import AgentState, AgentStepCtx, GradeOutcome, StepRecord, ToolObservation
 from .tools.registry import AgentToolRegistry
 
@@ -29,8 +30,15 @@ def run_agent(
     initial_query: str = "",
     state_dir: str = "",
     classic_fallback: AnswerGeneration | None = None,
+    router: AdaptiveRouter | None = None,
 ) -> AgentRunResult:
     state = AgentState(plan=plan, classic_fallback_answer=classic_fallback)
+
+    if router is not None:
+        route = router.route(plan=plan, query_text=initial_query)
+        _append_route_step(state, route, plan_log)
+        if route.route in {"single_shot", "no_retrieval"}:
+            return _terminate_with_classic_fallback(state, f"route_{route.route}")
 
     exhausted, reason = guard.agent_exhausted()
     if exhausted:
@@ -96,6 +104,24 @@ def run_agent(
     )
     state.final_answer = answer
     return AgentRunResult(answer=state.finalize(), state=state)
+
+
+def _append_route_step(
+    state: AgentState,
+    route: RouteDecision,
+    plan_log: PlanLog | None,
+) -> None:
+    record = _build_step_record(
+        step_idx=len(state.history),
+        tool="route",
+        args={},
+        observation=ToolObservation(payload={"route": route.to_dict()}),
+        grade=GradeOutcome(signal="no_signal", reason="route_preflight"),
+        rationale=route.reason,
+    )
+    state.append(record)
+    if plan_log is not None:
+        plan_log.append_step_async(state.plan.plan_id, record)
 
 
 def _call_tool(
@@ -179,7 +205,7 @@ def _decide_next(state: AgentState, grade: GradeOutcome, decision_gen: DecisionG
 
 def _terminate_with_classic_fallback(state: AgentState, reason: str) -> AgentRunResult:
     if state.classic_fallback_answer is None:
-        raise RuntimeError(f"agentic budget exhausted without fallback: {reason}")
+        raise RuntimeError(f"agentic fallback unavailable: {reason}")
     return AgentRunResult(
         answer=state.classic_fallback_answer,
         state=state,

@@ -26,3 +26,22 @@ def test_replay_steps_match_rule_driven_stub_step():
     assert verdict.steps[0].args_schema_match is True
     assert verdict.steps[0].decision_source_match is True
     assert verdict.to_dict()["steps"][0]["verdict"] == "match"
+
+
+def test_replay_steps_match_rule_driven_route_step():
+    step = StepRecord(
+        step_idx=0,
+        tool="route",
+        args={},
+        observation=ToolObservation({"route": {"route": "single_shot"}}),
+        grade=GradeOutcome(signal="no_signal", reason="route_preflight"),
+        decision_source="rule",
+        rationale="single_shot_default",
+        ts="2026-05-21T00:00:00Z",
+    )
+
+    verdict = replay_steps("plan-1", [step])
+
+    assert verdict.overall == "match"
+    assert verdict.steps[0].tool_match is True
+    assert verdict.steps[0].verdict == "match"

@@ -6,6 +6,7 @@ import pytest
 
 from tagmemorag.agentic import AgentStepCtx, ToolObservation, run_agent
 from tagmemorag.agentic.decision import RuleOnlyDecisionGenerator
+from tagmemorag.agentic.router import RouteDecision
 from tagmemorag.agentic.tools import AgentToolRegistry
 from tagmemorag.answer.base import AnswerCitation, AnswerGeneration
 from tagmemorag.config import Settings, StorageConfig
@@ -54,6 +55,16 @@ class _Decision(RuleOnlyDecisionGenerator):
         return super().choose_tool(state, registry)
 
 
+class _Router:
+    def __init__(self, route: str):
+        self.route_kind = route
+        self.calls = []
+
+    def route(self, *, plan, query_text: str) -> RouteDecision:
+        self.calls.append((plan.plan_id, query_text))
+        return RouteDecision(self.route_kind, 0.9, f"{self.route_kind}_rule")
+
+
 def _registry():
     registry = AgentToolRegistry()
     retrieve = _Tool("retrieve", {"results": []})
@@ -99,6 +110,81 @@ def test_runs_retrieve_grade_then_final_on_no_signal_stub():
     assert grade.calls
     assert final.calls
     assert decision.called is False
+
+
+def test_router_single_shot_returns_classic_fallback_without_tool_calls():
+    registry, retrieve, grade, final = _registry()
+    router = _Router("single_shot")
+    plan = _plan()
+    fallback = AnswerGeneration("fallback")
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        classic_fallback=fallback,
+        router=router,
+    )
+
+    assert result.answer is fallback
+    assert result.fallback_reason == "route_single_shot"
+    assert [record.tool for record in result.state.history] == ["route"]
+    assert result.state.history[0].observation.payload["route"]["route"] == "single_shot"
+    assert router.calls == [(plan.plan_id, "q")]
+    assert not retrieve.calls
+    assert not grade.calls
+    assert not final.calls
+
+
+def test_router_single_shot_writes_only_route_step(tmp_path: Path):
+    _reset_shared_writer_for_tests()
+    registry, *_tools = _registry()
+    settings = Settings(storage=StorageConfig(data_dir=str(tmp_path / "data")))
+    log = PlanLog("kb", settings)
+    plan = _plan()
+    log.insert_basic(plan)
+
+    run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=settings,
+        plan_log=log,
+        initial_query="q",
+        classic_fallback=AnswerGeneration("fallback"),
+        router=_Router("single_shot"),
+    )
+    log._writer.flush()
+
+    steps = log.load_steps(plan.plan_id)
+    assert [step.tool for step in steps] == ["route"]
+    assert steps[0].decision_source == "rule"
+    assert steps[0].grade is not None
+    assert steps[0].grade.signal == "no_signal"
+    assert steps[0].rationale == "single_shot_rule"
+
+
+def test_router_multi_hop_continues_c1_loop_after_route_step():
+    registry, retrieve, grade, final = _registry()
+    plan = _plan()
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        router=_Router("multi_hop"),
+    )
+
+    assert result.answer.text == "ok"
+    assert [record.tool for record in result.state.history] == ["route", "retrieve", "grade", "final"]
+    assert retrieve.calls[0][1] == 1
 
 
 def test_writes_one_step_record_per_tool(tmp_path: Path):
@@ -173,4 +259,19 @@ def test_budget_exhaustion_without_fallback_is_error():
             guard=BudgetGuard(plan),
             decision_gen=RuleOnlyDecisionGenerator(),
             settings=object(),
+        )
+
+
+def test_router_short_circuit_without_fallback_is_error():
+    registry, *_tools = _registry()
+    plan = _plan()
+
+    with pytest.raises(RuntimeError, match="fallback unavailable: route_single_shot"):
+        run_agent(
+            plan=plan,
+            registry=registry,
+            guard=BudgetGuard(plan),
+            decision_gen=RuleOnlyDecisionGenerator(),
+            settings=object(),
+            router=_Router("single_shot"),
         )
