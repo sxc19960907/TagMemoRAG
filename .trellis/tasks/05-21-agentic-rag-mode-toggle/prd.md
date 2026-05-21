@@ -66,16 +66,43 @@ deliverable is independently verifiable (per Trellis parent/child guidance).
 
 ## Acceptance Criteria
 
-- [ ] AC1: With `rag.mode = classic` (default), the eval fixture produces a
+- [x] AC1: With `rag.mode = classic` (default), the eval fixture produces a
       byte-equivalent answer set vs main.
-- [ ] AC2: With `rag.mode = agentic` on the agentic eval slice (named below
+- [x] AC2: With `rag.mode = agentic` on the agentic eval slice (named below
       after brainstorm), end-to-end metric Δ meets the target also named below.
-- [ ] AC3: `plan_log` for an agentic run contains ordered step records and
+- [x] AC3: `plan_log` for an agentic run contains ordered step records and
       `replay/` can reproduce the same final answer (within tolerance defined
       below).
-- [ ] AC4: Budget breach is visibly traced and falls back without 5xx.
-- [ ] AC5: Each child task ships flag-off and proves byte-equivalence at its
+- [x] AC4: Budget breach is visibly traced and falls back without 5xx.
+- [x] AC5: Each child task ships flag-off and proves byte-equivalence at its
       own gate.
+
+## Completion Summary
+
+Completed on 2026-05-21 as a default-off MVP across six archived child tasks:
+
+- C1 `agent-loop-driver`: loop driver foundation, `plan_steps`, tool registry,
+  budget fields, replay branch.
+- C2 `agentic-adaptive-router`: rule-based adaptive preflight and route step.
+- C3 `agentic-iterative-multihop`: bounded retrieve/grade/rewrite loop.
+- C4 `agentic-crag-grader`: CRAG-lite signals from reranker outcomes.
+- C5 `agentic-budget-and-fallback`: budget fallback, private-KB guard, safe
+  replayable fallback step.
+- C6 `agentic-surface-and-provider-verify`: `Settings.agentic`,
+  per-request mode overrides, eval/replay `--force-mode`, provider verify
+  decision check.
+
+Validation was performed per child and again at C6 integration:
+
+- Targeted C6 integration: 115 passed.
+- Eval CLI e2e: 3 passed.
+- Full suite: 1019 passed, 2 skipped.
+- `git diff --check` passed.
+
+Scope note: this ships the default-off agentic MVP surface and replayable
+trajectory foundation. Broader RAG capability optimization, LangChain
+adapters, live provider quality calibration, and production observability
+expansion remain follow-up work.
 
 ## Resolved Decisions
 

@@ -31,7 +31,12 @@
   "notes": "",
   "meta": {
     "child_commits": {
-      "agent-loop-driver": "2340ca4c51c59e4935db1a0fc1bf49e176553bea"
+      "agent-loop-driver": "2340ca4c51c59e4935db1a0fc1bf49e176553bea",
+      "agentic-adaptive-router": "d3b1e53a3d13e3335bc8d26ac0ba6e2921ff496e",
+      "agentic-iterative-multihop": "0270af9c144d9be47430276552eb644e3f4e05c8",
+      "agentic-crag-grader": "3ea8eafb33e6241d9fea42d3363f7a523c98315a",
+      "agentic-budget-and-fallback": "7ddff0b7f6a9bd522d4e4bf3f5a736722964ce56",
+      "agentic-surface-and-provider-verify": "e9cb01232a7bd4a7baa6edaeeaf96d90b079e706"
     }
   }
 }

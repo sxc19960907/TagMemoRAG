@@ -191,18 +191,36 @@ independently.
 
 The parent task moves to `completed` only when **all** are true:
 
-- [ ] All six children archived green.
-- [ ] Parent-level eval gate passes (D4: AC1 + AC2 MUST + cross-slice
+- [x] All six children archived green.
+- [x] Parent-level eval gate passes (D4: AC1 + AC2 MUST + cross-slice
       regressions).
-- [ ] D6 invariant test (`dispatcher cache key independent of step_idx`)
+- [x] D6 invariant test (`dispatcher cache key independent of step_idx`)
       lives in `tests/unit` and is green.
-- [ ] D7 replay verdict: `agentic_*` fixtures replay as `match` or
+- [x] D7 replay verdict: `agentic_*` fixtures replay as `match` or
       `tolerated_drift`; zero `diverged` on baseline.
-- [ ] `production_provider_verify` runs include the decision step when
+- [x] `production_provider_verify` runs include the decision step when
       `agentic.mode != classic` or `agentic.decision.enabled == True`.
-- [ ] Spec update committed (Phase 3.3): `agentic` package documented in
+- [x] Spec update committed (Phase 3.3): `agentic` package documented in
       `.trellis/spec/backend/architecture.md`; ADR for D2 (self-built
       loop choice) created via `manage_adr`.
+
+## 9. Final Validation Results
+
+- C1 committed: `2340ca4c51c59e4935db1a0fc1bf49e176553bea`.
+- C2 committed: `d3b1e53a3d13e3335bc8d26ac0ba6e2921ff496e`.
+- C3 committed: `0270af9c144d9be47430276552eb644e3f4e05c8`.
+- C4 committed: `3ea8eafb33e6241d9fea42d3363f7a523c98315a`.
+- C5 committed: `7ddff0b7f6a9bd522d4e4bf3f5a736722964ce56`.
+- C6 committed: `e9cb01232a7bd4a7baa6edaeeaf96d90b079e706`.
+- Final C6 integration gate: 115 passed.
+- Eval CLI e2e: 3 passed.
+- Full suite: 1019 passed, 2 skipped.
+- `git diff --check` passed.
+
+Follow-up note: the original PRD's broader quality-improvement ambition is
+now separated from this MVP. The next parent should reassess RAG capability
+end-to-end, including where LangChain or other libraries can replace custom
+code, rather than expanding this mode-toggle task further.
 
 ## 8. Pre-`task.py start` Checklist (this parent)
 
