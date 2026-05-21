@@ -23,7 +23,8 @@
     "05-21-rag-answer-quality-diagnostics",
     "05-21-langchain-retriever-tool-adapter",
     "05-21-agentic-production-tool-wiring",
-    "05-21-prompt-context-pack-quality-review"
+    "05-21-prompt-context-pack-quality-review",
+    "05-21-langchain-unified-ingestion-path"
   ],
   "parent": null,
   "relatedFiles": [],

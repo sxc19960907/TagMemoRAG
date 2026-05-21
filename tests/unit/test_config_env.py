@@ -402,9 +402,21 @@ def test_nested_env_delimiter(tmp_path, monkeypatch):
 def test_parser_profile_defaults_to_product_manual():
     cfg = load_config("missing.yaml")
 
+    assert cfg.parser.provider == "native"
     assert cfg.parser.pdf_profile == "product_manual"
     assert cfg.parser.pdf_heading_hints == []
     assert cfg.parser.overlap_chars == 0
+
+
+def test_parser_provider_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__PARSER__PROVIDER", "langchain")
+
+    assert load_config(tmp_path / "missing.yaml").parser.provider == "langchain"
+
+
+def test_parser_provider_rejects_unknown_explicit_value():
+    with pytest.raises(ValidationError):
+        ParserConfig(provider="unknown")
 
 
 def test_parser_profile_env_overrides(tmp_path, monkeypatch):

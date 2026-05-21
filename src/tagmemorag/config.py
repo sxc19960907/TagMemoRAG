@@ -63,6 +63,7 @@ class SearchConfig(BaseModel):
 
 
 class ParserConfig(BaseModel):
+    provider: Literal["native", "langchain"] = "native"
     max_chars: int = 500
     min_chars: int = 50
     overlap_chars: int = Field(default=0, ge=0)

@@ -97,7 +97,15 @@ def _load_documents(path: Path, *, loader_kind: str) -> list[_DocumentLike]:
     if suffix not in SUPPORTED_LANGCHAIN_SUFFIXES:
         raise ValueError(f"Unsupported LangChain adapter suffix: {suffix}")
     loader_class = _loader_class(suffix, loader_kind)
-    loader = loader_class(str(path))
+    try:
+        if suffix in {".html", ".htm"}:
+            loader = loader_class(str(path), bs_kwargs={"features": "html.parser"})
+        else:
+            loader = loader_class(str(path))
+    except ImportError as exc:
+        raise LangChainAdapterUnavailable(
+            "Install the optional 'langchain' extra to use LangChain document loaders."
+        ) from exc
     return list(loader.load())
 
 

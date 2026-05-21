@@ -173,6 +173,7 @@ def entry_from_node(node_id: int, node: dict[str, Any], *, metadata: dict[str, A
 
 def parser_signature(cfg: Settings) -> dict[str, object]:
     return {
+        "provider": str(getattr(cfg.parser, "provider", "native")),
         "max_chars": int(cfg.parser.max_chars),
         "min_chars": int(cfg.parser.min_chars),
         "overlap_chars": int(cfg.parser.overlap_chars),

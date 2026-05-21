@@ -135,6 +135,18 @@ def test_safe_source_path_rejects_traversal_and_unsupported_suffix(library_confi
         safe_source_path("default", "coffee/manual.exe", library_config)
     assert suffix.value.code == "INVALID_INPUT"
 
+    with pytest.raises(ServiceError) as native_html:
+        safe_source_path("default", "coffee/manual.html", library_config)
+    assert native_html.value.code == "INVALID_INPUT"
+
+
+def test_safe_source_path_allows_html_when_langchain_provider_enabled(library_config):
+    cfg = library_config.model_copy(update={"parser": ParserConfig(provider="langchain")})
+
+    path = safe_source_path("default", "coffee/manual.html", cfg)
+
+    assert path.name == "manual.html"
+
 
 def test_validate_metadata_normalizes_and_reports_duplicate_manual_id(library_config):
     record = upsert_manual("default", _metadata(), b"# Use\nClean weekly.\n", library_config)

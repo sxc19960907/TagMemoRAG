@@ -17,7 +17,7 @@ from .errors import ErrorCode, ServiceError
 from .manual_blob_store import BlobRef, create_blob_store, guess_content_type
 from .manual_registry import ManualRecord, RegistryMigrationReport, create_registry
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, metadata_sidecar_path
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES
+from .parser_provider import supported_document_suffixes
 from .storage.atomic import atomic_write
 from .tag_store import delete_manual_tags, delete_tags, find_orphan_tags
 from .types import GraphState
@@ -268,11 +268,12 @@ def safe_source_path(kb_name: str, source_file: str, cfg: Settings) -> Path:
     root = library_root(kb_name, cfg)
     target = (root / relative).resolve()
     _ensure_under_root(target, root)
-    if target.suffix.lower() not in SUPPORTED_DOCUMENT_SUFFIXES:
+    suffixes = supported_document_suffixes(cfg.parser)
+    if target.suffix.lower() not in suffixes:
         raise ServiceError(
             ErrorCode.INVALID_INPUT,
             "Unsupported manual document suffix.",
-            {"source_file": source_file, "supported_suffixes": sorted(SUPPORTED_DOCUMENT_SUFFIXES)},
+            {"source_file": source_file, "supported_suffixes": sorted(suffixes)},
         )
     return target
 
@@ -1099,7 +1100,7 @@ def _chunk_count(graph_state: GraphState, manual_id: str) -> int:
 
 def _fallback_source_for_sidecar(sidecar: Path, root: Path) -> str:
     stem = sidecar.name[: -len(".metadata.json")]
-    for suffix in sorted(SUPPORTED_DOCUMENT_SUFFIXES):
+    for suffix in sorted({".htm", ".html", ".md", ".pdf", ".txt"}):
         candidate = sidecar.with_name(stem + suffix)
         if candidate.exists():
             return _relative(candidate, root)

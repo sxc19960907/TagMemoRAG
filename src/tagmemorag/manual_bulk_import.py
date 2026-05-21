@@ -19,7 +19,7 @@ from .manual_library import (
     validate_metadata,
 )
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, normalize_tag
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES
+from .parser_provider import supported_document_suffixes
 from .tag_governance import TagPolicy, load_tag_policy
 
 BulkImportMode = Literal["create_only", "upsert", "dry_run"]
@@ -445,7 +445,7 @@ def _append_file_issues(
         issues.append(_issue_from_message(candidate, ValidationMessage("source_file", exc.code.value, exc.message, exc.detail)))
         return
     suffix = Path(candidate.source_file).suffix.lower()
-    if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
+    if suffix not in supported_document_suffixes(cfg.parser):
         issues.append(
             BulkPreviewIssue(
                 row=candidate.row,

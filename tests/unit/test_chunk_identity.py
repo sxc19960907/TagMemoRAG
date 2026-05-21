@@ -26,3 +26,12 @@ def test_parser_signature_changes_with_parser_config():
     cfg.parser = ParserConfig(max_chars=800)
     changed = parser_signature(cfg)
     assert base != changed
+
+
+def test_parser_signature_changes_with_parser_provider():
+    cfg = Settings()
+    cfg.parser = ParserConfig(provider="native")
+    base = parser_signature(cfg)
+    cfg.parser = ParserConfig(provider="langchain")
+    changed = parser_signature(cfg)
+    assert base != changed
