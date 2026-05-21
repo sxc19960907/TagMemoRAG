@@ -122,3 +122,26 @@ def test_answer_can_omit_retrieve_payload(tmp_path, fake_embedder):
     body = response.json()
     assert body["answer"]["kind"] == "answer"
     assert "retrieve" not in body
+
+
+def test_answer_request_accepts_agentic_surface(tmp_path, fake_embedder):
+    client, _state = _client_with_docs(
+        tmp_path,
+        fake_embedder,
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+
+    response = client.post(
+        "/answer",
+        json={
+            "question": "蒸汽很小",
+            "top_k": 1,
+            "mode": "agentic",
+            "agentic": {"max_iterations": 0, "max_agent_tokens": 128, "max_tool_calls": 2},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]["kind"] == "answer"
+    assert body["retrieve"]["plan_id"]

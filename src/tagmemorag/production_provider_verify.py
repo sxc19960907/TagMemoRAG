@@ -137,6 +137,10 @@ def run_production_provider_verify(
     else:
         checks.append({"name": "docker_providers", "status": "skipped", "detail": {"reason": "skip_docker"}})
 
+    decision_check = _decision_check(cfg, env_map)
+    if decision_check is not None:
+        checks.append(decision_check)
+
     bucket_step = ensure_bucket_step or _ensure_bucket_step
     if ensure_bucket:
         checks.append(bucket_step(cfg, env_map))
@@ -238,12 +242,81 @@ def _required_env_names(cfg: Settings) -> list[str]:
         names.append(cfg.reranker.api_key_env)
     if cfg.answer.enabled and cfg.answer.provider == "openai_compatible":
         names.append(cfg.answer.api_key_env)
+    decision_cfg = cfg.agentic.decision
+    if _decision_check_required(cfg) and decision_cfg.provider == "openai_compatible":
+        names.append(_decision_api_key_env(cfg))
     if cfg.manual_library.blob_backend == "s3":
         names.append(cfg.manual_library.s3_access_key_env)
         names.append(cfg.manual_library.s3_secret_key_env)
         if cfg.manual_library.s3_session_token_env:
             names.append(cfg.manual_library.s3_session_token_env)
     return sorted(dict.fromkeys(name for name in names if name))
+
+
+def _decision_check_required(cfg: Settings) -> bool:
+    return cfg.agentic.mode != "classic" or cfg.agentic.decision.enabled
+
+
+def _decision_api_key_env(cfg: Settings) -> str:
+    return cfg.agentic.decision.api_key_env or cfg.answer.api_key_env
+
+
+def _decision_model_id(cfg: Settings) -> str:
+    return cfg.agentic.decision.model_id or cfg.answer.model_id
+
+
+def _decision_base_url(cfg: Settings) -> str:
+    return cfg.agentic.decision.base_url or cfg.answer.base_url
+
+
+def _decision_check(cfg: Settings, env: Mapping[str, str]) -> dict[str, Any] | None:
+    if not _decision_check_required(cfg):
+        return None
+    decision_cfg = cfg.agentic.decision
+    provider = decision_cfg.provider
+    detail: dict[str, Any] = {
+        "mode": cfg.agentic.mode,
+        "decision_enabled": bool(decision_cfg.enabled),
+        "provider": provider,
+        "tool_schema_mode": decision_cfg.tool_schema_mode,
+        "json_strict": bool(decision_cfg.json_strict),
+    }
+    if provider == "noop":
+        return {"name": "decision", "status": "passed", "detail": {**detail, "reason": "noop_provider"}}
+    if provider != "openai_compatible":
+        return {
+            "name": "decision",
+            "status": "failed",
+            "detail": detail,
+            "error": {"type": "InvalidConfig", "reason": "unsupported_decision_provider"},
+        }
+    env_name = _decision_api_key_env(cfg)
+    model_id = _decision_model_id(cfg)
+    base_url = _decision_base_url(cfg)
+    detail.update(
+        {
+            "api_key_env": env_name,
+            "api_key_present": bool(env.get(env_name)),
+            "model_configured": bool(model_id),
+            "base_url_configured": bool(base_url),
+            "max_output_tokens": int(decision_cfg.max_output_tokens),
+        }
+    )
+    if not env_name or not env.get(env_name):
+        return {
+            "name": "decision",
+            "status": "failed",
+            "detail": detail,
+            "error": {"type": "MissingEnv", "reason": "decision_env_var_missing"},
+        }
+    if not model_id:
+        return {
+            "name": "decision",
+            "status": "failed",
+            "detail": detail,
+            "error": {"type": "InvalidConfig", "reason": "decision_model_missing"},
+        }
+    return {"name": "decision", "status": "passed", "detail": detail}
 
 
 def _docker_command() -> list[str]:

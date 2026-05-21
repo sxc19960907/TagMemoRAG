@@ -234,6 +234,30 @@ class AnswerConfig(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0)
 
 
+class AgenticDecisionConfig(BaseModel):
+    """Config for optional agentic decision LLM calls."""
+
+    enabled: bool = False
+    provider: Literal["noop", "openai_compatible"] = "noop"
+    model_id: str = ""
+    model_version: str = "v1"
+    base_url: str = ""
+    chat_completions_url: str | None = None
+    api_key_env: str = ""
+    timeout_seconds: float = Field(default=15.0, gt=0.0)
+    max_output_tokens: int = Field(default=256, ge=1)
+    temperature: float = Field(default=0.0, ge=0.0)
+    tool_schema_mode: Literal["openai_tools", "json_object"] = "openai_tools"
+    json_strict: bool = True
+
+
+class AgenticConfig(BaseModel):
+    """Default-off agentic mode surface."""
+
+    mode: Literal["classic", "agentic"] = "classic"
+    decision: AgenticDecisionConfig = Field(default_factory=AgenticDecisionConfig)
+
+
 class OCRConfig(BaseModel):
     """T7: Settings block for optional OCR text ingestion."""
 
@@ -423,6 +447,7 @@ class Settings(BaseSettings):
     queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     answer: AnswerConfig = Field(default_factory=AnswerConfig)
+    agentic: AgenticConfig = Field(default_factory=AgenticConfig)
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     visual_retrieval: VisualRetrievalConfig = Field(default_factory=VisualRetrievalConfig)
     connectors: ConnectorsConfig = Field(default_factory=ConnectorsConfig)

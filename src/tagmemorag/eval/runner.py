@@ -37,7 +37,10 @@ def run_eval(
     reuse_built_kb: bool = False,
     eval_data_dir: str | Path | None = None,
     thresholds: EvalThresholds = DEFAULT_THRESHOLDS,
+    force_mode: str | None = None,
 ) -> EvalReport:
+    if force_mode not in {None, "classic", "agentic"}:
+        raise EvalSuiteError("force_mode must be classic or agentic")
     resolved_top_k = top_k or cfg.search.top_k or 5
     _validate_top_k(resolved_top_k)
     _validate_thresholds(thresholds)
@@ -155,6 +158,7 @@ def run_eval(
         config_snapshot={
             "model": {"provider": run_cfg.model.provider, "name": run_cfg.model.name, "dim": run_cfg.model.dim},
             "search": {"top_k": resolved_top_k, **search_params},
+            "agentic": {"force_mode": force_mode, "mode": force_mode or run_cfg.agentic.mode},
             "storage": storage_snapshot,
             "reuse_built_kb": reuse_built_kb,
             "build_ids": {kb_name: states[kb_name].build_id for kb_name in sorted(states)},

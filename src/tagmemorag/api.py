@@ -214,6 +214,15 @@ class SearchRequest(BaseModel):
     # T2: optional per-request budget override; missing fields fall through to
     # Settings.queryplan.default_*. None means "use settings defaults entirely".
     budget: "BudgetSpec | None" = None
+    mode: Literal["classic", "agentic"] | None = None
+    agentic: "AgenticRequestOverrides | None" = None
+
+
+class AgenticRequestOverrides(BaseModel):
+    decision_enabled: bool | None = None
+    max_iterations: int | None = Field(default=None, ge=0)
+    max_agent_tokens: int | None = Field(default=None, ge=1)
+    max_tool_calls: int | None = Field(default=None, ge=0)
 
 
 class BudgetSpec(BaseModel):
@@ -570,9 +579,18 @@ def _build_and_log_plan(request: SearchRequest, state: GraphState):
     returning the response to fill in result columns.
     """
     from .queryplan import PlanLog, build_plan
+    from .agentic.surface import resolve_agentic_mode, stamp_plan_mode
 
     filter_dict, _narrowing = _resolved_filter_dict(request, state)
     budget_spec = request.budget.to_planner_dict() if request.budget else None
+    if request.agentic is not None:
+        budget_spec = dict(budget_spec or {})
+        if request.agentic.max_iterations is not None:
+            budget_spec["max_iterations"] = request.agentic.max_iterations
+        if request.agentic.max_agent_tokens is not None:
+            budget_spec["max_agent_tokens"] = request.agentic.max_agent_tokens
+        if request.agentic.max_tool_calls is not None:
+            budget_spec["max_tool_calls"] = request.agentic.max_tool_calls
     plan = build_plan(
         request.question,
         request.kb_name,
@@ -580,6 +598,11 @@ def _build_and_log_plan(request: SearchRequest, state: GraphState):
         filters=filter_dict,
         budget_spec=budget_spec,
     )
+    resolution = resolve_agentic_mode(
+        settings_mode=settings.agentic.mode,
+        request_mode=request.mode,
+    )
+    plan = stamp_plan_mode(plan, resolution)
     plan_log = PlanLog(request.kb_name, settings)
     plan_log.insert_basic(plan)
     return plan, plan_log

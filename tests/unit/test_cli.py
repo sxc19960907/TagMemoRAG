@@ -658,6 +658,8 @@ storage:
                 "0.08",
                 "--tag-boost",
                 "0.05",
+                "--force-mode",
+                "agentic",
                 "--eval-data-dir",
                 str(tmp_path / "eval-data"),
                 "--min-recall-at-k",
@@ -676,6 +678,7 @@ storage:
     assert report["config_snapshot"]["search"]["source_k"] == 4
     assert report["config_snapshot"]["search"]["aggregate"] == "sum"
     assert report["config_snapshot"]["search"]["metadata_field_boost"] == 0.08
+    assert report["config_snapshot"]["agentic"]["force_mode"] == "agentic"
 
 
 def test_cli_qdrant_inspect_outputs_safe_report(tmp_path, capsys, monkeypatch, fake_embedder):

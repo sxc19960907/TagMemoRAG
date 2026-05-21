@@ -92,6 +92,20 @@ def test_budget_spec_passes_through_build_plan():
     assert plan.budget.max_evidence == s.queryplan.default_max_evidence
 
 
+def test_agentic_budget_spec_passes_through_build_plan():
+    s = Settings(model={"provider": "hashing"})
+    plan = build_plan(
+        "hi",
+        "default",
+        s,
+        budget_spec={"max_iterations": 0, "max_agent_tokens": 99, "max_tool_calls": 1},
+    )
+
+    assert plan.budget.max_iterations == 0
+    assert plan.budget.max_agent_tokens == 99
+    assert plan.budget.max_tool_calls == 1
+
+
 def test_search_request_omitted_budget_uses_settings_defaults_via_build_plan():
     s = Settings()
     r = SearchRequest(question="hi")

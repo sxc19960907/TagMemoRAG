@@ -108,6 +108,30 @@ def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
     }
 
 
+def test_run_eval_records_force_mode(tmp_path, test_config):
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Steam\nSteam pressure drops when scale blocks the nozzle.\n", encoding="utf-8")
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"steam","query":"steam pressure nozzle scale","relevant":[{"source_file":"manual.md","header":"Steam","text_contains":["scale blocks"]}]}\n',
+        encoding="utf-8",
+    )
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=suite,
+        docs_path=docs,
+        force_mode="agentic",
+        eval_data_dir=tmp_path / "eval-data",
+        thresholds=EvalThresholds(min_recall_at_k=0.0, min_mrr=0.0, min_hit_at_k=0.0),
+    )
+
+    assert report.summary.passed
+    assert report.config_snapshot["agentic"] == {"force_mode": "agentic", "mode": "agentic"}
+
+
 def test_run_eval_uses_ann_preselection_with_fake_qdrant(monkeypatch, tmp_path, test_config):
     FakeQdrantClient.reset()
     monkeypatch.setattr("tagmemorag.storage.qdrant_vector.QdrantVectorStore._create_client", lambda *args, **kwargs: FakeQdrantClient())

@@ -138,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     eval_run.add_argument("--metadata-field-boost", type=float, default=None)
     eval_run.add_argument("--tag-boost", type=float, default=None)
     eval_run.add_argument("--kb", default=None)
+    eval_run.add_argument("--force-mode", choices=["classic", "agentic"], default=None)
     eval_run.add_argument("--reuse-built-kb", action="store_true")
     eval_run.add_argument("--eval-data-dir", default=None)
     eval_run.add_argument("--min-precision-at-k", type=float, default=None)
@@ -511,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
                 metadata_field_boost=args.metadata_field_boost,
                 tag_boost=args.tag_boost,
                 kb_filter=args.kb,
+                force_mode=args.force_mode,
                 reuse_built_kb=args.reuse_built_kb,
                 eval_data_dir=args.eval_data_dir,
                 thresholds=thresholds,

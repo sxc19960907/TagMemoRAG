@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review backend checklist before final verification."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Ensure CLI/provider verify failures remain structured and safe."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Confirm tests and forbidden patterns before commit."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer final review for public surface wiring."}

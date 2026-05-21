@@ -44,6 +44,7 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--filter", action="append", default=[], help="filter key=value; may repeat")
     replay.add_argument("--metrics", default=",".join(DEFAULT_METRICS), help="comma-separated metric names")
     replay.add_argument("--limit", type=int, default=None, help="maximum replayable plans after filters")
+    replay.add_argument("--force-mode", choices=["classic", "agentic"], default=None)
     replay.add_argument("--output-format", choices=["json", "markdown"], default="json")
     return parser
 
@@ -130,6 +131,7 @@ def _run_replay(args) -> ReplayReport:
         rerank_summary=summarize_rerank(plans),
         skipped_rows=tuple(skipped),
         regression_detected=regression_detected,
+        forced_mode=args.force_mode,
     )
 
 

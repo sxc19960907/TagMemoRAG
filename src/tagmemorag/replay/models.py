@@ -124,6 +124,7 @@ class ReplayReport:
     rerank_summary: dict[str, Any] = field(default_factory=dict)
     skipped_rows: tuple[SkippedReplayRow, ...] = ()
     regression_detected: bool = False
+    forced_mode: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -138,6 +139,8 @@ class ReplayReport:
             "skipped_rows": [row.to_dict() for row in self.skipped_rows],
             "regression_detected": bool(self.regression_detected),
         }
+        if self.forced_mode is not None:
+            data["forced_mode"] = self.forced_mode
         if self.baseline is not None:
             data["baseline"] = self.baseline
         return data

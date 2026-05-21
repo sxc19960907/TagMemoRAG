@@ -22,6 +22,8 @@ def _clear_provider_env(monkeypatch):
         "TAGMEMORAG__MODEL__PROVIDER",
         "TAGMEMORAG__RERANKER__ENABLED",
         "TAGMEMORAG__ANSWER__ENABLED",
+        "TAGMEMORAG__AGENTIC__MODE",
+        "TAGMEMORAG__AGENTIC__DECISION__ENABLED",
         "TAGMEMORAG__MANUAL_LIBRARY__BLOB_BACKEND",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -54,6 +56,79 @@ def test_verify_smoke_check_only_skips_nested_smoke(monkeypatch):
     assert result.status == "passed"
     assert result.smoke_exit_code is None
     assert calls == [["docker", "compose", "--profile", "providers", "up", "-d", "qdrant", "minio"]]
+    assert "decision" not in {check["name"] for check in result.checks}
+
+
+def test_verify_decision_check_runs_when_agentic_enabled(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    config = tmp_path / "agentic.yaml"
+    config.write_text(
+        """
+model:
+  provider: hashing
+answer:
+  provider: openai_compatible
+  model_id: answer-model
+  api_key_env: ANSWER_KEY
+agentic:
+  mode: agentic
+  decision:
+    provider: openai_compatible
+    api_key_env: DECISION_KEY
+""",
+        encoding="utf-8",
+    )
+
+    result = run_production_provider_verify(
+        level="smoke",
+        config_path=config,
+        env={**_env(), "DECISION_KEY": "decision-secret"},
+        start_docker=False,
+        ensure_bucket=False,
+        check_only=True,
+    )
+
+    checks = {check["name"]: check for check in result.checks}
+    assert result.status == "passed"
+    assert checks["decision"]["status"] == "passed"
+    assert checks["decision"]["detail"]["api_key_env"] == "DECISION_KEY"
+    assert checks["decision"]["detail"]["model_configured"] is True
+    assert "decision-secret" not in result.to_json()
+    assert "| `decision` | `passed` |" in result.to_markdown()
+
+
+def test_verify_decision_env_is_required_when_decision_enabled(monkeypatch, tmp_path):
+    _clear_provider_env(monkeypatch)
+    config = tmp_path / "decision.yaml"
+    config.write_text(
+        """
+model:
+  provider: hashing
+answer:
+  provider: openai_compatible
+  model_id: answer-model
+  api_key_env: ANSWER_KEY
+agentic:
+  decision:
+    enabled: true
+    provider: openai_compatible
+    api_key_env: DECISION_MISSING
+""",
+        encoding="utf-8",
+    )
+
+    result = run_production_provider_verify(
+        level="smoke",
+        config_path=config,
+        env=_env(),
+        start_docker=False,
+        ensure_bucket=False,
+        check_only=True,
+    )
+
+    required = next(check for check in result.checks if check["name"] == "required_env")
+    assert result.status == "failed"
+    assert "DECISION_MISSING" in required["detail"]["missing"]
 
 
 def test_verify_smoke_builds_sanitized_nested_command(monkeypatch, tmp_path):

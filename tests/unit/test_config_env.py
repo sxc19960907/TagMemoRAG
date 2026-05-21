@@ -525,6 +525,22 @@ def test_search_ann_env_overrides(tmp_path, monkeypatch):
     assert cfg.search.debug_metadata_enabled is True
 
 
+def test_agentic_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__MODE", "agentic")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__PROVIDER", "openai_compatible")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__MODEL_ID", "decision-env")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__API_KEY_ENV", "DECISION_ENV_KEY")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.agentic.mode == "agentic"
+    assert cfg.agentic.decision.enabled is True
+    assert cfg.agentic.decision.provider == "openai_compatible"
+    assert cfg.agentic.decision.model_id == "decision-env"
+    assert cfg.agentic.decision.api_key_env == "DECISION_ENV_KEY"
+
+
 def test_search_lexical_env_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_ENABLED", "false")
     monkeypatch.setenv("TAGMEMORAG__SEARCH__LEXICAL_CANDIDATE_K", "12")

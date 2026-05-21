@@ -15,6 +15,8 @@ def render_markdown(report: ReplayReport) -> str:
         "",
         f"- Target generation: g{target.get('generation')}",
     ]
+    if data.get("forced_mode"):
+        lines.append(f"- Forced mode: {data['forced_mode']}")
     if baseline:
         lines.append(f"- Baseline generation: g{baseline.get('generation')}")
     lines.extend([
