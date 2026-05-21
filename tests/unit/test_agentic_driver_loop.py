@@ -46,6 +46,17 @@ class _Tool:
         return ToolObservation(self.payload)
 
 
+class _GradeTool(_Tool):
+    def __init__(self, signals):
+        super().__init__("grade", {})
+        self.signals = list(signals)
+
+    def __call__(self, args: dict, ctx: AgentStepCtx) -> ToolObservation:
+        signal, reason = self.signals.pop(0)
+        self.calls.append((args, ctx.step_idx))
+        return ToolObservation({"grade": {"signal": signal, "reason": reason}})
+
+
 class _Decision(RuleOnlyDecisionGenerator):
     def __init__(self):
         self.called = False
@@ -87,6 +98,30 @@ def _registry():
     registry.register(grade)
     registry.register(final)
     return registry, retrieve, grade, final
+
+
+def _iterative_registry(signals=(("low", "water tank"), ("no_signal", "c3_done"))):
+    registry = AgentToolRegistry()
+    retrieve = _Tool("retrieve", {"results": []})
+    grade = _GradeTool(signals)
+    rewrite = _Tool("rewrite", {"query": "q water tank", "changed": True})
+    final = _Tool(
+        "final",
+        {
+            "answer": {
+                "kind": "answer",
+                "text": "ok",
+                "citations": [],
+                "model_id": "stub",
+                "model_version": "",
+                "prompt_version": "p1",
+                "warnings": [],
+            }
+        },
+    )
+    for tool in (retrieve, grade, rewrite, final):
+        registry.register(tool)
+    return registry, retrieve, grade, rewrite, final
 
 
 def test_runs_retrieve_grade_then_final_on_no_signal_stub():
@@ -185,6 +220,87 @@ def test_router_multi_hop_continues_c1_loop_after_route_step():
     assert result.answer.text == "ok"
     assert [record.tool for record in result.state.history] == ["route", "retrieve", "grade", "final"]
     assert retrieve.calls[0][1] == 1
+
+
+def test_low_signal_runs_rewrite_then_second_retrieve():
+    registry, retrieve, grade, rewrite, final = _iterative_registry()
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=8, max_tool_calls=8))
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+    )
+
+    assert result.answer.text == "ok"
+    assert [record.tool for record in result.state.history] == [
+        "retrieve",
+        "grade",
+        "rewrite",
+        "retrieve",
+        "grade",
+        "final",
+    ]
+    assert retrieve.calls[0][0] == {"query": "q"}
+    assert rewrite.calls[0][0] == {"query": "q", "reason": "water tank", "append_terms": ["water tank"]}
+    assert retrieve.calls[1][0] == {"query": "q water tank"}
+    assert grade.calls[0][1] == 1
+    assert grade.calls[1][1] == 4
+    assert final.calls
+
+
+def test_router_multi_hop_composes_with_iterative_loop():
+    registry, retrieve, _grade, _rewrite, _final = _iterative_registry()
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=8, max_tool_calls=8))
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        router=_Router("multi_hop"),
+    )
+
+    assert [record.tool for record in result.state.history] == [
+        "route",
+        "retrieve",
+        "grade",
+        "rewrite",
+        "retrieve",
+        "grade",
+        "final",
+    ]
+    assert retrieve.calls[0][1] == 1
+    assert retrieve.calls[1][1] == 4
+
+
+def test_low_signal_budget_exhaustion_returns_classic_fallback():
+    registry, retrieve, grade, rewrite, final = _iterative_registry()
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=3, max_tool_calls=3))
+    fallback = AnswerGeneration("fallback")
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=object(),
+        initial_query="q",
+        classic_fallback=fallback,
+    )
+
+    assert result.answer is fallback
+    assert result.fallback_reason == "max_iterations"
+    assert [record.tool for record in result.state.history] == ["retrieve", "grade", "rewrite"]
+    assert retrieve.calls
+    assert grade.calls
+    assert rewrite.calls
+    assert not final.calls
 
 
 def test_writes_one_step_record_per_tool(tmp_path: Path):

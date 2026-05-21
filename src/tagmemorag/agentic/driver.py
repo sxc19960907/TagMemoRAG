@@ -44,38 +44,66 @@ def run_agent(
     if exhausted:
         return _terminate_with_classic_fallback(state, reason or "agent_budget_exhausted")
 
-    retrieve_obs = _call_tool(
-        "retrieve",
-        {"query": initial_query},
-        registry=registry,
-        state=state,
-        guard=guard,
-        settings=settings,
-        plan_log=plan_log,
-        state_dir=state_dir,
-        grade=None,
-        rationale="initial_retrieve",
-    )
-    state.last_retrieve_obs = retrieve_obs
+    current_query = initial_query
+    latest_grade: GradeOutcome | None = None
+    while True:
+        fallback = _fallback_if_exhausted(state, guard)
+        if fallback is not None:
+            return fallback
+        retrieve_obs = _call_tool(
+            "retrieve",
+            {"query": current_query},
+            registry=registry,
+            state=state,
+            guard=guard,
+            settings=settings,
+            plan_log=plan_log,
+            state_dir=state_dir,
+            grade=None,
+            rationale="initial_retrieve" if latest_grade is None else "iterative_retrieve",
+        )
+        state.last_retrieve_obs = retrieve_obs
 
-    grade_obs = _call_tool(
-        "grade",
-        {},
-        registry=registry,
-        state=state,
-        guard=guard,
-        settings=settings,
-        plan_log=plan_log,
-        state_dir=state_dir,
-        grade=_extract_grade(retrieve_obs),
-        rationale="c1_stub_grade",
-    )
-    grade = _extract_grade(grade_obs)
-    state.last_grade = grade
+        fallback = _fallback_if_exhausted(state, guard)
+        if fallback is not None:
+            return fallback
+        grade_obs = _call_tool(
+            "grade",
+            {},
+            registry=registry,
+            state=state,
+            guard=guard,
+            settings=settings,
+            plan_log=plan_log,
+            state_dir=state_dir,
+            grade=_extract_grade(retrieve_obs),
+            rationale="c1_stub_grade" if latest_grade is None else "iterative_grade",
+        )
+        latest_grade = _extract_grade(grade_obs)
+        state.last_grade = latest_grade
 
-    decision = _decide_next(state, grade, decision_gen)
-    if decision != "final":
-        raise NotImplementedError("agentic non-final decisions are owned by later child tasks")
+        decision = _decide_next(state, latest_grade, decision_gen)
+        if decision == "final":
+            break
+        if decision != "rewrite":
+            raise NotImplementedError("agentic non-rewrite decisions are owned by later child tasks")
+
+        fallback = _fallback_if_exhausted(state, guard)
+        if fallback is not None:
+            return fallback
+        rewrite_obs = _call_tool(
+            "rewrite",
+            _rewrite_args(current_query, latest_grade),
+            registry=registry,
+            state=state,
+            guard=guard,
+            settings=settings,
+            plan_log=plan_log,
+            state_dir=state_dir,
+            grade=latest_grade,
+            rationale="rewrite_via_low_signal",
+        )
+        current_query = str(rewrite_obs.payload.get("query") or current_query)
 
     final_obs = _call_tool(
         "final",
@@ -86,8 +114,8 @@ def run_agent(
         settings=settings,
         plan_log=plan_log,
         state_dir=state_dir,
-        grade=grade,
-        rationale="final_via_no_signal",
+        grade=latest_grade,
+        rationale=f"final_via_{latest_grade.signal if latest_grade is not None else 'no_signal'}",
     )
     answer_payload = dict(final_obs.payload.get("answer") or {})
     answer = AnswerGeneration(
@@ -104,6 +132,13 @@ def run_agent(
     )
     state.final_answer = answer
     return AgentRunResult(answer=state.finalize(), state=state)
+
+
+def _fallback_if_exhausted(state: AgentState, guard: BudgetGuard) -> AgentRunResult | None:
+    exhausted, reason = guard.agent_exhausted()
+    if not exhausted:
+        return None
+    return _terminate_with_classic_fallback(state, reason or "agent_budget_exhausted")
 
 
 def _append_route_step(
@@ -195,12 +230,21 @@ def _extract_grade(obs: ToolObservation) -> GradeOutcome:
 
 
 def _decide_next(state: AgentState, grade: GradeOutcome, decision_gen: DecisionGenerator) -> str:
-    if grade.signal == "no_signal":
+    if grade.signal in {"no_signal", "high", "inconclusive"}:
         return "final"
+    if grade.signal == "low":
+        return "rewrite"
     decision = decision_gen.choose_tool(state, AgentToolRegistry())
     if decision is not None:
         return decision.tool
     raise NotImplementedError("agentic non-no_signal decisions are owned by later child tasks")
+
+
+def _rewrite_args(query: str, grade: GradeOutcome) -> dict[str, Any]:
+    args: dict[str, Any] = {"query": query, "reason": grade.reason or "low_signal"}
+    if grade.reason:
+        args["append_terms"] = [grade.reason]
+    return args
 
 
 def _terminate_with_classic_fallback(state: AgentState, reason: str) -> AgentRunResult:

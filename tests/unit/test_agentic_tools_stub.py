@@ -38,10 +38,24 @@ def _ctx() -> AgentStepCtx:
     return AgentStepCtx(plan=plan, guard=BudgetGuard(plan), settings=_Settings(), step_idx=0)
 
 
-def test_rewrite_tool_is_identity_stub():
-    obs = RewriteTool()({"query": "original"}, _ctx())
+def test_rewrite_tool_is_identity_without_terms():
+    obs = RewriteTool()({"query": "  original   query "}, _ctx())
 
-    assert obs.payload == {"query": "original", "reason": "c1_stub_identity"}
+    assert obs.payload["query"] == "original query"
+    assert obs.payload["changed"] is False
+    assert obs.payload["reason"] == "c3_no_terms_identity"
+    assert "original_query_hash" in obs.payload
+
+
+def test_rewrite_tool_appends_unique_terms():
+    obs = RewriteTool()(
+        {"query": "E01 pump", "append_terms": ["water tank", "pump", "water tank"], "reason": "low_signal"},
+        _ctx(),
+    )
+
+    assert obs.payload["query"] == "E01 pump water tank"
+    assert obs.payload["changed"] is True
+    assert obs.payload["reason"] == "low_signal"
 
 
 class _AnswerGenerator:

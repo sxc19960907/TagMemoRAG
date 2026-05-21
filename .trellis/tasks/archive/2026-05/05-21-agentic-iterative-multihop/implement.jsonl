@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-21-agentic-iterative-multihop/prd.md", "reason": "C3 iterative loop requirements and acceptance criteria."}
+{"file": ".trellis/tasks/05-21-agentic-iterative-multihop/design.md", "reason": "Driver loop, rewrite tool contract, and step ordering design."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agent-loop-driver/design.md", "reason": "C1 loop foundation and plan_steps contracts."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-adaptive-router/design.md", "reason": "C2 route composition and step-index behavior."}
+{"file": ".trellis/tasks/05-21-agentic-rag-mode-toggle/design.md", "reason": "Parent flavor B and D4 eval context."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Living architecture and default-off agentic boundary."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and forbidden-pattern rules."}
