@@ -41,6 +41,14 @@ class LexicalMatch:
     mode: str
 
 
+@dataclass(frozen=True)
+class _SearchField:
+    text: str
+    weight: float
+    allow_term_hits: bool = True
+    allow_identity_hits: bool = True
+
+
 def lexical_search(
     graph: nx.Graph,
     query: str,
@@ -60,7 +68,7 @@ def lexical_search(
         return []
 
     matches: list[LexicalMatch] = []
-    cap = max(float(boost) * 4.0, float(exact_code_boost) + float(model_boost) + float(boost))
+    cap = max(float(boost) * 8.0, float(exact_code_boost) + float(model_boost) + float(boost))
     for node_id in sorted(eligible):
         fields = _node_search_fields(graph.nodes[node_id])
         score, mode = _score_fields(
@@ -129,25 +137,25 @@ def _cjk_ngrams(value: str, *, min_token_chars: int) -> set[str]:
     return grams
 
 
-def _node_search_fields(node: Mapping[str, Any]) -> list[tuple[str, float]]:
+def _node_search_fields(node: Mapping[str, Any]) -> list[_SearchField]:
     metadata = metadata_from_node(dict(node))
     path = node.get("path", [])
     if not isinstance(path, list):
         path = []
-    high = " ".join(
+    heading = " ".join(
         [
             str(node.get("header", "")),
             " ".join(str(part) for part in path if part),
-            str(node.get("source_file", "")),
-            str(metadata.get("manual_id", "")),
-            str(metadata.get("product_model", "")),
         ]
     )
     tags = metadata.get("tags", [])
     if not isinstance(tags, list):
         tags = []
-    medium = " ".join(
+    identity = " ".join(
         [
+            str(node.get("source_file", "")),
+            str(metadata.get("manual_id", "")),
+            str(metadata.get("product_model", "")),
             str(metadata.get("brand", "")),
             str(metadata.get("product_category", "")),
             str(metadata.get("product_name", "")),
@@ -155,11 +163,17 @@ def _node_search_fields(node: Mapping[str, Any]) -> list[tuple[str, float]]:
             " ".join(str(tag) for tag in tags),
         ]
     )
-    return [(high, 1.0), (medium, 0.85), (str(node.get("text", "")), 0.75)]
+    body = str(node.get("text", ""))
+    fields = [
+        _SearchField(heading, 1.0, allow_term_hits=True, allow_identity_hits=True),
+        _SearchField(body, 0.9, allow_term_hits=True, allow_identity_hits=False),
+        _SearchField(identity, 0.85, allow_term_hits=False, allow_identity_hits=True),
+    ]
+    return fields
 
 
 def _score_fields(
-    fields: Sequence[tuple[str, float]],
+    fields: Sequence[_SearchField],
     tokens: Mapping[str, set[str]],
     *,
     boost: float,
@@ -169,24 +183,26 @@ def _score_fields(
 ) -> tuple[float, str]:
     score = 0.0
     best_mode = ""
-    for text, weight in fields:
-        normalized = text.lower()
+    for field in fields:
+        normalized = field.text.lower()
         compact = _compact_token(normalized)
-        for token in tokens["exact_code"]:
-            if _contains_token_variant(normalized, compact, token):
-                score += exact_code_boost * weight
-                best_mode = _max_mode(best_mode, "exact_code")
-                break
-        for token in tokens["model"]:
-            if _contains_token_variant(normalized, compact, token):
-                score += model_boost * weight
-                best_mode = _max_mode(best_mode, "model")
-                break
-        text_hits = sum(1 for token in tokens["ordinary"] if token in normalized)
-        text_hits += sum(1 for token in tokens["cjk"] if token in normalized)
-        if text_hits:
-            score += boost * weight * min(2, text_hits)
-            best_mode = _max_mode(best_mode, "ordinary")
+        if field.allow_identity_hits:
+            for token in tokens["exact_code"]:
+                if _contains_token_variant(normalized, compact, token):
+                    score += exact_code_boost * field.weight
+                    best_mode = _max_mode(best_mode, "exact_code")
+                    break
+            for token in tokens["model"]:
+                if _contains_token_variant(normalized, compact, token):
+                    score += model_boost * field.weight
+                    best_mode = _max_mode(best_mode, "model")
+                    break
+        if field.allow_term_hits:
+            text_hits = sum(1 for token in tokens["ordinary"] if token in normalized)
+            text_hits += sum(1 for token in tokens["cjk"] if token in normalized)
+            if text_hits:
+                score += boost * field.weight * min(4, text_hits)
+                best_mode = _max_mode(best_mode, "ordinary")
     if score <= 0.0:
         return 0.0, ""
     return min(score, cap), best_mode or "ordinary"

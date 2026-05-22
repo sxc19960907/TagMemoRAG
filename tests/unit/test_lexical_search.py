@@ -74,6 +74,43 @@ def test_lexical_search_rewards_multiple_ordinary_term_hits():
     assert matches[0].score > single_term_score
 
 
+def test_lexical_search_prioritizes_specific_multi_term_manual_body():
+    graph = build_graph(
+        [
+            Chunk("Step 2: Choosing the Cooking System", "Step 2: Choosing the Cooking System", ("Step 2",), 2, 1, "oven.md"),
+            Chunk(
+                "The bottom heater, the round heater, and the hot air fan operate.",
+                "HOT AIR AND BOTTOM HEATER 200",
+                ("Cooking systems",),
+                2,
+                2,
+                "oven.md",
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "oven cooking system hot air bottom heater", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_does_not_reward_source_file_category_as_topic_hit():
+    graph = build_graph(
+        [
+            Chunk("Display controls set the fridge and freezer temperature.", "Display controls", ("Display controls",), 2, 1, "refrigerator/manual.md"),
+            Chunk("Installing Your New Appliance.", "Installing Your New Appliance", ("Installing Your New Appliance",), 2, 2, "refrigerator/manual.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "refrigerator display controls", candidate_k=5)
+
+    assert [match.node_id for match in matches] == [0]
+
+
 def test_wave_search_lexical_seed_recovers_short_exact_term():
     chunks = [
         Chunk("Generic vibration advice.", "Vibration", ("Vibration",), 2, 1, "washer.md"),

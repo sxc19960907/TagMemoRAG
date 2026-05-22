@@ -552,7 +552,7 @@ python -m tagmemorag eval run \
   --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0
 ```
 
-The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence.
+The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence. Lexical scoring must also keep identity fields (`source_file`, `manual_id`, `product_model`, category tags) separate from topic fields: identity fields may match exact model/code tokens for narrowing, but ordinary topic terms should be rewarded from headings/body text. Specific multi-term body matches (for example `hot air bottom heater`) need enough headroom to outrank broad table-of-contents headings like `Choosing the Cooking System`.
 
 #### T5 Replay CLI Implementation Contract
 
