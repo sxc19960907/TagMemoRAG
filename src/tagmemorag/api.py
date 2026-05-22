@@ -56,6 +56,7 @@ from .manual_registry import create_registry
 from .metadata_narrowing import NarrowingDecision, infer_metadata_narrowing, merge_inferred_filters
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
+from .qa_context import context_meta, contextual_question, normalize_question, trim_context_text
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
 from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
@@ -508,42 +509,19 @@ def _load_all_kbs(logger) -> None:
 
 
 def _normalize_question(question: str) -> str:
-    return " ".join(question.strip().split())
+    return normalize_question(question)
 
 
 def _trim_context_text(value: str | None, limit: int) -> str:
-    text = _normalize_question(value or "")
-    return text[:limit]
+    return trim_context_text(value, limit)
 
 
 def _qa_contextual_question(request: QaAnswerRequest) -> str:
-    question = _normalize_question(request.question)
-    turns: list[str] = []
-    for turn in request.conversation_context[-2:]:
-        turn_question = _trim_context_text(turn.question, 220)
-        turn_answer = _trim_context_text(turn.answer, 360)
-        if not turn_question:
-            continue
-        if turn_answer:
-            turns.append(f"Previous question: {turn_question}\nPrevious answer: {turn_answer}")
-        else:
-            turns.append(f"Previous question: {turn_question}")
-    if not turns:
-        return question
-    context = "\n\n".join(turns)
-    return f"{context}\n\nCurrent follow-up question: {question}"
+    return contextual_question(request.question, list(request.conversation_context))
 
 
 def _qa_context_meta(request: QaAnswerRequest) -> dict[str, object]:
-    summaries: list[dict[str, str]] = []
-    for turn in request.conversation_context[-2:]:
-        question = _trim_context_text(turn.question, 120)
-        if question:
-            summaries.append({"question": question})
-    return {
-        "applied": bool(summaries),
-        "summary": summaries,
-    }
+    return context_meta(list(request.conversation_context))
 
 
 def _search_param_values(request: SearchRequest) -> dict[str, object]:
