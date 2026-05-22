@@ -26,6 +26,7 @@ from .manualslib_opencli_import import ManualslibOpenCLIError, import_from_openc
 from .manualslib_import import import_manualslib_url
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .provider_probe import run_provider_probe
+from .public_web_import import import_public_web
 from .qdrant_ops import inspect_qdrant
 from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
@@ -199,6 +200,18 @@ def main(argv: list[str] | None = None) -> int:
     manualslib_opencli.add_argument("--max-pages", type=int, default=None)
     manualslib_opencli.add_argument("--timeout-seconds", type=float, default=20.0)
     manualslib_opencli.add_argument("--preview", action="store_true")
+
+    knowledge = sub.add_parser("knowledge")
+    knowledge_sub = knowledge.add_subparsers(dest="knowledge_command", required=True)
+    sample_web = knowledge_sub.add_parser("sample-web")
+    sample_web.add_argument("--url", action="append", required=True)
+    sample_web.add_argument("--output-dir", default=None)
+    sample_web.add_argument("--kb", default="default")
+    sample_web.add_argument("--domain", default="public_web")
+    sample_web.add_argument("--doc-type", default="web_page")
+    sample_web.add_argument("--tag", action="append", default=[])
+    sample_web.add_argument("--timeout-seconds", type=float, default=20.0)
+    sample_web.add_argument("--preview", action="store_true")
 
     manual_library = sub.add_parser("manual-library")
     manual_library_sub = manual_library.add_subparsers(dest="manual_library_command", required=True)
@@ -702,6 +715,34 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "knowledge" and args.knowledge_command == "sample-web":
+        try:
+            report = import_public_web(
+                tuple(args.url or ()),
+                output_dir=args.output_dir,
+                kb_name=args.kb,
+                domain=args.domain,
+                doc_type=args.doc_type,
+                tags=tuple(args.tag or ()),
+                preview=args.preview,
+                timeout_seconds=args.timeout_seconds,
+            )
+        except ValueError as exc:
+            print(
+                json.dumps(
+                    {
+                        "schema_version": "public_web_import.v1",
+                        "status": "failed",
+                        "error": {"message": str(exc)},
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                file=sys.stderr,
+            )
+            return 2
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.status in {"preview", "completed", "partial"} else 1
     if args.command == "manual-library" and args.manual_library_command == "rebuild":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

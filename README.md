@@ -44,6 +44,25 @@ Manual metadata can live next to each source file as `<manual>.metadata.json`:
 If no sidecar exists, TagMemoRAG creates fallback metadata from the relative path, filename, parent directory, and `language="unknown"`.
 During build, manual metadata is also mirrored into a generic document contract (`doc_id`, `domain`, `doc_type`, `attributes`) plus internal identity tags such as `brand:gorenje`, `model:nrk6192`, `category:fridge`, `doc:gorenje-nrk6192-zh-cn-v1`, and `manual:gorenje-nrk6192-zh-cn-v1`. These internal tags help retrieval narrow or boost by document identity; `/manuals` and search results continue to expose only the original user-facing metadata tags.
 
+Public web pages can be sampled into Markdown for general-knowledge RAG validation without committing fetched third-party content:
+
+```bash
+python -m tagmemorag knowledge sample-web \
+  --url https://docs.python.org/3/tutorial/index.html \
+  --output-dir .tmp/general-web-samples \
+  --kb general_web \
+  --domain software_docs \
+  --doc-type documentation \
+  --tag python
+
+python -m tagmemorag build \
+  --docs .tmp/general-web-samples/general_web \
+  --kb general_web \
+  --config config.yaml
+```
+
+Use `--preview` to fetch and parse pages without writing Markdown files. The sampler writes `.md` files plus sidecar metadata with `remote_id`, `url`, `domain`, and `doc_type` fields so public samples can feed the existing build and eval pipeline while remaining attributable.
+
 ### 2. Search from CLI
 
 ```bash

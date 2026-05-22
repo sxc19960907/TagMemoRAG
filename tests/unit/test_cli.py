@@ -7,6 +7,7 @@ import sys
 from tagmemorag import cli
 from tagmemorag import readiness
 from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
+from tagmemorag.public_web_import import PublicWebDocument, PublicWebImportReport
 
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
@@ -138,6 +139,68 @@ answer:
     body = json.loads(capsys.readouterr().out)
     assert body["status"] == "failed"
     assert body["probes"][0]["detail"]["env"] == "TMR_ABSENT_PROVIDER_PROBE_KEY"
+
+
+def test_cli_knowledge_sample_web_wires_arguments(monkeypatch, tmp_path, capsys):
+    captured = {}
+
+    def fake_import_public_web(urls, **kwargs):
+        captured["urls"] = urls
+        captured.update(kwargs)
+        return PublicWebImportReport(
+            status="preview",
+            preview=True,
+            kb_name=kwargs["kb_name"],
+            output_dir=kwargs["output_dir"],
+            documents=(
+                PublicWebDocument(
+                    url=urls[0],
+                    title="Python Tutorial",
+                    markdown="# Python Tutorial\n",
+                    source_file="public_web/python.md",
+                    domain=kwargs["domain"],
+                    doc_type=kwargs["doc_type"],
+                    tags=kwargs["tags"],
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(cli, "import_public_web", fake_import_public_web)
+
+    exit_code = cli.main(
+        [
+            "knowledge",
+            "sample-web",
+            "--url",
+            "https://docs.python.org/3/tutorial/index.html",
+            "--output-dir",
+            str(tmp_path),
+            "--kb",
+            "general",
+            "--domain",
+            "software_docs",
+            "--doc-type",
+            "tutorial",
+            "--tag",
+            "python",
+            "--preview",
+            "--timeout-seconds",
+            "3",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["urls"] == ("https://docs.python.org/3/tutorial/index.html",)
+    assert captured["output_dir"] == str(tmp_path)
+    assert captured["kb_name"] == "general"
+    assert captured["domain"] == "software_docs"
+    assert captured["doc_type"] == "tutorial"
+    assert captured["tags"] == ("python",)
+    assert captured["preview"] is True
+    assert captured["timeout_seconds"] == 3.0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "public_web_import.v1"
+    assert body["status"] == "preview"
 
 
 def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, capsys):
