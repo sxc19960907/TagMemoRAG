@@ -327,3 +327,34 @@ Extended /qa/answer with bounded page-session conversation context, frontend fol
 ### Next Steps
 
 - None - task complete
+
+
+## Session 63: QA session memory
+
+**Date**: 2026-05-22
+**Task**: QA session memory
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Upgraded /qa short-term memory to sanitized sessionStorage-backed tab-session recovery, preserving recent answered turns, sources, follow-ups, feedback state, and clear-history behavior without backend persistence or debug identifiers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
