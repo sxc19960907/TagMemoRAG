@@ -552,3 +552,36 @@ Added explicit ManualsLib URL import tooling that materializes browser-visible m
 ### Next Steps
 
 - None - task complete
+
+
+## Session 70: ManualsLib OpenCLI batch import
+
+**Date**: 2026-05-22
+**Task**: ManualsLib OpenCLI batch import
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a manualslib import-opencli command that uses the local OpenCLI adapter to preview and batch-import selected ManualsLib URLs through the existing explicit URL importer. Verified focused unit tests, compileall, OpenCLI preview, and a one-page real smoke import.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22380f3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

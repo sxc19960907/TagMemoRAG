@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 69
+- **Total Sessions**: 70
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~554 | Active |
+| `journal-2.md` | ~587 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 70 | 2026-05-22 | ManualsLib OpenCLI batch import | `22380f3` | `codex/agent-loop-driver` |
 | 69 | 2026-05-22 | Manualslib real manual validation | `71dbed4` | `codex/agent-loop-driver` |
 | 68 | 2026-05-22 | Manual evidence ranking quality | `7d67050` | `codex/agent-loop-driver` |
 | 67 | 2026-05-22 | Real manual retrieval quality | `3066b98` | `codex/agent-loop-driver` |
