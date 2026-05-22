@@ -585,3 +585,36 @@ Added a manualslib import-opencli command that uses the local OpenCLI adapter to
 ### Next Steps
 
 - None - task complete
+
+
+## Session 71: ManualsLib real sample quality slice
+
+**Date**: 2026-05-22
+**Task**: ManualsLib real sample quality slice
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Imported a runtime-only ManualsLib sample across Dryer, Washer, Refrigerator, and TV using the OpenCLI bridge, built a hashing KB with 239 chunks, created a .tmp retrieval eval slice, and validated recall@5=1.0/mrr=0.833333/hit@5=1.0. Regression gates for realmanuals and QA answer quality passed; noted that eval text_contains is sensitive to OCR line breaks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2b5da7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
