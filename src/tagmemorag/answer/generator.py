@@ -7,6 +7,7 @@ from .base import AnswerCitation, AnswerGeneration, AnswerGenerator, AnswerReque
 
 MAX_EXTRACTIVE_EXCERPTS = 3
 STEPWISE_ANSWER_PREFIX = "建议先这样处理："
+GENERIC_ANSWER_PREFIX = "根据资料可确认："
 SAFETY_ANSWER_PREFIX = "建议先保证安全："
 UNSUPPORTED_REPAIR_PREFIX = "现有说明书证据不足，无法确认需要这样处理。"
 SAFETY_TERMS = (
@@ -58,6 +59,9 @@ TROUBLESHOOTING_QUESTION_TERMS = (
     "fix",
     "fault",
     "problem",
+    "weak",
+    "low",
+    "small",
     "怎么办",
     "怎麼辦",
     "如何处理",
@@ -132,7 +136,7 @@ def _supported_excerpts(context: AnswerRequestContext) -> tuple[tuple[str, str],
     deduped = _dedupe_excerpts(candidates)
     if deduped:
         return tuple(deduped[:MAX_EXTRACTIVE_EXCERPTS])
-    return tuple(_dedupe_excerpts(_all_supported_excerpts(context, allowed))[:1])
+    return tuple(_dedupe_excerpts(_all_supported_excerpts(context, allowed))[:MAX_EXTRACTIVE_EXCERPTS])
 
 
 def _all_supported_excerpts(context: AnswerRequestContext, allowed: set[str]) -> list[tuple[str, str]]:
@@ -177,7 +181,8 @@ def _format_extractive_answer(question: str, excerpts: tuple[tuple[str, str], ..
     if len(excerpts) == 1:
         citation_id, excerpt = excerpts[0]
         return f"{excerpt} [{citation_id}]"
-    return _format_stepwise_answer(STEPWISE_ANSWER_PREFIX, excerpts)
+    prefix = STEPWISE_ANSWER_PREFIX if _asks_troubleshooting_question(question) else GENERIC_ANSWER_PREFIX
+    return _format_stepwise_answer(prefix, excerpts)
 
 
 def _format_stepwise_answer(prefix: str, excerpts: tuple[tuple[str, str], ...]) -> str:
@@ -242,6 +247,10 @@ def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
 
 def _asks_unsupported_repair(question: str) -> bool:
     return _contains_any(question, UNSUPPORTED_REPAIR_TERMS)
+
+
+def _asks_troubleshooting_question(question: str) -> bool:
+    return _contains_any(question, TROUBLESHOOTING_QUESTION_TERMS)
 
 
 def _is_cjk(char: str) -> bool:

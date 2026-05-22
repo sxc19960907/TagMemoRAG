@@ -84,6 +84,79 @@ def test_noop_answer_generator_falls_back_to_first_supported_excerpt():
     assert [c.citation_id for c in generation.citations] == ["cit_001"]
 
 
+def test_noop_answer_generator_formats_generic_multi_evidence_answer():
+    retrieve_payload = {
+        "citations": [{"citation_id": "cit_001"}, {"citation_id": "cit_002"}],
+        "context_pack": {
+            "items": [
+                {
+                    "citation_id": "cit_001",
+                    "content": (
+                        "Repositories\n\n"
+                        "You can think of a repository as a folder that contains related items."
+                    ),
+                },
+                {
+                    "citation_id": "cit_002",
+                    "content": "README\n\nREADME files are written in Markdown.",
+                },
+            ]
+        },
+    }
+    prompt = build_answer_prompt(
+        question="What is a GitHub repository and README?",
+        retrieve_payload=retrieve_payload,
+        prompt_version="answer_prompt.v1",
+    )
+    context = AnswerRequestContext(
+        question="What is a GitHub repository and README?",
+        retrieve_payload=retrieve_payload,
+        prompt=prompt,
+        max_output_tokens=64,
+    )
+
+    generation = NoopAnswerGenerator().generate(context)
+
+    assert generation.text == (
+        "根据资料可确认：\n"
+        "1. You can think of a repository as a folder that contains related items. [cit_001]\n"
+        "2. README files are written in Markdown. [cit_002]"
+    )
+    assert "建议先这样处理" not in generation.text
+    assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
+
+
+def test_noop_answer_generator_fallback_keeps_multiple_allowed_excerpts():
+    retrieve_payload = {
+        "citations": [
+            {"citation_id": "cit_001"},
+            {"citation_id": "cit_002"},
+            {"citation_id": "cit_003"},
+            {"citation_id": "cit_004"},
+        ],
+        "context_pack": {
+            "items": [
+                {"citation_id": "cit_001", "content": "One\n\nFirst available fact."},
+                {"citation_id": "cit_002", "content": "Two\n\nSecond available fact."},
+                {"citation_id": "cit_003", "content": "Three\n\nThird available fact."},
+                {"citation_id": "cit_004", "content": "Four\n\nFourth available fact."},
+            ]
+        },
+    }
+    prompt = build_answer_prompt(question="unrelated topic", retrieve_payload=retrieve_payload, prompt_version="answer_prompt.v1")
+    context = AnswerRequestContext(question="unrelated topic", retrieve_payload=retrieve_payload, prompt=prompt, max_output_tokens=64)
+
+    generation = NoopAnswerGenerator().generate(context)
+
+    assert generation.text == (
+        "根据资料可确认：\n"
+        "1. First available fact. [cit_001]\n"
+        "2. Second available fact. [cit_002]\n"
+        "3. Third available fact. [cit_003]"
+    )
+    assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002", "cit_003"]
+
+
 def test_noop_answer_generator_handles_no_supported_evidence():
     retrieve_payload = {
         "citations": [{"citation_id": "cit_001"}],
