@@ -53,7 +53,22 @@
           </header>
 
           <div class="qa-answer-scroll">
-            <div id="qa-answer" class="qa-answer-message empty-state">Ask a question to generate an answer.</div>
+            <div id="qa-answer" class="qa-answer-message empty-state">
+              <strong>Ask about a symptom, task, or error.</strong>
+              <p>Good questions include weak steam, no coffee output, descaling, or nozzle cleaning.</p>
+            </div>
+            <section id="qa-followups" class="qa-followups" aria-label="Follow-up questions" hidden></section>
+            <section id="qa-feedback" class="qa-feedback" aria-label="Answer feedback" hidden>
+              <div>
+                <span class="eyebrow">Feedback</span>
+                <strong>Was this useful?</strong>
+              </div>
+              <div class="qa-feedback-actions">
+                <button type="button" class="ghost small" data-feedback="helpful">Helpful</button>
+                <button type="button" class="ghost small" data-feedback="not-helpful">Not helpful</button>
+              </div>
+              <p id="qa-feedback-note" aria-live="polite"></p>
+            </section>
           </div>
 
           <form id="qa-question-form" class="qa-composer">

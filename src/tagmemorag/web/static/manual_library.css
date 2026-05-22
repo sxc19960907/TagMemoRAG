@@ -346,6 +346,15 @@ textarea {
   margin: 0 0 10px;
 }
 
+.qa-answer-message.empty-state strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.qa-loading-stage {
+  color: var(--muted);
+}
+
 .qa-answer-steps {
   display: grid;
   gap: 10px;
@@ -389,6 +398,72 @@ textarea {
 .qa-answer-message.warn {
   border-color: #efcf8f;
   background: #fff8eb;
+}
+
+.qa-followups,
+.qa-feedback {
+  max-width: 780px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+  box-shadow: 0 8px 24px rgb(22 38 55 / 0.04);
+}
+
+.qa-followup-list,
+.qa-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.qa-followup-chip {
+  min-height: 30px;
+  border: 1px solid #b7c5d7;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #284b6f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+.qa-followup-chip:hover,
+.qa-followup-chip:focus {
+  border-color: #6d95c3;
+  background: #e7f1ff;
+  outline: none;
+}
+
+.qa-feedback {
+  display: grid;
+  gap: 8px;
+}
+
+.qa-feedback[hidden],
+.qa-followups[hidden] {
+  display: none;
+}
+
+.qa-feedback strong {
+  display: block;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.qa-feedback button.active {
+  border-color: #2f6f56;
+  background: #e9f7ef;
+  color: #1d5b43;
+}
+
+.qa-feedback p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .qa-composer {
@@ -442,6 +517,36 @@ textarea {
 
 .qa-source-item p {
   margin: 8px 0 0;
+}
+
+.qa-source-section {
+  color: #41566f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qa-source-summary,
+.qa-source-full {
+  color: var(--ink);
+}
+
+.qa-source-toggle {
+  margin-top: 8px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  color: #315f8f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+}
+
+.qa-source-toggle:hover,
+.qa-source-toggle:focus {
+  color: #1f4974;
+  text-decoration: underline;
+  outline: none;
 }
 
 .workbench-question-form,

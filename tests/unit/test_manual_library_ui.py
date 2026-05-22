@@ -142,9 +142,13 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-answer"' in body
     assert 'id="qa-suggestions"' in body
     assert 'id="qa-copy-answer"' in body
+    assert 'id="qa-followups"' in body
+    assert 'id="qa-feedback"' in body
+    assert 'id="qa-feedback-note"' in body
     assert 'id="qa-sources"' in body
     assert "Product manual support" in body
     assert "Try asking" in body
+    assert "Ask about a symptom, task, or error." in body
     assert "Knowledge base" not in body
     assert "Use KB" not in body
     assert 'id="qa-kb-name"' not in body
@@ -169,6 +173,14 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderSuggestions" in js.text
     assert "copyAnswer" in js.text
     assert "navigator.clipboard.writeText" in js.text
+    assert "loadingStages" in js.text
+    assert "startLoadingStages" in js.text
+    assert "renderFollowups" in js.text
+    assert "buildFollowupQuestions" in js.text
+    assert "handleFeedback" in js.text
+    assert "bindSourceToggles" in js.text
+    assert "qa-source-summary" in js.text
+    assert "qa-source-toggle" in js.text
     assert "qa-citation-chip" in js.text
     assert "data-citation-target" in js.text
     assert "data-citation-id" in js.text

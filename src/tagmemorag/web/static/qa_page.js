@@ -4,6 +4,8 @@ const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 const state = {
   kbName: config.defaultKbName || "default",
   lastAnswerText: "",
+  loadingTimer: null,
+  loadingStageIndex: 0,
 };
 
 const suggestedQuestions = [
@@ -11,6 +13,12 @@ const suggestedQuestions = [
   "不出咖啡怎么办？",
   "什么时候需要除垢？",
   "喷嘴怎么清洗？",
+];
+
+const loadingStages = [
+  "Understanding the question...",
+  "Finding the most relevant manual passages...",
+  "Composing a grounded answer...",
 ];
 
 const el = {
@@ -26,6 +34,9 @@ const el = {
   sources: document.getElementById("qa-sources"),
   contextNote: document.getElementById("qa-context-note"),
   suggestions: document.getElementById("qa-suggestions"),
+  followups: document.getElementById("qa-followups"),
+  feedback: document.getElementById("qa-feedback"),
+  feedbackNote: document.getElementById("qa-feedback-note"),
 };
 
 function headers() {
@@ -38,6 +49,10 @@ function headers() {
 function setStatus(message, kind = "") {
   el.status.textContent = message || "";
   el.status.className = kind ? `status-strip qa-status ${kind}` : "status-strip qa-status";
+}
+
+function setHidden(node, hidden) {
+  if (node) node.hidden = hidden;
 }
 
 function escapeHtml(value) {
@@ -97,17 +112,21 @@ async function askQuestion(question) {
 }
 
 function renderPending() {
+  resetPostAnswerUi();
   state.lastAnswerText = "";
   el.answer.className = "qa-answer-message empty-state";
-  el.answer.textContent = "Waiting for answer...";
-  el.answerMeta.textContent = "Searching the selected knowledge base";
+  el.answer.innerHTML = '<p class="qa-loading-stage">Understanding the question...</p>';
+  el.answerMeta.textContent = "Preparing answer";
   if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
-  el.sources.textContent = "Looking for sources...";
+  el.sources.textContent = "Finding sources...";
   el.sourceMeta.textContent = "Cited source snippets will appear here.";
+  startLoadingStages();
 }
 
 function renderError(error) {
+  stopLoadingStages();
+  resetPostAnswerUi();
   state.lastAnswerText = "";
   el.answer.className = "qa-answer-message error";
   el.answer.textContent = userFacingError(error.message);
@@ -119,6 +138,7 @@ function renderError(error) {
 }
 
 function renderAnswer(body) {
+  stopLoadingStages();
   const answer = body.answer || {};
   const retrieve = body.retrieve || {};
   const kind = String(answer.kind || "unknown");
@@ -129,7 +149,10 @@ function renderAnswer(body) {
     el.answer.innerHTML = renderAnswerText(answer.text || "");
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
     if (el.copyAnswer) el.copyAnswer.disabled = !state.lastAnswerText;
+    renderFollowups(answer.text || "", answer.citations || []);
+    renderFeedback();
   } else {
+    resetPostAnswerUi();
     state.lastAnswerText = "";
     el.answer.className = "qa-answer-message warn";
     const reason = answer.text || answer.refusal_reason || "I could not answer from the available manual content.";
@@ -149,6 +172,37 @@ function renderAnswer(body) {
   }
 }
 
+function startLoadingStages() {
+  stopLoadingStages();
+  state.loadingStageIndex = 0;
+  state.loadingTimer = window.setInterval(() => {
+    state.loadingStageIndex = (state.loadingStageIndex + 1) % loadingStages.length;
+    const stage = loadingStages[state.loadingStageIndex];
+    const stageEl = el.answer.querySelector(".qa-loading-stage");
+    if (stageEl) stageEl.textContent = stage;
+    el.answerMeta.textContent = stage;
+  }, 700);
+}
+
+function stopLoadingStages() {
+  if (!state.loadingTimer) return;
+  window.clearInterval(state.loadingTimer);
+  state.loadingTimer = null;
+}
+
+function resetPostAnswerUi() {
+  setHidden(el.followups, true);
+  if (el.followups) el.followups.innerHTML = "";
+  setHidden(el.feedback, true);
+  if (el.feedbackNote) el.feedbackNote.textContent = "";
+  if (el.feedback) {
+    el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
+      button.classList.remove("active");
+      button.setAttribute("aria-pressed", "false");
+    });
+  }
+}
+
 function renderSuggestions() {
   if (!el.suggestions) return;
   el.suggestions.innerHTML = suggestedQuestions
@@ -161,6 +215,70 @@ function renderSuggestions() {
       askQuestion(question);
     });
   });
+}
+
+function renderFollowups(answerText, citations) {
+  if (!el.followups) return;
+  const questions = buildFollowupQuestions(answerText, citations).slice(0, 3);
+  if (questions.length === 0) {
+    setHidden(el.followups, true);
+    return;
+  }
+  el.followups.innerHTML = `
+    <span class="eyebrow">Follow up</span>
+    <div class="qa-followup-list">
+      ${questions.map((question) => `<button class="qa-followup-chip" type="button" data-followup="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}
+    </div>
+  `;
+  setHidden(el.followups, false);
+  el.followups.querySelectorAll("[data-followup]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const question = button.dataset.followup || "";
+      el.question.value = question;
+      askQuestion(question);
+    });
+  });
+}
+
+function buildFollowupQuestions(answerText, citations) {
+  const text = String(answerText || "").toLowerCase();
+  const citationText = JSON.stringify(citations || []).toLowerCase();
+  const combined = `${text} ${citationText}`;
+  const questions = [];
+  if (combined.includes("steam") || combined.includes("蒸汽")) {
+    questions.push("蒸汽还是很小怎么办？", "喷嘴堵塞怎么判断？");
+  }
+  if (combined.includes("descal") || combined.includes("scale") || combined.includes("除垢")) {
+    questions.push("除垢多久做一次？");
+  }
+  if (combined.includes("nozzle") || combined.includes("喷嘴")) {
+    questions.push("喷嘴怎么彻底清洗？");
+  }
+  if (combined.includes("coffee") || combined.includes("咖啡")) {
+    questions.push("还是不出咖啡怎么办？");
+  }
+  questions.push("如果还没恢复，下一步检查什么？", "哪些情况需要联系维修？");
+  return [...new Set(questions)];
+}
+
+function renderFeedback() {
+  if (!el.feedback) return;
+  setHidden(el.feedback, false);
+  if (el.feedbackNote) el.feedbackNote.textContent = "";
+}
+
+function handleFeedback(kind) {
+  if (!el.feedback) return;
+  el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
+    const selected = button.dataset.feedback === kind;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  if (el.feedbackNote) {
+    el.feedbackNote.textContent = kind === "helpful"
+      ? "Marked helpful for this answer."
+      : "Marked for review in this page session.";
+  }
 }
 
 async function copyAnswer() {
@@ -269,6 +387,7 @@ function renderSources(citations, evidence) {
   el.sources.className = "qa-source-list";
   el.sourceMeta.textContent = `${items.length} source${items.length === 1 ? "" : "s"} cited`;
   el.sources.innerHTML = items.map(renderSourceItem).join("");
+  bindSourceToggles();
   bindCitationLinks();
 }
 
@@ -299,16 +418,45 @@ function renderSourceItem(item) {
   const source = item.source || item.source_file || "";
   const section = Array.isArray(item.section_path) ? item.section_path.join(" / ") : "";
   const text = item.text || item.content || "";
+  const summary = summarizeSourceText(text);
+  const canExpand = text.length > summary.length;
   return `
     <article id="qa-source-${safeCitation}" class="qa-source-item" data-citation-id="${safeCitation}">
       <div class="evidence-head">
         <span class="badge">${safeCitation}</span>
         <span class="muted">${escapeHtml(source)}</span>
       </div>
-      ${section ? `<p class="muted">${escapeHtml(section)}</p>` : ""}
-      <p>${escapeHtml(text)}</p>
+      ${section ? `<p class="qa-source-section">${escapeHtml(section)}</p>` : ""}
+      <p class="qa-source-summary">${escapeHtml(summary)}</p>
+      ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>Show more</button>` : ""}
     </article>
   `;
+}
+
+function summarizeSourceText(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= 180) return normalized;
+  const sentenceEnd = normalized.search(/[。.!?]\s/);
+  if (sentenceEnd >= 80 && sentenceEnd <= 180) {
+    return `${normalized.slice(0, sentenceEnd + 1).trim()}...`;
+  }
+  return `${normalized.slice(0, 177).trim()}...`;
+}
+
+function bindSourceToggles() {
+  el.sources.querySelectorAll("[data-source-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const source = button.closest(".qa-source-item");
+      if (!source) return;
+      const full = source.querySelector(".qa-source-full");
+      const summary = source.querySelector(".qa-source-summary");
+      if (!full || !summary) return;
+      const expanding = full.hidden;
+      full.hidden = !expanding;
+      summary.hidden = expanding;
+      button.textContent = expanding ? "Show less" : "Show more";
+    });
+  });
 }
 
 function bindCitationLinks() {
@@ -335,5 +483,10 @@ function cssEscape(value) {
 
 el.questionForm.addEventListener("submit", requestAnswer);
 if (el.copyAnswer) el.copyAnswer.addEventListener("click", copyAnswer);
+if (el.feedback) {
+  el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
+    button.addEventListener("click", () => handleFeedback(button.dataset.feedback || ""));
+  });
+}
 renderSuggestions();
 updateLocationKb();
