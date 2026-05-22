@@ -21,6 +21,7 @@ from .cli_helpers import (
     read_text_file,
     split_csv,
 )
+from .cli_source_import import run_knowledge_command, run_manualslib_command
 from .config_validation import validate_config
 from .embedder import create_embedder
 from .epa_basis import retrain_if_needed, basis_path, load_epa_basis
@@ -31,11 +32,8 @@ from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
-from .manualslib_opencli_import import ManualslibOpenCLIError, import_from_opencli
-from .manualslib_import import import_manualslib_url
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .provider_probe import run_provider_probe
-from .public_web_import import import_public_web
 from .qdrant_ops import inspect_qdrant
 from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
@@ -683,68 +681,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
-    if args.command == "manualslib" and args.manualslib_command == "import-opencli":
-        try:
-            report = import_from_opencli(
-                brand=args.brand,
-                category=args.category,
-                limit=args.limit,
-                output_dir=args.output_dir,
-                preview=args.preview,
-                max_pages=args.max_pages,
-                timeout_seconds=args.timeout_seconds,
-            )
-        except (ManualslibOpenCLIError, ValueError) as exc:
-            body = exc.to_dict() if isinstance(exc, ManualslibOpenCLIError) else {
-                "schema_version": "manualslib_opencli_import.v1",
-                "status": "failed",
-                "error": {"message": str(exc)},
-            }
-            print(json.dumps(body, ensure_ascii=False, indent=2), file=sys.stderr)
-            return 2
-        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
-        return 0 if report.status in {"preview", "completed"} else 1
-    if args.command == "manualslib" and args.manualslib_command == "import-url":
-        try:
-            result = import_manualslib_url(
-                args.url,
-                output_dir=args.output_dir,
-                max_pages=args.max_pages,
-                timeout_seconds=args.timeout_seconds,
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"manualslib import error: {type(exc).__name__}: {exc}", file=sys.stderr)
-            return 2
-        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
-        return 0
-    if args.command == "knowledge" and args.knowledge_command == "sample-web":
-        try:
-            report = import_public_web(
-                tuple(args.url or ()),
-                output_dir=args.output_dir,
-                kb_name=args.kb,
-                domain=args.domain,
-                doc_type=args.doc_type,
-                tags=tuple(args.tag or ()),
-                preview=args.preview,
-                timeout_seconds=args.timeout_seconds,
-            )
-        except ValueError as exc:
-            print(
-                json.dumps(
-                    {
-                        "schema_version": "public_web_import.v1",
-                        "status": "failed",
-                        "error": {"message": str(exc)},
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                file=sys.stderr,
-            )
-            return 2
-        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
-        return 0 if report.status in {"preview", "completed", "partial"} else 1
+    if args.command == "manualslib":
+        return run_manualslib_command(args)
+    if args.command == "knowledge":
+        return run_knowledge_command(args)
     if args.command == "manual-library" and args.manual_library_command == "rebuild":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)

@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import cli_source_import
 from tagmemorag import readiness
 from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
 from tagmemorag.public_web_import import PublicWebDocument, PublicWebImportReport
@@ -165,7 +166,7 @@ def test_cli_knowledge_sample_web_wires_arguments(monkeypatch, tmp_path, capsys)
             ),
         )
 
-    monkeypatch.setattr(cli, "import_public_web", fake_import_public_web)
+    monkeypatch.setattr(cli_source_import, "import_public_web", fake_import_public_web)
 
     exit_code = cli.main(
         [
@@ -884,7 +885,7 @@ def test_cli_manualslib_import_opencli_preview_wires_arguments(monkeypatch, caps
         captured.update(kwargs)
         return FakeReport()
 
-    monkeypatch.setattr(cli, "import_from_opencli", fake_import_from_opencli)
+    monkeypatch.setattr(cli_source_import, "import_from_opencli", fake_import_from_opencli)
 
     exit_code = cli.main(
         [
@@ -921,7 +922,7 @@ def test_cli_manualslib_import_opencli_failure_returns_two(monkeypatch, capsys):
     def fake_import_from_opencli(**kwargs):
         raise ManualslibOpenCLIError("opencli returned exit code 66", command=["opencli"], stderr="missing")
 
-    monkeypatch.setattr(cli, "import_from_opencli", fake_import_from_opencli)
+    monkeypatch.setattr(cli_source_import, "import_from_opencli", fake_import_from_opencli)
 
     exit_code = cli.main(["manualslib", "import-opencli", "--preview"])
 
