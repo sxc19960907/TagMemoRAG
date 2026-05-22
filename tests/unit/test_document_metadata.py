@@ -51,3 +51,31 @@ def test_manual_node_attrs_keeps_backward_compatible_manual_fields():
     assert attrs["product_category"] == "coffee"
     assert attrs["product_model"] == "CM1"
     assert "model:cm1" in attrs["tags"]
+
+
+def test_manual_node_attrs_honors_generic_sidecar_metadata():
+    metadata = ManualMetadata(
+        manual_id="python-tutorial",
+        title="Python Tutorial",
+        source_file="public_web/python.md",
+        product_category="software_docs",
+        tags=("python",),
+        extra={
+            "domain": "software_docs",
+            "doc_type": "documentation",
+            "remote_id": "https://docs.python.org/3/tutorial/index.html",
+            "url": "https://docs.python.org/3/tutorial/index.html",
+        },
+    )
+
+    attrs = manual_node_attrs(metadata)
+
+    assert attrs["doc_id"] == "python-tutorial"
+    assert attrs["domain"] == "software_docs"
+    assert attrs["doc_type"] == "documentation"
+    assert attrs["manual_id"] == "python-tutorial"
+    assert attrs["product_category"] == "software_docs"
+    assert attrs["remote_id"] == "https://docs.python.org/3/tutorial/index.html"
+    assert attrs["attributes"]["manual_id"] == "python-tutorial"
+    assert attrs["attributes"]["url"] == "https://docs.python.org/3/tutorial/index.html"
+    assert "category:software-docs" in attrs["tags"]

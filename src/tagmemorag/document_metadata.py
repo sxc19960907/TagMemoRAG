@@ -47,6 +47,8 @@ def document_metadata_from_manual(metadata: ManualMetadata) -> DocumentMetadata:
         "product_model": metadata.product_model,
         "version": metadata.version,
         "checksum": metadata.checksum,
+        "remote_id": metadata.extra.get("remote_id", ""),
+        "url": metadata.extra.get("url", ""),
     }
     tags = _dedupe_tags(
         (
@@ -64,8 +66,8 @@ def document_metadata_from_manual(metadata: ManualMetadata) -> DocumentMetadata:
         doc_id=manual_id,
         title=metadata.title,
         source_file=metadata.source_file,
-        domain="product_manual",
-        doc_type="manual",
+        domain=metadata.extra.get("domain") or "product_manual",
+        doc_type=metadata.extra.get("doc_type") or "manual",
         language=metadata.language,
         status=metadata.status,
         tags=tags,

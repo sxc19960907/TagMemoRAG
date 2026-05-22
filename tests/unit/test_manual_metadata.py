@@ -47,6 +47,41 @@ def test_manual_metadata_from_sidecar_normalizes_tags_and_source_file(tmp_path):
     assert metadata.to_node_attrs()["product_model"] == "NRK6192"
 
 
+def test_manual_metadata_from_sidecar_preserves_generic_extra_fields(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    source = docs / "python.md"
+    source.write_text("# Python\n", encoding="utf-8")
+    (docs / "python.metadata.json").write_text(
+        json.dumps(
+            {
+                "manual_id": "python-tutorial",
+                "title": "Python Tutorial",
+                "source_file": "ignored.md",
+                "product_category": "software_docs",
+                "domain": "software_docs",
+                "doc_type": "documentation",
+                "remote_id": "https://docs.python.org/3/tutorial/index.html",
+                "url": "https://docs.python.org/3/tutorial/index.html",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = load_manual_metadata(source, docs)
+
+    assert metadata.source_file == "python.md"
+    assert metadata.extra == {
+        "domain": "software_docs",
+        "doc_type": "documentation",
+        "remote_id": "https://docs.python.org/3/tutorial/index.html",
+        "url": "https://docs.python.org/3/tutorial/index.html",
+    }
+    attrs = metadata.to_node_attrs()
+    assert attrs["domain"] == "software_docs"
+    assert attrs["doc_type"] == "documentation"
+
+
 def test_fallback_manual_metadata_uses_relative_path_and_parent_category(tmp_path):
     docs = tmp_path / "docs"
     source = docs / "fridge" / "basic-manual.txt"
