@@ -31,6 +31,7 @@ const el = {
   questionForm: document.getElementById("qa-question-form"),
   question: document.getElementById("qa-question"),
   submit: document.getElementById("qa-submit"),
+  submitNew: document.getElementById("qa-submit-new"),
   status: document.getElementById("qa-status"),
   answerMeta: document.getElementById("qa-answer-meta"),
   answer: document.getElementById("qa-answer"),
@@ -89,11 +90,27 @@ async function requestAnswer(event) {
   await askQuestion(question, { useConversationContext: shouldUseConversationContext(question) });
 }
 
+async function requestNewQuestion() {
+  const question = el.question.value.trim();
+  if (!question) {
+    setStatus("Enter a question first.", "error");
+    el.question.focus();
+    return;
+  }
+  await askQuestion(question, { useConversationContext: false });
+}
+
 async function askQuestion(question, options = {}) {
   updateLocationKb();
   const turn = addConversationTurn(question);
+  const contextTurns = options.useConversationContext ? conversationContextForRequest(turn.id) : [];
+  updateConversationTurn(turn.id, {
+    usedContext: contextTurns.length > 0,
+    contextSummary: contextTurns.map((item) => ({ question: item.question })),
+  });
   renderPending();
   el.submit.disabled = true;
+  if (el.submitNew) el.submitNew.disabled = true;
   setStatus("Asking...");
 
   try {
@@ -103,7 +120,7 @@ async function askQuestion(question, options = {}) {
       body: JSON.stringify({
         question,
         include_retrieve: true,
-        conversation_context: options.useConversationContext ? conversationContextForRequest(turn.id) : [],
+        conversation_context: contextTurns,
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -113,6 +130,8 @@ async function askQuestion(question, options = {}) {
     updateConversationTurn(turn.id, {
       status: answerStatusFromBody(body),
       body,
+      usedContext: Boolean(body.context?.applied),
+      contextSummary: Array.isArray(body.context?.summary) ? body.context.summary : contextTurns.map((item) => ({ question: item.question })),
     });
     if (state.activeTurnId === turn.id) {
       renderAnswer(body);
@@ -130,6 +149,7 @@ async function askQuestion(question, options = {}) {
     }
   } finally {
     el.submit.disabled = false;
+    updateSubmitNewState();
   }
 }
 
@@ -171,6 +191,7 @@ function renderAnswer(body) {
     el.answer.innerHTML = renderAnswerText(answer.text || "");
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
     if (el.copyAnswer) el.copyAnswer.disabled = !state.lastAnswerText;
+    renderContextNotice(body.context);
     renderFollowups(answer.text || "", answer.citations || []);
     renderFeedback();
   } else {
@@ -185,6 +206,7 @@ function renderAnswer(body) {
     ].join("");
     el.answerMeta.textContent = "No grounded answer available";
     if (el.copyAnswer) el.copyAnswer.disabled = true;
+    renderContextNotice(body.context);
   }
 
   if (body.route && body.route.kind === "clarification") {
@@ -213,6 +235,7 @@ function stopLoadingStages() {
 }
 
 function resetPostAnswerUi() {
+  renderContextNotice(null);
   setHidden(el.followups, true);
   if (el.followups) el.followups.innerHTML = "";
   setHidden(el.feedback, true);
@@ -233,6 +256,8 @@ function addConversationTurn(question) {
     body: null,
     errorMessage: "",
     feedbackKind: "",
+    usedContext: false,
+    contextSummary: [],
   };
   state.turns = [turn, ...state.turns].slice(0, 8);
   state.activeTurnId = turn.id;
@@ -313,7 +338,10 @@ function renderHistory() {
   el.history.innerHTML = state.turns.map((turn) => `
     <button class="qa-history-item ${turn.id === state.activeTurnId ? "active" : ""}" type="button" data-turn-id="${escapeHtml(turn.id)}">
       <span>${escapeHtml(turn.question)}</span>
-      <small>${escapeHtml(historyStatusLabel(turn.status))}</small>
+      <small class="qa-history-status">
+        <span>${escapeHtml(historyStatusLabel(turn.status))}</span>
+        ${turn.usedContext ? '<span class="qa-context-pill">Context</span>' : ""}
+      </small>
     </button>
   `).join("");
   if (el.clearHistory) el.clearHistory.disabled = false;
@@ -354,6 +382,8 @@ function normalizeSavedTurn(rawTurn) {
     body: rawTurn.body ? sanitizeAnswerBody(rawTurn.body) : null,
     errorMessage: status === "error" ? String(rawTurn.errorMessage || "This answer was interrupted before reload.").slice(0, 300) : "",
     feedbackKind: rawTurn.feedbackKind === "helpful" || rawTurn.feedbackKind === "not-helpful" ? rawTurn.feedbackKind : "",
+    usedContext: Boolean(rawTurn.usedContext),
+    contextSummary: Array.isArray(rawTurn.contextSummary) ? rawTurn.contextSummary.slice(0, 2) : [],
   };
 }
 
@@ -382,6 +412,8 @@ function sanitizeTurnForStorage(turn) {
     body: turn.body ? sanitizeAnswerBody(turn.body) : null,
     errorMessage: String(turn.errorMessage || "").slice(0, 300),
     feedbackKind: turn.feedbackKind === "helpful" || turn.feedbackKind === "not-helpful" ? turn.feedbackKind : "",
+    usedContext: Boolean(turn.usedContext),
+    contextSummary: Array.isArray(turn.contextSummary) ? turn.contextSummary.slice(0, 2) : [],
   };
 }
 
@@ -437,6 +469,30 @@ function clearSessionMemory() {
   }
 }
 
+function renderContextNotice(context) {
+  const existing = document.getElementById("qa-context-notice");
+  if (existing) existing.remove();
+  const applied = Boolean(context?.applied);
+  const summary = Array.isArray(context?.summary) ? context.summary : [];
+  if (!applied || summary.length === 0) return;
+  const notice = document.createElement("section");
+  notice.id = "qa-context-notice";
+  notice.className = "qa-context-notice";
+  notice.setAttribute("aria-label", "Conversation context");
+  const question = summary.map((item) => item.question).filter(Boolean)[0] || "previous question";
+  notice.innerHTML = `
+    <strong>Continuing from earlier</strong>
+    <p>Using context from: ${escapeHtml(question)}</p>
+  `;
+  el.answer.insertAdjacentElement("afterend", notice);
+}
+
+function updateSubmitNewState() {
+  if (!el.submitNew) return;
+  const question = el.question ? el.question.value.trim() : "";
+  el.submitNew.disabled = !shouldUseConversationContext(question);
+}
+
 function historyStatusLabel(status) {
   if (status === "pending") return "Asking...";
   if (status === "answered") return "Answered";
@@ -454,15 +510,18 @@ function restoreConversationTurn(turnId) {
   stopLoadingStages();
   if (turn.status === "pending") {
     renderPending();
+    updateSubmitNewState();
     return;
   }
   if (turn.status === "error") {
     renderError({ message: turn.errorMessage || "Answer request failed." });
+    updateSubmitNewState();
     return;
   }
   if (turn.body) {
     renderAnswer(turn.body);
   }
+  updateSubmitNewState();
 }
 
 function clearHistory() {
@@ -470,6 +529,7 @@ function clearHistory() {
   state.activeTurnId = "";
   renderHistory();
   clearSessionMemory();
+  updateSubmitNewState();
 }
 
 function renderSuggestions() {
@@ -776,8 +836,11 @@ if (el.feedback) {
   });
 }
 if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
+if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
+if (el.question) el.question.addEventListener("input", updateSubmitNewState);
 renderSuggestions();
 loadSessionMemory();
 renderHistory();
 if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);
+updateSubmitNewState();
 updateLocationKb();

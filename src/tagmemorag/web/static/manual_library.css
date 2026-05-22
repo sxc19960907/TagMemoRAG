@@ -329,6 +329,21 @@ textarea {
   font-size: 11px;
 }
 
+.qa-history-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.qa-context-pill {
+  border-radius: 999px;
+  background: #e9f7ef;
+  color: #1d5b43;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
 .qa-center-pane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -458,6 +473,7 @@ textarea {
   background: #fff8eb;
 }
 
+.qa-context-notice,
 .qa-followups,
 .qa-feedback {
   max-width: 780px;
@@ -467,6 +483,28 @@ textarea {
   background: var(--surface);
   padding: 12px;
   box-shadow: 0 8px 24px rgb(22 38 55 / 0.04);
+}
+
+.qa-context-notice {
+  display: grid;
+  gap: 4px;
+  border-color: #b8d5c6;
+  background: #f4fbf7;
+}
+
+.qa-context-notice[hidden] {
+  display: none;
+}
+
+.qa-context-notice strong {
+  color: #1d5b43;
+  font-size: 13px;
+}
+
+.qa-context-notice p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .qa-followup-list,
@@ -541,9 +579,14 @@ textarea {
 
 .qa-composer button {
   align-self: end;
-  justify-self: stretch;
   min-width: 76px;
   min-height: 40px;
+}
+
+.qa-composer-actions {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(96px, 1fr);
+  gap: 8px;
 }
 
 .qa-token-field {

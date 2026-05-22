@@ -139,6 +139,7 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'class="qa-center-pane"' in body
     assert 'class="qa-right-rail"' in body
     assert 'id="qa-question"' in body
+    assert 'id="qa-submit-new"' in body
     assert 'id="qa-answer"' in body
     assert 'id="qa-suggestions"' in body
     assert 'id="qa-copy-answer"' in body
@@ -172,6 +173,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "conversationContextForRequest" in js.text
     assert "answerPreviewForContext" in js.text
     assert "shouldUseConversationContext" in js.text
+    assert "requestNewQuestion" in js.text
+    assert "renderContextNotice" in js.text
+    assert "updateSubmitNewState" in js.text
+    assert "qa-context-pill" in js.text
+    assert "qa-context-notice" in js.text
     assert "sessionStorage" in js.text
     assert "loadSessionMemory" in js.text
     assert "saveSessionMemory" in js.text

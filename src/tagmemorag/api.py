@@ -534,6 +534,18 @@ def _qa_contextual_question(request: QaAnswerRequest) -> str:
     return f"{context}\n\nCurrent follow-up question: {question}"
 
 
+def _qa_context_meta(request: QaAnswerRequest) -> dict[str, object]:
+    summaries: list[dict[str, str]] = []
+    for turn in request.conversation_context[-2:]:
+        question = _trim_context_text(turn.question, 120)
+        if question:
+            summaries.append({"question": question})
+    return {
+        "applied": bool(summaries),
+        "summary": summaries,
+    }
+
+
 def _search_param_values(request: SearchRequest) -> dict[str, object]:
     return {
         "top_k": request.top_k or settings.search.top_k,
@@ -946,11 +958,16 @@ def qa_answer(
     _: None = Depends(rate_limit_dep),
 ):
     effective_question = _qa_contextual_question(request)
+    context_meta = _qa_context_meta(request)
     route = _route_qa_question(effective_question, api_key)
     if route["kind"] == "not_ready":
-        return _qa_not_ready_response(route)
+        payload = _qa_not_ready_response(route)
+        payload["context"] = context_meta
+        return payload
     if route["kind"] == "clarification":
-        return _qa_clarification_response(request, route)
+        payload = _qa_clarification_response(request, route)
+        payload["context"] = context_meta
+        return payload
 
     kb_name = str(route["kb_name"])
     answer_request = AnswerRequest(
@@ -981,6 +998,7 @@ def qa_answer(
                 "reason": route.get("reason", "single_kb"),
             }
             payload["question"] = request.question
+            payload["context"] = context_meta
             return payload
     except ServiceError as exc:
         get_metrics().record_search(

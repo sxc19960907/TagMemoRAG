@@ -160,6 +160,7 @@ def test_qa_answer_routes_single_accessible_kb(tmp_path, fake_embedder):
     assert response.status_code == 200
     body = response.json()
     assert body["route"] == {"kind": "answered", "kb_name": "default", "reason": "single_kb"}
+    assert body["context"] == {"applied": False, "summary": []}
     assert body["answer"]["kind"] == "answer"
     assert body["retrieve"]["kb_name"] == state.kb_name
 
@@ -269,4 +270,5 @@ def test_qa_answer_routes_followup_with_conversation_context(tmp_path, fake_embe
     assert body["route"]["kind"] == "answered"
     assert body["route"]["kb_name"] == "coffee"
     assert body["question"] == "还是不行怎么办？"
+    assert body["context"] == {"applied": True, "summary": [{"question": "CM1 蒸汽很小怎么办？"}]}
     assert body["answer"]["kind"] == "answer"
