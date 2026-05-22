@@ -417,7 +417,7 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 
 - Route: `GET /qa` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing page config pattern. `kb_name` may still appear in the URL for compatibility, but the user page must not render it as an editable concept.
 - Client call: `qa_page.js` submits `POST /qa/answer` with only the question and display options. The browser does not choose a KB.
-- Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields.
+- Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields. Numbered answer lines may be rendered as a step list, and inline `[cit_###]` markers may become clickable citation chips that focus cited source cards.
 - Auth: when API auth is enabled, the page can send a Bearer token. When auth is disabled, the token field is hidden.
 - Error UX: known readiness failures such as an unloaded KB are mapped to user-readable copy. The underlying structured API error remains unchanged.
 

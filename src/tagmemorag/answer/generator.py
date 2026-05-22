@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from .base import AnswerCitation, AnswerGeneration, AnswerGenerator, AnswerRequestContext
 
 MAX_EXTRACTIVE_EXCERPTS = 3
+STEPWISE_ANSWER_PREFIX = "建议先这样处理："
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..config import Settings
@@ -86,7 +87,18 @@ def _excerpt_fingerprint(text: str) -> str:
 
 
 def _format_extractive_answer(excerpts: tuple[tuple[str, str], ...]) -> str:
-    return " ".join(f"{excerpt} [{citation_id}]" for citation_id, excerpt in excerpts)
+    if len(excerpts) == 1:
+        citation_id, excerpt = excerpts[0]
+        return f"{excerpt} [{citation_id}]"
+    steps = [f"{index}. {_step_text(excerpt)} [{citation_id}]" for index, (citation_id, excerpt) in enumerate(excerpts, 1)]
+    return "\n".join((STEPWISE_ANSWER_PREFIX, *steps))
+
+
+def _step_text(excerpt: str) -> str:
+    text = excerpt.strip()
+    if text.endswith(("。", ".", "!", "?", "！", "？")):
+        return text
+    return f"{text}。"
 
 
 def _is_relevant_excerpt(question: str, excerpt: str) -> bool:

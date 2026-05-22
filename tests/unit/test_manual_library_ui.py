@@ -160,6 +160,8 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
     assert "renderAnswerText" in js.text
+    assert "renderAnswerStep" in js.text
+    assert "qa-answer-steps" in js.text
     assert "qa-citation-chip" in js.text
     assert "data-citation-target" in js.text
     assert "data-citation-id" in js.text

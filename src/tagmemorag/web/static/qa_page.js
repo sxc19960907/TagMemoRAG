@@ -135,14 +135,29 @@ function confidenceLabel(confidence) {
 }
 
 function renderAnswerText(text) {
+  const lines = String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const firstStepIndex = lines.findIndex((line) => /^\d+\.\s+/.test(line));
+  if (firstStepIndex >= 0) {
+    const intro = lines.slice(0, firstStepIndex).map((line) => `<p>${renderInlineAnswerText(line)}</p>`).join("");
+    const steps = lines.slice(firstStepIndex).map(renderAnswerStep).join("");
+    return `${intro}<ol class="qa-answer-steps">${steps}</ol>`;
+  }
+  return `<p>${renderInlineAnswerText(text || "")}</p>`;
+}
+
+function renderAnswerStep(line) {
+  const cleaned = line.replace(/^\d+\.\s+/, "");
+  return `<li>${renderInlineAnswerText(cleaned)}</li>`;
+}
+
+function renderInlineAnswerText(text) {
   const parts = splitCitationMarkers(text || "");
-  const html = parts
+  return parts
     .map((part) => {
       if (part.kind === "citation") return renderCitationChip(part.value);
       return escapeHtml(part.value);
     })
     .join("");
-  return `<p>${html}</p>`;
 }
 
 function splitCitationMarkers(text) {

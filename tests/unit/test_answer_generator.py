@@ -43,9 +43,9 @@ def test_noop_answer_generator_is_deterministic():
     generation = NoopAnswerGenerator().generate(_context())
 
     assert generation.text == (
-        "Weak steam is usually caused by a blocked nozzle. "
-        "Clean the nozzle and check the water tank. [cit_001] "
-        "Clean the steam nozzle after each use because a clogged nozzle can reduce steam output. [cit_002]"
+        "建议先这样处理：\n"
+        "1. Weak steam is usually caused by a blocked nozzle. Clean the nozzle and check the water tank. [cit_001]\n"
+        "2. Clean the steam nozzle after each use because a clogged nozzle can reduce steam output. [cit_002]"
     )
     assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
     assert "answer_noop_provider" in generation.warnings

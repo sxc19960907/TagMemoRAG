@@ -290,6 +290,17 @@ textarea {
   margin: 0 0 10px;
 }
 
+.qa-answer-steps {
+  display: grid;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding-left: 24px;
+}
+
+.qa-answer-steps li {
+  padding-left: 4px;
+}
+
 .qa-citation-chip {
   display: inline-flex;
   align-items: center;
