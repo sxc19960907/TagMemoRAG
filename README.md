@@ -1069,9 +1069,9 @@ scripts/seed_general_web_eval.sh
 ```
 
 The first general web baseline covers Python and GitHub documentation with
-`domain=software_docs` and `doc_type=documentation`. The current hashing
-baseline intentionally records one missed GitHub repository case, making this a
-useful benchmark for future HTML cleanup and retrieval improvements.
+`domain=software_docs` and `doc_type=documentation`. The GitHub repository case
+models multi-evidence retrieval explicitly: the repository/folder definition and
+the README/Markdown explanation may be returned as separate chunks.
 
 For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
 
