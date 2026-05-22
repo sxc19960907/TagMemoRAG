@@ -141,8 +141,10 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-question"' in body
     assert 'id="qa-answer"' in body
     assert 'id="qa-sources"' in body
-    assert 'id="qa-kb-name"' in body
-    assert 'id="qa-current-kb"' in body
+    assert "Product manual support" in body
+    assert "Knowledge base" not in body
+    assert "Use KB" not in body
+    assert 'id="qa-kb-name"' not in body
     assert "workbench-evidence" not in body
     assert "workbench-results" not in body
     assert '"defaultKbName": "ops"' in body
@@ -157,8 +159,10 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert js.status_code == 200
     assert "/answer" in js.text
     assert "include_retrieve" in js.text
+    assert "kb_name: state.kbName" in js.text
     assert "top_k: 5" in js.text
     assert "source_k: 8" in js.text
     assert "qa-answer" in js.text
+    assert "qa-kb-name" not in js.text
     assert "plan_id" not in js.text
     assert "build_id" not in js.text

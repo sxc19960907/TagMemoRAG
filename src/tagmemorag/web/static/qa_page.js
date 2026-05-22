@@ -6,8 +6,6 @@ const state = {
 };
 
 const el = {
-  kbForm: document.getElementById("qa-kb-form"),
-  kbName: document.getElementById("qa-kb-name"),
   token: document.getElementById("qa-api-token"),
   questionForm: document.getElementById("qa-question-form"),
   question: document.getElementById("qa-question"),
@@ -17,7 +15,6 @@ const el = {
   answer: document.getElementById("qa-answer"),
   sourceMeta: document.getElementById("qa-source-meta"),
   sources: document.getElementById("qa-sources"),
-  currentKb: document.getElementById("qa-current-kb"),
   contextNote: document.getElementById("qa-context-note"),
 };
 
@@ -46,8 +43,9 @@ function updateLocationKb() {
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set("kb_name", state.kbName || "default");
   window.history.replaceState({}, "", nextUrl);
-  if (el.currentKb) el.currentKb.textContent = state.kbName || "default";
-  if (el.contextNote) el.contextNote.textContent = "Ask against the selected manual library.";
+  if (el.contextNote) {
+    el.contextNote.textContent = "Ask a question and get an answer grounded in the available manuals.";
+  }
 }
 
 async function requestAnswer(event) {
@@ -59,7 +57,6 @@ async function requestAnswer(event) {
     return;
   }
 
-  state.kbName = el.kbName.value.trim() || "default";
   updateLocationKb();
   renderPending();
   el.submit.disabled = true;
@@ -198,13 +195,6 @@ function renderSourceItem(item) {
     </article>
   `;
 }
-
-el.kbForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  state.kbName = el.kbName.value.trim() || "default";
-  updateLocationKb();
-  setStatus(`Knowledge base set to ${state.kbName}.`);
-});
 
 el.questionForm.addEventListener("submit", requestAnswer);
 updateLocationKb();

@@ -19,18 +19,10 @@
             <h1>Manual Q&A</h1>
           </div>
 
-          <form class="qa-context-form" id="qa-kb-form">
-            <label>
-              <span>Knowledge base</span>
-              <input id="qa-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
-            </label>
-            <button type="submit">Use KB</button>
-          </form>
-
           <section class="qa-context-card">
-            <span class="eyebrow">Current State</span>
-            <strong id="qa-current-kb">{{ default_kb_name }}</strong>
-            <p id="qa-context-note">Ask against the selected manual library.</p>
+            <span class="eyebrow">Assistant</span>
+            <strong>Product manual support</strong>
+            <p id="qa-context-note">Ask a question and get an answer grounded in the available manuals.</p>
           </section>
 
           {% if auth_enabled %}
