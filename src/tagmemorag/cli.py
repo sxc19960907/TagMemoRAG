@@ -46,6 +46,7 @@ from .tag_governance import (
 )
 from .manual_registry import create_registry
 from .production_pilot import (
+    DEFAULT_ANSWER_QUALITY_SUITE,
     DEFAULT_PILOT_CONFIG,
     DEFAULT_PILOT_DOCS,
     DEFAULT_PILOT_SUITE,
@@ -338,6 +339,8 @@ def main(argv: list[str] | None = None) -> int:
     pilot_run.add_argument("--min-hit-at-k", type=float, default=DEFAULT_PILOT_THRESHOLDS.min_hit_at_k)
     pilot_run.add_argument("--hashing-baseline", default=None)
     pilot_run.add_argument("--production-baseline", default=None)
+    pilot_run.add_argument("--answer-quality-suite", default=DEFAULT_ANSWER_QUALITY_SUITE)
+    pilot_run.add_argument("--skip-answer-quality", action="store_true", default=False)
     pilot_run.add_argument(
         "--informational-suites",
         default="",
@@ -895,6 +898,8 @@ def main(argv: list[str] | None = None) -> int:
                 production_baseline_path=args.production_baseline,
                 informational_suites=_split_csv(args.informational_suites),
                 accepted_suites=_split_csv(args.accepted_suites),
+                answer_quality_suite_path=args.answer_quality_suite,
+                skip_answer_quality=args.skip_answer_quality,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)

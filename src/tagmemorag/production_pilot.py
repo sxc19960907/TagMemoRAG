@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from .config import load_config
 from .config_validation import ConfigValidationReport, validate_config
+from .eval.answer_quality import AnswerQualityReport, run_answer_quality_diagnostics
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.report import EvalReport
 from .eval.runner import run_eval
@@ -19,6 +20,7 @@ PILOT_SCHEMA_VERSION = "production_pilot.v1"
 DEFAULT_PILOT_CONFIG = "examples/config/local-hashing-npz.yaml"
 DEFAULT_PILOT_SUITE = "tests/fixtures/eval/coffee.jsonl"
 DEFAULT_PILOT_DOCS = "tests/fixtures"
+DEFAULT_ANSWER_QUALITY_SUITE = "tests/fixtures/answer_quality/basic.jsonl"
 DEFAULT_PILOT_THRESHOLDS = EvalThresholds(min_recall_at_k=0.75, min_mrr=0.75, min_hit_at_k=0.8)
 
 
@@ -103,6 +105,8 @@ def run_production_pilot(
     production_baseline_path: str | Path | None = None,
     informational_suites: Iterable[str] | None = None,
     accepted_suites: Iterable[str] | None = None,
+    answer_quality_suite_path: str | Path | None = DEFAULT_ANSWER_QUALITY_SUITE,
+    skip_answer_quality: bool = False,
 ) -> ProductionPilotReport:
     pilot_workdir = _pilot_workdir(workdir)
     stages: list[PilotStage] = []
@@ -115,6 +119,9 @@ def run_production_pilot(
 
     smoke_report = run_readiness_smoke(workdir=pilot_workdir / "readiness", keep_workdir=True)
     stages.append(_readiness_stage(smoke_report))
+
+    if not skip_answer_quality:
+        stages.append(_answer_quality_stage(answer_quality_suite_path or DEFAULT_ANSWER_QUALITY_SUITE))
 
     try:
         cfg = load_config(config_path)
@@ -241,6 +248,54 @@ def _eval_stage(report: EvalReport) -> PilotStage:
     )
 
 
+def _answer_quality_stage(suite_path: str | Path) -> PilotStage:
+    try:
+        report = run_answer_quality_diagnostics(suite_path)
+    except EvalSuiteError as exc:
+        return PilotStage(
+            "answer_quality",
+            "failed",
+            {"suite": Path(suite_path).name},
+            {"type": "EvalSuiteError", "reason": _safe_reason(str(exc))},
+        )
+    except Exception as exc:  # noqa: BLE001
+        return PilotStage(
+            "answer_quality",
+            "failed",
+            {"suite": Path(suite_path).name},
+            {"type": type(exc).__name__, "reason": _safe_reason(str(exc))},
+        )
+    return _answer_quality_report_stage(report)
+
+
+def _answer_quality_report_stage(report: AnswerQualityReport) -> PilotStage:
+    summary = report.summary
+    passed_cases = sum(1 for case in report.cases if case.passed)
+    failed_cases = summary.cases - passed_cases
+    failures = [
+        {
+            "id": case.id,
+            "failures": list(case.failures)[:3],
+            "warnings": list(case.warnings)[:3],
+        }
+        for case in report.cases
+        if not case.passed
+    ][:5]
+    return PilotStage(
+        "answer_quality",
+        "passed" if summary.passed else "failed",
+        {
+            "suite": Path(report.suite).name,
+            "schema_version": report.schema_version,
+            "cases": summary.cases,
+            "passed": passed_cases,
+            "failed": failed_cases,
+            "failures": failures,
+        },
+        _first_error([{"error": {"type": "AnswerQuality", "reason": "; ".join(case.failures)}} for case in report.cases if case.failures]),
+    )
+
+
 def _optional_diagnosis_stage(
     *,
     hashing_baseline_path: str | Path | None,
@@ -351,6 +406,7 @@ __all__ = [
     "DEFAULT_PILOT_CONFIG",
     "DEFAULT_PILOT_DOCS",
     "DEFAULT_PILOT_SUITE",
+    "DEFAULT_ANSWER_QUALITY_SUITE",
     "DEFAULT_PILOT_THRESHOLDS",
     "PILOT_SCHEMA_VERSION",
     "PilotStage",

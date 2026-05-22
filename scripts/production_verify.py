@@ -22,6 +22,7 @@ if str(SRC_ROOT) not in sys.path:
 from tagmemorag.config_validation import validate_config  # noqa: E402
 from tagmemorag.eval.dataset import EvalThresholds  # noqa: E402
 from tagmemorag.production_pilot import (  # noqa: E402
+    DEFAULT_ANSWER_QUALITY_SUITE,
     DEFAULT_PILOT_THRESHOLDS,
     run_production_pilot,
 )
@@ -121,6 +122,8 @@ def run_verification(
     production_baseline_path: str | Path | None = DEFAULT_PRODUCTION_BASELINE,
     informational_suites: list[str] | None = None,
     accepted_suites: list[str] | None = None,
+    answer_quality_suite_path: str | Path | None = DEFAULT_ANSWER_QUALITY_SUITE,
+    skip_answer_quality: bool = False,
     thresholds: EvalThresholds = DEFAULT_PILOT_THRESHOLDS,
 ) -> VerificationReport:
     report_dir = _run_workdir(workdir)
@@ -187,6 +190,8 @@ def run_verification(
         production_baseline_path=production_baseline_path,
         informational_suites=informational_suites if informational_suites is not None else list(DEFAULT_INFORMATIONAL_SUITES),
         accepted_suites=accepted_suites if accepted_suites is not None else list(DEFAULT_ACCEPTED_SUITES),
+        answer_quality_suite_path=answer_quality_suite_path,
+        skip_answer_quality=skip_answer_quality,
     )
     steps.append(
         VerificationStep(
@@ -236,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--probe", action="append", choices=(*PROBE_NAMES, "all"), default=[])
     parser.add_argument("--hashing-baseline", default=DEFAULT_HASHING_BASELINE)
     parser.add_argument("--production-baseline", default=DEFAULT_PRODUCTION_BASELINE)
+    parser.add_argument("--answer-quality-suite", default=DEFAULT_ANSWER_QUALITY_SUITE)
+    parser.add_argument("--skip-answer-quality", action="store_true", default=False)
     parser.add_argument("--informational-suites", default=",".join(DEFAULT_INFORMATIONAL_SUITES))
     parser.add_argument("--accepted-suites", default=",".join(DEFAULT_ACCEPTED_SUITES))
     args = parser.parse_args(argv)
@@ -251,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
             production_baseline_path=args.production_baseline,
             informational_suites=_split_csv(args.informational_suites),
             accepted_suites=_split_csv(args.accepted_suites),
+            answer_quality_suite_path=args.answer_quality_suite,
+            skip_answer_quality=args.skip_answer_quality,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"production verification error: {type(exc).__name__}: {_safe_reason(str(exc))}", file=sys.stderr)
