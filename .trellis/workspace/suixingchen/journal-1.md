@@ -1879,3 +1879,36 @@ Added a clean /qa page for normal users, reusing /answer while hiding RAG diagno
 ### Next Steps
 
 - None - task complete
+
+
+## Session 50: QA three-pane layout
+
+**Date**: 2026-05-22
+**Task**: QA three-pane layout
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Refined the user-facing /qa page into a Codex-like three-pane layout with a left KB context rail, center answer workspace, and right sources rail. Verified focused UI and answer API tests plus browser visual layout.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f77f9f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
