@@ -36,3 +36,36 @@ Opened the next Trellis journal because journal-1.md reached the 2000-line thres
 ### Next Steps
 
 - None - task complete
+
+
+## Session 54: QA demo seed smoke
+
+**Date**: 2026-05-22
+**Task**: QA demo seed smoke
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline QA demo path using the coffee fixture, qa-demo config, and seed script. Verified build, config validation, /qa/answer answered route, citations, evidence, and focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c0ebfd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
