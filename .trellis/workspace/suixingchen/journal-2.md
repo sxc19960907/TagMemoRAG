@@ -453,3 +453,36 @@ Improved deterministic noop answer generation for product manuals with stepwise 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 67: Real manual retrieval quality
+
+**Date**: 2026-05-22
+**Task**: Real manual retrieval quality
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved real PDF manual retrieval by adding CJK bi/tri-gram lexical matching with generic term filtering and multi-term lexical scoring; realmanuals hit@5 improved from 0.4 to 0.8, recall@5 from 0.283333 to 0.633333, mrr from 0.233333 to 0.516667.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3066b98` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
