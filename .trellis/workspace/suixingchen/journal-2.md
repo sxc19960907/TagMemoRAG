@@ -816,3 +816,36 @@ Improved the local extractive answer baseline so generic documentation questions
 ### Next Steps
 
 - None - task complete
+
+
+## Session 78: General web answer quality suite
+
+**Date**: 2026-05-23
+**Task**: General web answer quality suite
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a checked-in answer-quality suite for generic public documentation answers covering multi-evidence GitHub docs, Python tutorial grounding, and an unsupported GitHub security claim. Wired the suite into unit and CLI coverage and documented the command next to the general web retrieval benchmark.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `20b38e6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
