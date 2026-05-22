@@ -684,3 +684,36 @@ Added a general knowledge sample-web CLI that fetches public HTML pages into Mar
 ### Next Steps
 
 - None - task complete
+
+
+## Session 74: Generic document metadata
+
+**Date**: 2026-05-22
+**Task**: Generic document metadata
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Made sidecar-declared generic domain/doc_type metadata survive build/search, preserved remote_id/url attributes for public web samples, and verified both public web and real product-manual paths remain green.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e95a188` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

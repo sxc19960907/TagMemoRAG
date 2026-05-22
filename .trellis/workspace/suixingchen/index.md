@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 73
+- **Total Sessions**: 74
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~686 | Active |
+| `journal-2.md` | ~719 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 74 | 2026-05-22 | Generic document metadata | `e95a188` | `codex/agent-loop-driver` |
 | 73 | 2026-05-22 | Public web knowledge sampler | `f98dcef` | `codex/agent-loop-driver` |
 | 72 | 2026-05-22 | General RAG robustness direction | `109d771` | `codex/agent-loop-driver` |
 | 71 | 2026-05-22 | ManualsLib real sample quality slice | `c2b5da7` | `codex/agent-loop-driver` |
