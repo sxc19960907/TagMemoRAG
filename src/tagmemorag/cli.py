@@ -22,6 +22,7 @@ from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
+from .manualslib_import import import_manualslib_url
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .provider_probe import run_provider_probe
 from .qdrant_ops import inspect_qdrant
@@ -181,6 +182,14 @@ def main(argv: list[str] | None = None) -> int:
     _add_bulk_args(bulk_preview, include_import_args=False)
     bulk_import = manual_bulk_sub.add_parser("import")
     _add_bulk_args(bulk_import, include_import_args=True)
+
+    manualslib = sub.add_parser("manualslib")
+    manualslib_sub = manualslib.add_subparsers(dest="manualslib_command", required=True)
+    manualslib_import = manualslib_sub.add_parser("import-url")
+    manualslib_import.add_argument("--url", required=True)
+    manualslib_import.add_argument("--output-dir", required=True)
+    manualslib_import.add_argument("--max-pages", type=int, default=None)
+    manualslib_import.add_argument("--timeout-seconds", type=float, default=20.0)
 
     manual_library = sub.add_parser("manual-library")
     manual_library_sub = manual_library.add_subparsers(dest="manual_library_command", required=True)
@@ -648,6 +657,19 @@ def main(argv: list[str] | None = None) -> int:
             overwrite=args.overwrite,
             selected_rows=set(args.selected_row) if args.selected_row else None,
         )
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "manualslib" and args.manualslib_command == "import-url":
+        try:
+            result = import_manualslib_url(
+                args.url,
+                output_dir=args.output_dir,
+                max_pages=args.max_pages,
+                timeout_seconds=args.timeout_seconds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"manualslib import error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
     if args.command == "manual-library" and args.manual_library_command == "rebuild":
