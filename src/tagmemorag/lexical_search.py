@@ -13,6 +13,25 @@ _CJK_RE = re.compile(r"[\u3400-\u9fff]+")
 _CODE_RE = re.compile(r"^[a-z]{1,4}[- ]?\d{1,5}[a-z0-9]*$", re.IGNORECASE)
 _SPACED_CODE_RE = re.compile(r"\b[a-z]{1,4}\s+\d{1,5}[a-z0-9]*\b", re.IGNORECASE)
 _STOP_WORDS = {"a", "an", "and", "for", "if", "in", "is", "of", "on", "or", "the", "to", "with"}
+_CJK_STOP_TERMS = {
+    "洗衣",
+    "衣機",
+    "洗衣機",
+    "洗衣机",
+    "烘乾",
+    "烘干",
+    "乾衣",
+    "干衣",
+    "烤箱",
+    "冰箱",
+    "怎麼",
+    "怎么",
+    "哪裡",
+    "哪里",
+    "如何",
+    "什麼",
+    "什么",
+}
 
 
 @dataclass(frozen=True)
@@ -41,7 +60,7 @@ def lexical_search(
         return []
 
     matches: list[LexicalMatch] = []
-    cap = max(float(boost), float(exact_code_boost), float(model_boost))
+    cap = max(float(boost) * 4.0, float(exact_code_boost) + float(model_boost) + float(boost))
     for node_id in sorted(eligible):
         fields = _node_search_fields(graph.nodes[node_id])
         score, mode = _score_fields(
@@ -89,8 +108,25 @@ def extract_lexical_tokens(query: str, *, min_token_chars: int = 2) -> dict[str,
 
     for raw in _CJK_RE.findall(normalized):
         if len(raw) >= min_token_chars:
-            tokens["cjk"].add(raw)
+            if raw not in _CJK_STOP_TERMS:
+                tokens["cjk"].add(raw)
+            tokens["cjk"].update(_cjk_ngrams(raw, min_token_chars=min_token_chars))
     return tokens
+
+
+def _cjk_ngrams(value: str, *, min_token_chars: int) -> set[str]:
+    grams: set[str] = set()
+    for size in (2, 3):
+        if size < min_token_chars:
+            continue
+        if len(value) < size:
+            continue
+        grams.update(
+            gram
+            for index in range(0, len(value) - size + 1)
+            if (gram := value[index : index + size]) not in _CJK_STOP_TERMS
+        )
+    return grams
 
 
 def _node_search_fields(node: Mapping[str, Any]) -> list[tuple[str, float]]:

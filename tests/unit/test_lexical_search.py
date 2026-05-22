@@ -18,6 +18,7 @@ def test_extract_lexical_tokens_classifies_code_model_and_cjk_variants():
     assert "f07" in tokens["exact_code"]
     assert "07" not in tokens["ordinary"]
     assert "排水泵" in tokens["cjk"]
+    assert {"排水", "水泵"} <= tokens["cjk"]
     assert "and" not in tokens["ordinary"]
 
 
@@ -37,6 +38,40 @@ def test_lexical_search_matches_punctuation_and_cjk_terms():
     assert code_matches[0].node_id == 0
     assert code_matches[0].mode == "exact_code"
     assert cjk_matches[0].node_id == 0
+
+
+def test_lexical_search_uses_cjk_ngrams_for_partial_manual_terms():
+    graph = build_graph(
+        [
+            Chunk("將洗衣精倒入洗劑粉盒的前區。", "洗衣粉", ("洗衣粉",), 2, 1, "washer.md"),
+            Chunk("洗衣機門打開時，無法啟動機器。", "洗衣機門", ("洗衣機門",), 2, 2, "washer.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "洗劑粉盒怎麼用", candidate_k=5)
+
+    assert matches[0].node_id == 0
+    assert len(matches) == 1
+
+
+def test_lexical_search_rewards_multiple_ordinary_term_hits():
+    graph = build_graph(
+        [
+            Chunk("Ionizer system dries laundry by addition of ions.", "IONIZER SYSTEM", ("IONIZER SYSTEM",), 2, 1, "dryer.md"),
+            Chunk("General technical information.", "Technical information", ("Technical information",), 2, 2, "dryer.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "dryer ionizer system", candidate_k=5)
+
+    single_term_score = lexical_search(graph, "dryer ionizer", candidate_k=5)[0].score
+
+    assert matches[0].node_id == 0
+    assert matches[0].score > single_term_score
 
 
 def test_wave_search_lexical_seed_recovers_short_exact_term():

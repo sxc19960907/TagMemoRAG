@@ -542,6 +542,18 @@ python -m tagmemorag eval answer-quality --suite tests/fixtures/answer_quality/q
 
 The diagnostics are deterministic and offline. They use lexical support/citation/refusal checks, including CJK n-gram matching for Chinese manual questions; they are not an LLM-as-judge gate.
 
+**Real-manual retrieval slice.** As of 2026-05-22, `tests/fixtures/eval/realmanuals.jsonl` is the fixed retrieval-quality slice for the real PDFs in `product_manuals/`. Run it against a docs directory containing the real manual subdirectories (`washer/`, `dryer/`, `oven/`, `refrigerator/`) with the local hashing profile:
+
+```text
+python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/realmanuals.jsonl \
+  --docs <real-manual-docs> \
+  --config examples/config/qa-demo.yaml \
+  --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0
+```
+
+The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence.
+
 #### T5 Replay CLI Implementation Contract
 
 **1. Scope / Trigger.** Applies when adding or changing offline replay of persisted QueryPlans, generation-swap gates, replay metrics, or rerank impact reporting.
