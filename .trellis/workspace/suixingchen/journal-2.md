@@ -981,3 +981,36 @@ Moved feedback CLI command execution out of cli.py into cli_feedback.py, added d
 ### Next Steps
 
 - None - task complete
+
+
+## Session 83: CLI source import command extraction
+
+**Date**: 2026-05-23
+**Task**: CLI source import command extraction
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Moved ManualsLib and public-web source import CLI execution out of cli.py into cli_source_import.py, added direct failure-path tests, and kept existing CLI behavior covered.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2e5575` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

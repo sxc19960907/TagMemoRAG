@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 82
+- **Total Sessions**: 83
 - **Last Active**: 2026-05-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~983 | Active |
+| `journal-2.md` | ~1016 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 83 | 2026-05-23 | CLI source import command extraction | `c2e5575` | `codex/agent-loop-driver` |
 | 82 | 2026-05-23 | CLI feedback command extraction | `b0225c3` | `codex/agent-loop-driver` |
 | 81 | 2026-05-23 | API CLI entrypoint slimming | `8a50ac2` | `codex/agent-loop-driver` |
 | 80 | 2026-05-23 | Answer intent classification | `219253d` | `codex/agent-loop-driver` |
