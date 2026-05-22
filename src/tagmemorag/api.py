@@ -418,6 +418,19 @@ def retrieval_quality_admin(request: Request, kb_name: str = "default"):
     )
 
 
+@app.get("/admin/rag-workbench")
+def rag_workbench_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "rag_workbench.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
 def _status_for(code: ErrorCode) -> int:
     return {
         ErrorCode.KB_NOT_LOADED: 404,

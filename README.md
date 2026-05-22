@@ -506,6 +506,20 @@ Safe recovery flows:
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 
+### RAG workbench
+
+Open the question-answer workbench at:
+
+```text
+http://127.0.0.1:8000/admin/rag-workbench
+```
+
+Use `?kb_name=product-a` to preselect another KB. The workbench calls
+`POST /answer` with `include_retrieve=true`, then shows the generated answer,
+citations, warnings, plan/build ids, answerability, cited evidence, and top
+retrieval results. Links in the top bar open the manual library and retrieval
+quality pages for the same KB.
+
 ### Retrieval quality feedback
 
 Search responses include `trace_id` and `search_id` so clients can attach bounded feedback to a specific retrieval interaction. Feedback is stored per KB at `storage.data_dir/{kb_name}/feedback/search-feedback.jsonl`; review state lives in `search-feedback-reviews.json`.

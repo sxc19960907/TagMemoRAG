@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG RAG Workbench</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="rag-workbench-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell workbench-shell">
+      <header class="topbar workbench-topbar">
+        <div class="brand">
+          <span class="eyebrow">TagMemoRAG</span>
+          <h1>RAG Workbench</h1>
+        </div>
+        <form class="kb-form" id="workbench-kb-form">
+          <label>
+            <span>KB</span>
+            <input id="workbench-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
+          </label>
+          <button type="submit">Load</button>
+        </form>
+        <label class="token-field">
+          <span>API token</span>
+          <input id="workbench-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+        </label>
+        <nav class="top-actions workbench-links" aria-label="Workbench navigation">
+          <a id="workbench-manual-library" class="button-link" href="/admin/manual-library?kb_name={{ default_kb_name }}">Manual Library</a>
+          <a id="workbench-retrieval-quality" class="button-link" href="/admin/retrieval-quality?kb_name={{ default_kb_name }}">Retrieval Quality</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="status-strip" id="workbench-status" role="status" aria-live="polite"></section>
+
+        <div class="workspace workbench-workspace">
+          <section class="table-pane workbench-main" aria-label="Question and answer">
+            <div class="pane-header">
+              <div>
+                <h2>Ask</h2>
+                <p>Question, answer, citations, and retrieval state for one KB</p>
+              </div>
+            </div>
+
+            <form id="workbench-question-form" class="workbench-question-form">
+              <label>
+                <span>Question</span>
+                <textarea id="workbench-question" rows="4" placeholder="Ask a product-manual question"></textarea>
+              </label>
+              <div class="workbench-controls">
+                <label><span>Top K</span><input id="workbench-top-k" type="number" min="1" max="30" value="5"></label>
+                <label><span>Source K</span><input id="workbench-source-k" type="number" min="1" max="30" value="8"></label>
+                <label><span>Mode</span>
+                  <select id="workbench-mode">
+                    <option value="classic">Classic</option>
+                    <option value="agentic">Agentic</option>
+                  </select>
+                </label>
+                <button id="workbench-submit" class="primary" type="submit">Ask</button>
+              </div>
+            </form>
+
+            <section class="answer-panel" aria-label="Answer">
+              <div class="pane-header compact">
+                <div>
+                  <h3>Answer</h3>
+                  <p id="workbench-answer-meta">No answer yet</p>
+                </div>
+              </div>
+              <div id="workbench-answer" class="answer-body empty-state">Ask a question to generate an answer.</div>
+              <div id="workbench-citations" class="citation-list"></div>
+            </section>
+
+            <section class="answer-panel" aria-label="Warnings and trace">
+              <div class="pane-header compact">
+                <div>
+                  <h3>Trace</h3>
+                  <p id="workbench-trace-summary">No request yet</p>
+                </div>
+              </div>
+              <div id="workbench-warnings" class="warning-list"></div>
+            </section>
+          </section>
+
+          <aside class="detail-pane workbench-side" aria-label="Evidence and retrieval detail">
+            <div class="pane-header">
+              <div>
+                <h2>Evidence</h2>
+                <p id="workbench-answerability">No retrieval payload</p>
+              </div>
+            </div>
+            <section class="quality-detail-block">
+              <h3>Cited Evidence</h3>
+              <div id="workbench-evidence" class="evidence-list empty-state">No evidence loaded.</div>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Top Results</h3>
+              <div id="workbench-results" class="evidence-list empty-state">No results loaded.</div>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="{{ url_for('manual-library-static', path='rag_workbench.js') }}"></script>
+  </body>
+</html>

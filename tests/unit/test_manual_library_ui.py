@@ -92,3 +92,34 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "/search/feedback" in js.text
     assert "/search/feedback/promote/preview" in js.text
     assert "quality-feedback-rows" in js.text
+
+
+def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/admin/rag-workbench?kb_name=ops")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "RAG Workbench" in body
+    assert 'id="workbench-question"' in body
+    assert 'id="workbench-answer"' in body
+    assert 'id="workbench-evidence"' in body
+    assert 'id="workbench-results"' in body
+    assert 'id="workbench-manual-library"' in body
+    assert 'id="workbench-retrieval-quality"' in body
+    assert '"defaultKbName": "ops"' in body
+    assert "/static/manual-library/rag_workbench.js" in body
+
+
+def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/rag_workbench.js")
+
+    assert js.status_code == 200
+    assert "/answer" in js.text
+    assert "include_retrieve" in js.text
+    assert "workbench-answer" in js.text
+    assert "workbench-evidence" in js.text
