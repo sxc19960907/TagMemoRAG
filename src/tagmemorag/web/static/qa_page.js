@@ -6,6 +6,8 @@ const state = {
   lastAnswerText: "",
   loadingTimer: null,
   loadingStageIndex: 0,
+  turns: [],
+  activeTurnId: "",
 };
 
 const suggestedQuestions = [
@@ -37,6 +39,8 @@ const el = {
   followups: document.getElementById("qa-followups"),
   feedback: document.getElementById("qa-feedback"),
   feedbackNote: document.getElementById("qa-feedback-note"),
+  history: document.getElementById("qa-history"),
+  clearHistory: document.getElementById("qa-clear-history"),
 };
 
 function headers() {
@@ -84,6 +88,7 @@ async function requestAnswer(event) {
 
 async function askQuestion(question) {
   updateLocationKb();
+  const turn = addConversationTurn(question);
   renderPending();
   el.submit.disabled = true;
   setStatus("Asking...");
@@ -101,11 +106,24 @@ async function askQuestion(question) {
     if (!response.ok) {
       throw new Error(body.message || body.detail || `HTTP ${response.status}`);
     }
-    renderAnswer(body);
-    setStatus("Answer ready.", "success");
+    updateConversationTurn(turn.id, {
+      status: answerStatusFromBody(body),
+      body,
+    });
+    if (state.activeTurnId === turn.id) {
+      renderAnswer(body);
+      setStatus("Answer ready.", "success");
+    }
   } catch (error) {
-    renderError(error);
-    setStatus(userFacingError(error.message), "error");
+    const message = userFacingError(error.message);
+    updateConversationTurn(turn.id, {
+      status: "error",
+      errorMessage: message,
+    });
+    if (state.activeTurnId === turn.id) {
+      renderError(error);
+      setStatus(message, "error");
+    }
   } finally {
     el.submit.disabled = false;
   }
@@ -203,6 +221,90 @@ function resetPostAnswerUi() {
   }
 }
 
+function addConversationTurn(question) {
+  const turn = {
+    id: `turn-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    question,
+    status: "pending",
+    body: null,
+    errorMessage: "",
+    feedbackKind: "",
+  };
+  state.turns = [turn, ...state.turns].slice(0, 8);
+  state.activeTurnId = turn.id;
+  renderHistory();
+  return turn;
+}
+
+function updateConversationTurn(turnId, patch) {
+  state.turns = state.turns.map((turn) => (
+    turn.id === turnId ? { ...turn, ...patch } : turn
+  ));
+  renderHistory();
+}
+
+function answerStatusFromBody(body) {
+  const kind = String(body?.answer?.kind || "unknown");
+  if (kind === "answer") return "answered";
+  if (body?.route && body.route.kind === "clarification") return "clarification";
+  return "refusal";
+}
+
+function renderHistory() {
+  if (!el.history) return;
+  if (state.turns.length === 0) {
+    el.history.className = "qa-history-list empty-state";
+    el.history.textContent = "No questions yet.";
+    if (el.clearHistory) el.clearHistory.disabled = true;
+    return;
+  }
+  el.history.className = "qa-history-list";
+  el.history.innerHTML = state.turns.map((turn) => `
+    <button class="qa-history-item ${turn.id === state.activeTurnId ? "active" : ""}" type="button" data-turn-id="${escapeHtml(turn.id)}">
+      <span>${escapeHtml(turn.question)}</span>
+      <small>${escapeHtml(historyStatusLabel(turn.status))}</small>
+    </button>
+  `).join("");
+  if (el.clearHistory) el.clearHistory.disabled = false;
+  el.history.querySelectorAll("[data-turn-id]").forEach((button) => {
+    button.addEventListener("click", () => restoreConversationTurn(button.dataset.turnId || ""));
+  });
+}
+
+function historyStatusLabel(status) {
+  if (status === "pending") return "Asking...";
+  if (status === "answered") return "Answered";
+  if (status === "clarification") return "Needs detail";
+  if (status === "error") return "Failed";
+  return "No answer";
+}
+
+function restoreConversationTurn(turnId) {
+  const turn = state.turns.find((item) => item.id === turnId);
+  if (!turn) return;
+  state.activeTurnId = turn.id;
+  if (el.question) el.question.value = turn.question;
+  renderHistory();
+  stopLoadingStages();
+  if (turn.status === "pending") {
+    renderPending();
+    return;
+  }
+  if (turn.status === "error") {
+    renderError({ message: turn.errorMessage || "Answer request failed." });
+    return;
+  }
+  if (turn.body) {
+    renderAnswer(turn.body);
+  }
+}
+
+function clearHistory() {
+  state.turns = [];
+  state.activeTurnId = "";
+  renderHistory();
+}
+
 function renderSuggestions() {
   if (!el.suggestions) return;
   el.suggestions.innerHTML = suggestedQuestions
@@ -264,21 +366,39 @@ function buildFollowupQuestions(answerText, citations) {
 function renderFeedback() {
   if (!el.feedback) return;
   setHidden(el.feedback, false);
-  if (el.feedbackNote) el.feedbackNote.textContent = "";
+  const feedbackKind = activeConversationTurn()?.feedbackKind || "";
+  el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
+    const selected = button.dataset.feedback === feedbackKind;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  if (el.feedbackNote) {
+    el.feedbackNote.textContent = feedbackNoteForKind(feedbackKind);
+  }
 }
 
 function handleFeedback(kind) {
   if (!el.feedback) return;
+  const turn = activeConversationTurn();
+  if (turn) updateConversationTurn(turn.id, { feedbackKind: kind });
   el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
     const selected = button.dataset.feedback === kind;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-pressed", selected ? "true" : "false");
   });
   if (el.feedbackNote) {
-    el.feedbackNote.textContent = kind === "helpful"
-      ? "Marked helpful for this answer."
-      : "Marked for review in this page session.";
+    el.feedbackNote.textContent = feedbackNoteForKind(kind);
   }
+}
+
+function activeConversationTurn() {
+  return state.turns.find((turn) => turn.id === state.activeTurnId);
+}
+
+function feedbackNoteForKind(kind) {
+  if (kind === "helpful") return "Marked helpful for this answer.";
+  if (kind === "not-helpful") return "Marked for review in this page session.";
+  return "";
 }
 
 async function copyAnswer() {
@@ -488,5 +608,7 @@ if (el.feedback) {
     button.addEventListener("click", () => handleFeedback(button.dataset.feedback || ""));
   });
 }
+if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 renderSuggestions();
+renderHistory();
 updateLocationKb();

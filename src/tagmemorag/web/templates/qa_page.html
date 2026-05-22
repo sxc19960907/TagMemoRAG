@@ -30,6 +30,14 @@
             <div id="qa-suggestions" class="qa-suggestion-list"></div>
           </section>
 
+          <section class="qa-context-card qa-history-card" aria-label="Conversation history">
+            <div class="qa-history-head">
+              <span class="eyebrow">Conversation</span>
+              <button id="qa-clear-history" class="ghost small" type="button" disabled>Clear</button>
+            </div>
+            <div id="qa-history" class="qa-history-list empty-state">No questions yet.</div>
+          </section>
+
           {% if auth_enabled %}
           <label class="token-field qa-token-field">
             <span>API token</span>

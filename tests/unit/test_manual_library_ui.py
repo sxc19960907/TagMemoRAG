@@ -145,6 +145,8 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-followups"' in body
     assert 'id="qa-feedback"' in body
     assert 'id="qa-feedback-note"' in body
+    assert 'id="qa-history"' in body
+    assert 'id="qa-clear-history"' in body
     assert 'id="qa-sources"' in body
     assert "Product manual support" in body
     assert "Try asking" in body
@@ -178,6 +180,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderFollowups" in js.text
     assert "buildFollowupQuestions" in js.text
     assert "handleFeedback" in js.text
+    assert "addConversationTurn" in js.text
+    assert "updateConversationTurn" in js.text
+    assert "restoreConversationTurn" in js.text
+    assert "clearHistory" in js.text
+    assert "qa-history-item" in js.text
     assert "bindSourceToggles" in js.text
     assert "qa-source-summary" in js.text
     assert "qa-source-toggle" in js.text
