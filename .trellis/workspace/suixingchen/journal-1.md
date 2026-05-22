@@ -1846,3 +1846,36 @@ Shifted from verification to product experience by adding an admin RAG workbench
 ### Next Steps
 
 - None - task complete
+
+
+## Session 49: User-facing QA page MVP
+
+**Date**: 2026-05-22
+**Task**: User-facing QA page MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a clean /qa page for normal users, reusing /answer while hiding RAG diagnostics; documented the route contract, verified UI behavior in browser, and passed focused plus full unit/e2e regression.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97e603a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
