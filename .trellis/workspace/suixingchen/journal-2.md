@@ -296,3 +296,34 @@ Added local /qa conversation history with pending/answered/error turn tracking, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 62: QA follow-up context
+
+**Date**: 2026-05-22
+**Task**: QA follow-up context
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Extended /qa/answer with bounded page-session conversation context, frontend follow-up context sending, context-aware routing/retrieval for ambiguous follow-ups, original-question response preservation, focused tests, and browser smoke verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

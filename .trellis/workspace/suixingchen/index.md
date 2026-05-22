@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 61
+- **Total Sessions**: 62
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~298 | Active |
+| `journal-2.md` | ~329 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 62 | 2026-05-22 | QA follow-up context | - | `codex/agent-loop-driver` |
 | 61 | 2026-05-22 | QA local conversation UX | - | `codex/agent-loop-driver` |
 | 60 | 2026-05-22 | QA answer polish UX | - | `codex/agent-loop-driver` |
 | 59 | 2026-05-22 | QA quick starts and copy | `2047ecd` | `codex/agent-loop-driver` |
