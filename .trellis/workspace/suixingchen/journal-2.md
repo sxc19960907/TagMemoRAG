@@ -915,3 +915,36 @@ Moved deterministic answer intent rules into the answer layer, preserved product
 ### Next Steps
 
 - None - task complete
+
+
+## Session 81: API CLI entrypoint slimming
+
+**Date**: 2026-05-23
+**Task**: API CLI entrypoint slimming
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Extracted QA context formatting from api.py and reusable argparse/file helpers from cli.py into focused modules, added tests, and documented the new module boundaries.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8a50ac2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
