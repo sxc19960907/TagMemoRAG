@@ -172,6 +172,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "conversationContextForRequest" in js.text
     assert "answerPreviewForContext" in js.text
     assert "shouldUseConversationContext" in js.text
+    assert "sessionStorage" in js.text
+    assert "loadSessionMemory" in js.text
+    assert "saveSessionMemory" in js.text
+    assert "sanitizeAnswerBody" in js.text
+    assert "clearSessionMemory" in js.text
     assert "renderAnswerText" in js.text
     assert "renderAnswerStep" in js.text
     assert "qa-answer-steps" in js.text

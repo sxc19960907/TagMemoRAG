@@ -10,6 +10,9 @@ const state = {
   activeTurnId: "",
 };
 
+const sessionMemoryKey = `tagmemorag:qa:session:${state.kbName}`;
+const sessionMemoryVersion = 1;
+
 const suggestedQuestions = [
   "蒸汽很小怎么办？",
   "不出咖啡怎么办？",
@@ -242,6 +245,7 @@ function updateConversationTurn(turnId, patch) {
     turn.id === turnId ? { ...turn, ...patch } : turn
   ));
   renderHistory();
+  saveSessionMemory();
 }
 
 function answerStatusFromBody(body) {
@@ -318,6 +322,121 @@ function renderHistory() {
   });
 }
 
+function loadSessionMemory() {
+  let saved;
+  try {
+    saved = JSON.parse(window.sessionStorage.getItem(sessionMemoryKey) || "{}");
+  } catch (_error) {
+    clearSessionMemory();
+    return;
+  }
+  if (!saved || saved.version !== sessionMemoryVersion || !Array.isArray(saved.turns)) return;
+  state.turns = saved.turns
+    .map(normalizeSavedTurn)
+    .filter(Boolean)
+    .slice(0, 8);
+  state.activeTurnId = state.turns.some((turn) => turn.id === saved.activeTurnId)
+    ? saved.activeTurnId
+    : (state.turns[0]?.id || "");
+}
+
+function normalizeSavedTurn(rawTurn) {
+  if (!rawTurn || typeof rawTurn !== "object") return null;
+  const question = String(rawTurn.question || "").trim().slice(0, 1000);
+  if (!question) return null;
+  const status = rawTurn.status === "answered" || rawTurn.status === "clarification" || rawTurn.status === "refusal"
+    ? rawTurn.status
+    : "error";
+  return {
+    id: String(rawTurn.id || `saved-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+    question,
+    status,
+    body: rawTurn.body ? sanitizeAnswerBody(rawTurn.body) : null,
+    errorMessage: status === "error" ? String(rawTurn.errorMessage || "This answer was interrupted before reload.").slice(0, 300) : "",
+    feedbackKind: rawTurn.feedbackKind === "helpful" || rawTurn.feedbackKind === "not-helpful" ? rawTurn.feedbackKind : "",
+  };
+}
+
+function saveSessionMemory() {
+  try {
+    const payload = {
+      version: sessionMemoryVersion,
+      activeTurnId: state.activeTurnId,
+      turns: state.turns
+        .filter((turn) => turn.status !== "pending")
+        .map(sanitizeTurnForStorage)
+        .filter(Boolean),
+    };
+    window.sessionStorage.setItem(sessionMemoryKey, JSON.stringify(payload));
+  } catch (_error) {
+    // Storage can be unavailable in private or restricted browser modes.
+  }
+}
+
+function sanitizeTurnForStorage(turn) {
+  if (!turn || !turn.question) return null;
+  return {
+    id: turn.id,
+    question: String(turn.question).slice(0, 1000),
+    status: turn.status === "pending" ? "error" : turn.status,
+    body: turn.body ? sanitizeAnswerBody(turn.body) : null,
+    errorMessage: String(turn.errorMessage || "").slice(0, 300),
+    feedbackKind: turn.feedbackKind === "helpful" || turn.feedbackKind === "not-helpful" ? turn.feedbackKind : "",
+  };
+}
+
+function sanitizeAnswerBody(body) {
+  const answer = body?.answer || {};
+  const retrieve = body?.retrieve || {};
+  const route = body?.route || {};
+  return {
+    schema_version: body?.schema_version || "qa_answer.v1",
+    question: body?.question || "",
+    route: sanitizeRoute(route),
+    answer: {
+      kind: answer.kind || "unknown",
+      text: String(answer.text || "").slice(0, 4000),
+      confidence: typeof answer.confidence === "number" ? answer.confidence : null,
+      citations: Array.isArray(answer.citations) ? answer.citations.slice(0, 8) : [],
+      refusal_reason: answer.refusal_reason || null,
+      missing_evidence_hints: Array.isArray(answer.missing_evidence_hints) ? answer.missing_evidence_hints.slice(0, 5) : [],
+      warnings: Array.isArray(answer.warnings) ? answer.warnings.slice(0, 5) : [],
+    },
+    retrieve: {
+      evidence: Array.isArray(retrieve.evidence) ? retrieve.evidence.slice(0, 8).map(sanitizeEvidence) : [],
+    },
+  };
+}
+
+function sanitizeRoute(route) {
+  if (!route || typeof route !== "object") return {};
+  return {
+    kind: route.kind || "",
+    reason: route.reason || "",
+    candidates: Array.isArray(route.candidates) ? route.candidates.slice(0, 5) : [],
+  };
+}
+
+function sanitizeEvidence(item) {
+  return {
+    evidence_id: item?.evidence_id || "",
+    citation_id: item?.citation_id || "",
+    text: String(item?.text || item?.content || "").slice(0, 1800),
+    source: item?.source || item?.source_file || "",
+    section_path: Array.isArray(item?.section_path) ? item.section_path.slice(0, 6) : [],
+    confidence: typeof item?.confidence === "number" ? item.confidence : null,
+    retrieval_reason: item?.retrieval_reason || "",
+  };
+}
+
+function clearSessionMemory() {
+  try {
+    window.sessionStorage.removeItem(sessionMemoryKey);
+  } catch (_error) {
+    // Ignore storage failures; in-memory history still works.
+  }
+}
+
 function historyStatusLabel(status) {
   if (status === "pending") return "Asking...";
   if (status === "answered") return "Answered";
@@ -350,6 +469,7 @@ function clearHistory() {
   state.turns = [];
   state.activeTurnId = "";
   renderHistory();
+  clearSessionMemory();
 }
 
 function renderSuggestions() {
@@ -657,5 +777,7 @@ if (el.feedback) {
 }
 if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 renderSuggestions();
+loadSessionMemory();
 renderHistory();
+if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);
 updateLocationKb();
