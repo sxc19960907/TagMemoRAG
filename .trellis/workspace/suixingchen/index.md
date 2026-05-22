@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 56
+- **Total Sessions**: 57
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~137 | Active |
+| `journal-2.md` | ~170 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 57 | 2026-05-22 | Clickable QA citations | `a07b788` | `codex/agent-loop-driver` |
 | 56 | 2026-05-22 | Multi evidence extractive answers | `34fd658` | `codex/agent-loop-driver` |
 | 55 | 2026-05-22 | Extractive noop demo answers | `16a544f` | `codex/agent-loop-driver` |
 | 54 | 2026-05-22 | QA demo seed smoke | `0c0ebfd` | `codex/agent-loop-driver` |

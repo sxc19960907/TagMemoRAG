@@ -135,3 +135,36 @@ Improved the offline noop answer provider to synthesize a bounded set of relevan
 ### Next Steps
 
 - None - task complete
+
+
+## Session 57: Clickable QA citations
+
+**Date**: 2026-05-22
+**Task**: Clickable QA citations
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Turned inline QA citations into clickable chips that focus and highlight matching source cards, with focused UI/API tests and browser smoke verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a07b788` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
