@@ -476,6 +476,83 @@ def run_native_retrieve(...):
     return api._retrieve_impl(...)
 ```
 
+## Scenario: Agentic Production Tool Wiring
+
+### 1. Scope / Trigger
+
+- Trigger: wiring agentic retrieve/final tools to production retrieval and
+  answer contracts.
+
+### 2. Signatures
+
+- Retrieve tool:
+  `RetrieveTool(state, embedder, query_text, top_k, source_k, ...)`
+- Final tool:
+  `FinalTool(generator, context=None, question="", prompt_version=..., max_output_tokens=...)`
+- Registry builder:
+  `build_production_agent_tool_registry(state, embedder, answer_generator, reranker_dispatcher, query_text, config)`
+
+### 3. Contracts
+
+- Agentic production wiring remains default-off through `Settings.agentic.mode`.
+- `RetrieveTool` must encode the runtime tool query on every call; it must not
+  reuse a query vector captured at construction time.
+- `FinalTool` may accept a fixed `AnswerRequestContext` for tests, but
+  production mode should build context from the latest retrieve observation in
+  `ctx.history`.
+- `FinalTool` must call `build_answer_prompt` and
+  `validate_generation_citations` before returning the answer payload.
+- Agentic production tools append normal `plan_steps`; they do not write a
+  second QueryPlan row per tool call.
+- Package `__init__` files must stay lightweight. Do not import production
+  builders from `agentic.tools.__init__` if that pulls in `search_runtime`,
+  `state`, parser, or manual-library modules at package import time.
+
+### 4. Validation & Error Matrix
+
+- Runtime retrieve query differs after rewrite -> embedder receives the
+  rewritten query.
+- Generated answer includes unknown citation -> final tool drops it and emits
+  `answer_dropped_invalid_citations`.
+- Production registry run -> `plan_steps` contain retrieve/grade/final and
+  latest retrieve context reaches the answer prompt.
+- Private KB / budget exhaustion -> existing fallback behavior remains.
+- Circular import during `import tagmemorag.agentic` or eval collection ->
+  reject the change and move heavy imports behind direct module imports.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `run_agent` with production tools retrieves evidence, grades, builds a
+  prompt from that evidence, validates citations, and persists steps.
+- Base: classic mode remains unchanged and `Settings().agentic.mode ==
+  "classic"`.
+- Bad: `RetrieveTool` embeds the original user query once and then ignores
+  rewritten queries.
+
+### 6. Tests Required
+
+- Unit test proving retrieve embeds each runtime query.
+- Unit test proving final builds context from latest retrieve and validates
+  citations.
+- Driver test proving production registry persists retrieve/grade/final steps.
+- Existing budget/private-KB fallback tests remain green.
+- Agentic eval slice names remain documented gates.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+tool = RetrieveTool(state=state, query_vec=embedder.encode_query(initial), ...)
+```
+
+#### Correct
+
+```python
+tool = RetrieveTool(state=state, embedder=embedder, ...)
+observation = tool({"query": rewritten_query}, ctx)
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger

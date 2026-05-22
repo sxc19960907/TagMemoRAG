@@ -13,13 +13,13 @@ Plan production retrieve/final tool wiring for default-off agentic mode with eva
 
 ## Acceptance Criteria
 
-- [ ] `agentic_simple_passthrough.jsonl` remains classic-equivalent where
+- [x] `agentic_simple_passthrough.jsonl` remains classic-equivalent where
       expected.
-- [ ] `agentic_multihop.jsonl`, `agentic_low_recall_recovery.jsonl`, and
+- [x] `agentic_multihop.jsonl`, `agentic_low_recall_recovery.jsonl`, and
       `agentic_budget_breach.jsonl` are named gates.
-- [ ] Replay verdict remains `match` or documented tolerated drift.
-- [ ] Agentic mode remains default-off.
-- [ ] Rollback is disabling agentic mode or reverting tool wiring.
+- [x] Replay verdict remains `match` or documented tolerated drift.
+- [x] Agentic mode remains default-off.
+- [x] Rollback is disabling agentic mode or reverting tool wiring.
 
 ## Notes
 

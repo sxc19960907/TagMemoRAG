@@ -3,7 +3,7 @@
   "name": "agentic-production-tool-wiring",
   "title": "Agentic Production Tool Wiring",
   "description": "Plan production retrieve/final tool wiring for default-off agentic mode with eval and replay gates. Planning only until approved.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

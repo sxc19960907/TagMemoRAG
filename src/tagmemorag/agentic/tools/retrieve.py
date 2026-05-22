@@ -12,7 +12,7 @@ from ..state import AgentStepCtx, ToolObservation
 @dataclass(frozen=True)
 class RetrieveTool:
     state: Any
-    query_vec: Any
+    embedder: Any
     query_text: str
     top_k: int
     source_k: int
@@ -39,9 +39,10 @@ class RetrieveTool:
     def __call__(self, args: dict[str, Any], ctx: AgentStepCtx) -> ToolObservation:
         started = time.perf_counter()
         query = str(args.get("query") or self.query_text)
+        query_vec = self.embedder.encode_query(query)
         execution = execute_search(
             state=self.state,
-            query_vec=self.query_vec,
+            query_vec=query_vec,
             settings=ctx.settings,
             query_text=query,
             top_k=int(self.top_k),

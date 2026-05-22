@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from tagmemorag.agentic import AgentStepCtx
+from tagmemorag.agentic.state import StepRecord, ToolObservation
 from tagmemorag.agentic.tools.final import FinalTool
 from tagmemorag.agentic.tools.grade import GradeTool
+from tagmemorag.agentic.tools.retrieve import RetrieveTool
 from tagmemorag.agentic.tools.rewrite import RewriteTool
 from tagmemorag.answer.base import AnswerCitation, AnswerGeneration, AnswerPrompt, AnswerRequestContext
+from tagmemorag.config import Settings
 from tagmemorag.queryplan import Budget, Intent, QueryPlan
 from tagmemorag.queryplan.budget import BudgetGuard
 from tagmemorag.reranker.base import RerankResult, RerankResultItem
@@ -72,7 +75,7 @@ def test_final_tool_wraps_answer_generator():
     context = AnswerRequestContext(
         question="q",
         retrieve_payload={},
-        prompt=AnswerPrompt(messages=(), prompt_version="p1"),
+        prompt=AnswerPrompt(messages=(), prompt_version="p1", allowed_citation_ids=frozenset({"cit_1"})),
         max_output_tokens=16,
     )
 
@@ -81,6 +84,108 @@ def test_final_tool_wraps_answer_generator():
     assert obs.payload["answer"]["text"] == "ok"
     assert obs.payload["answer"]["citations"] == [{"citation_id": "cit_1"}]
     assert obs.tokens_consumed == 16
+
+
+class _RecordingEmbedder:
+    def __init__(self):
+        self.queries = []
+
+    def encode_query(self, query):
+        self.queries.append(query)
+        return [1.0, 0.0]
+
+
+class _State:
+    build_id = "build-1"
+    kb_name = "kb"
+
+
+def test_retrieve_tool_embeds_each_runtime_query(monkeypatch):
+    calls = []
+
+    def fake_execute_search(**kwargs):
+        calls.append(kwargs)
+
+        class _Execution:
+            results = []
+
+        return _Execution()
+
+    monkeypatch.setattr("tagmemorag.agentic.tools.retrieve.execute_search", fake_execute_search)
+    embedder = _RecordingEmbedder()
+    tool = RetrieveTool(
+        state=_State(),
+        embedder=embedder,
+        query_text="fallback query",
+        top_k=3,
+        source_k=3,
+    )
+
+    plan = _plan()
+    ctx = AgentStepCtx(plan=plan, guard=BudgetGuard(plan), settings=Settings(), step_idx=0)
+    obs = tool({"query": "rewritten steam query"}, ctx)
+
+    assert embedder.queries == ["rewritten steam query"]
+    assert calls[0]["query_text"] == "rewritten steam query"
+    assert calls[0]["query_vec"] == [1.0, 0.0]
+    assert obs.payload["kb_name"] == "kb"
+
+
+class _ContextInspectingGenerator:
+    def __init__(self):
+        self.contexts = []
+
+    def generate(self, context):
+        self.contexts.append(context)
+        return AnswerGeneration(
+            "Use the nozzle. [cit_001] [cit_fake]",
+            citations=(AnswerCitation("cit_001"), AnswerCitation("cit_fake")),
+            model_id="stub",
+            prompt_version=context.prompt.prompt_version,
+        )
+
+
+def test_final_tool_builds_context_from_latest_retrieve_and_validates_citations():
+    generator = _ContextInspectingGenerator()
+    retrieve_payload = {
+        "citations": [{"citation_id": "cit_001"}],
+        "context_pack": {
+            "items": [
+                {
+                    "context_item_id": "ctx_001",
+                    "citation_id": "cit_001",
+                    "content": "Clean the steam nozzle.",
+                    "source": {"source_file": "manual.md"},
+                }
+            ]
+        },
+    }
+    plan = _plan()
+    ctx = AgentStepCtx(
+        plan=plan,
+        guard=BudgetGuard(plan),
+        settings=Settings(),
+        step_idx=1,
+        history=(
+            StepRecord(
+                step_idx=0,
+                tool="retrieve",
+                args={"query": "steam nozzle"},
+                observation=ToolObservation(retrieve_payload),
+                grade=None,
+                decision_source="rule",
+                rationale="test",
+                ts="2026-05-22T00:00:00Z",
+            ),
+        ),
+    )
+
+    obs = FinalTool(generator, question="How do I fix weak steam?")({}, ctx)
+
+    assert generator.contexts[0].retrieve_payload is retrieve_payload
+    assert "Clean the steam nozzle." in generator.contexts[0].prompt.messages[1]["content"]
+    assert obs.payload["answer"]["citations"] == [{"citation_id": "cit_001"}]
+    assert "answer_dropped_invalid_citations" in obs.payload["answer"]["warnings"]
 
 
 class _Dispatcher:

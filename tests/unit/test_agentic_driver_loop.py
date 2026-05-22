@@ -8,13 +8,16 @@ from tagmemorag.agentic import AgentStepCtx, ToolObservation, run_agent
 from tagmemorag.agentic.decision import RuleOnlyDecisionGenerator
 from tagmemorag.agentic.router import RouteDecision
 from tagmemorag.agentic.tools import AgentToolRegistry
+from tagmemorag.agentic.tools.production import ProductionAgentToolsConfig, build_production_agent_tool_registry
 from tagmemorag.agentic.tools.grade import GradeTool
 from tagmemorag.answer.base import AnswerCitation, AnswerGeneration
-from tagmemorag.config import Settings, StorageConfig
+from tagmemorag.config import ModelConfig, Settings, StorageConfig
+from tagmemorag.embedder import HashingEmbedder
 from tagmemorag.queryplan import Budget, Intent, PlanLog, QueryPlan
 from tagmemorag.queryplan.budget import BudgetGuard
 from tagmemorag.queryplan.plan_log import _reset_shared_writer_for_tests
 from tagmemorag.reranker.base import RerankResult, RerankResultItem
+from tagmemorag.state import build_kb
 
 
 def _plan(**kwargs) -> QueryPlan:
@@ -159,6 +162,32 @@ class _RerankDispatcher:
             vendor_used="qwen",
             cache_status="miss",
             latency_ms=0,
+        )
+
+
+class _NoopReranker:
+    def rerank(self, plan, candidates, guard, *, query_text=""):
+        return RerankResult(
+            items=(),
+            truncated_chunk_ids=(),
+            vendor_used="noop",
+            cache_status="skipped",
+            latency_ms=0,
+        )
+
+
+class _InspectingAnswerGenerator:
+    def __init__(self):
+        self.contexts = []
+
+    def generate(self, context):
+        self.contexts.append(context)
+        citation = sorted(context.prompt.allowed_citation_ids)[0]
+        return AnswerGeneration(
+            f"Clean the steam nozzle. [{citation}]",
+            citations=(AnswerCitation(citation),),
+            model_id="stub",
+            prompt_version=context.prompt.prompt_version,
         )
 
 
@@ -418,6 +447,49 @@ def test_writes_one_step_record_per_tool(tmp_path: Path):
     steps = log.load_steps(plan.plan_id)
     assert [step.tool for step in steps] == ["retrieve", "grade", "final"]
     assert all(step.decision_source == "rule" for step in steps)
+
+
+def test_production_agent_tools_run_retrieve_final_and_persist_steps(tmp_path: Path):
+    _reset_shared_writer_for_tests()
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model=ModelConfig(provider="hashing", dim=64),
+    )
+    assert cfg.agentic.mode == "classic"
+    embedder = HashingEmbedder(dim=64)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Steam\nWeak steam needs nozzle cleaning.\n", encoding="utf-8")
+    state = build_kb(docs, "kb", cfg, embedder=embedder)
+    answer_gen = _InspectingAnswerGenerator()
+    registry = build_production_agent_tool_registry(
+        state=state,
+        embedder=embedder,
+        answer_generator=answer_gen,
+        reranker_dispatcher=_NoopReranker(),
+        query_text="weak steam",
+        config=ProductionAgentToolsConfig(top_k=3, source_k=3, answer_max_output_tokens=32),
+    )
+    log = PlanLog("kb", cfg)
+    plan = _plan(budget=Budget(latency_ms=5000, max_iterations=5, max_tool_calls=5))
+    log.insert_basic(plan)
+
+    result = run_agent(
+        plan=plan,
+        registry=registry,
+        guard=BudgetGuard(plan),
+        decision_gen=RuleOnlyDecisionGenerator(),
+        settings=cfg,
+        plan_log=log,
+        initial_query="weak steam",
+    )
+    log._writer.flush()
+
+    assert result.answer.text.startswith("Clean the steam nozzle.")
+    assert "Weak steam needs nozzle cleaning" in answer_gen.contexts[0].prompt.messages[1]["content"]
+    steps = log.load_steps(plan.plan_id)
+    assert [step.tool for step in steps] == ["retrieve", "grade", "final"]
+    assert steps[0].observation.payload["context_pack"]["items"]
 
 
 def test_budget_iteration_exhaustion_triggers_classic_fallback():

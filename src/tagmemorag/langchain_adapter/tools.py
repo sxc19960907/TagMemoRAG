@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..agentic import AgentStepCtx
 from ..agentic.tools import AgentToolRegistry
 from .loader_splitter import LangChainAdapterUnavailable
 
 
-def registry_to_langchain_tools(registry: AgentToolRegistry, ctx: AgentStepCtx) -> list[Any]:
+def registry_to_langchain_tools(registry: AgentToolRegistry, ctx: Any) -> list[Any]:
     """Wrap AgentToolRegistry entries as LangChain StructuredTool objects."""
 
     try:
