@@ -4,96 +4,21 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import AnswerCitation, AnswerGeneration, AnswerGenerator, AnswerRequestContext
+from .intent import (
+    AnswerIntent,
+    SAFETY_TERMS,
+    TROUBLESHOOTING_ACTION_TERMS,
+    TROUBLESHOOTING_QUESTION_TERMS,
+    UNSUPPORTED_REPAIR_TERMS,
+    classify_answer_intent,
+    contains_any,
+)
 
 MAX_EXTRACTIVE_EXCERPTS = 3
 STEPWISE_ANSWER_PREFIX = "建议先这样处理："
 GENERIC_ANSWER_PREFIX = "根据资料可确认："
 SAFETY_ANSWER_PREFIX = "建议先保证安全："
 UNSUPPORTED_REPAIR_PREFIX = "现有说明书证据不足，无法确认需要这样处理。"
-SAFETY_TERMS = (
-    "abnormal smell",
-    "burning smell",
-    "electric shock",
-    "overheat",
-    "overheating",
-    "disconnect power",
-    "unplug",
-    "contact service",
-    "异味",
-    "異味",
-    "漏电",
-    "漏電",
-    "触电",
-    "觸電",
-    "过热",
-    "過熱",
-    "持续高温",
-    "持續高溫",
-    "立即断电",
-    "立即斷電",
-    "联系售后",
-    "聯絡售後",
-)
-UNSUPPORTED_REPAIR_TERMS = (
-    "part number",
-    "spare part",
-    "replace",
-    "replacement",
-    "disassemble",
-    "配件编号",
-    "零件编号",
-    "料号",
-    "料號",
-    "更换",
-    "更換",
-    "换泵",
-    "換泵",
-    "拆机",
-    "拆機",
-    "拆卸",
-)
-TROUBLESHOOTING_QUESTION_TERMS = (
-    "how to",
-    "what should",
-    "troubleshoot",
-    "fix",
-    "fault",
-    "problem",
-    "weak",
-    "low",
-    "small",
-    "怎么办",
-    "怎麼辦",
-    "如何处理",
-    "如何處理",
-    "怎么处理",
-    "怎麼處理",
-    "故障",
-    "异常",
-    "異常",
-)
-TROUBLESHOOTING_ACTION_TERMS = (
-    "clean",
-    "check",
-    "confirm",
-    "wait",
-    "reset",
-    "清洗",
-    "清洁",
-    "清潔",
-    "检查",
-    "檢查",
-    "确认",
-    "確認",
-    "安装到位",
-    "安裝到位",
-    "预热",
-    "預熱",
-    "等待",
-    "重启",
-    "重啟",
-)
-
 if TYPE_CHECKING:  # pragma: no cover
     from ..config import Settings
 
@@ -181,7 +106,8 @@ def _format_extractive_answer(question: str, excerpts: tuple[tuple[str, str], ..
     if len(excerpts) == 1:
         citation_id, excerpt = excerpts[0]
         return f"{excerpt} [{citation_id}]"
-    prefix = STEPWISE_ANSWER_PREFIX if _asks_troubleshooting_question(question) else GENERIC_ANSWER_PREFIX
+    answer_intent = classify_answer_intent(question)
+    prefix = STEPWISE_ANSWER_PREFIX if answer_intent == AnswerIntent.TROUBLESHOOTING else GENERIC_ANSWER_PREFIX
     return _format_stepwise_answer(prefix, excerpts)
 
 
@@ -241,16 +167,11 @@ def _contains_cjk(text: str) -> bool:
 
 
 def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
-    lowered = text.casefold()
-    return any(needle.casefold() in lowered for needle in needles)
+    return contains_any(text, needles)
 
 
 def _asks_unsupported_repair(question: str) -> bool:
     return _contains_any(question, UNSUPPORTED_REPAIR_TERMS)
-
-
-def _asks_troubleshooting_question(question: str) -> bool:
-    return _contains_any(question, TROUBLESHOOTING_QUESTION_TERMS)
 
 
 def _is_cjk(char: str) -> bool:

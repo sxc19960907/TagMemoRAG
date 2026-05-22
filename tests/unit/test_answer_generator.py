@@ -5,6 +5,7 @@ import pytest
 
 from tagmemorag.answer.base import AnswerRequestContext
 from tagmemorag.answer.generator import NoopAnswerGenerator, create_answer_generator
+from tagmemorag.answer.intent import AnswerIntent, classify_answer_intent, contains_any
 from tagmemorag.answer.openai_compatible import OpenAICompatibleAnswerGenerator
 from tagmemorag.answer.prompt import build_answer_prompt
 from tagmemorag.config import AnswerConfig, Settings
@@ -124,6 +125,56 @@ def test_noop_answer_generator_formats_generic_multi_evidence_answer():
     )
     assert "建议先这样处理" not in generation.text
     assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
+
+
+def test_noop_answer_generator_keeps_github_workflow_docs_generic():
+    retrieve_payload = {
+        "citations": [{"citation_id": "cit_001"}, {"citation_id": "cit_002"}],
+        "context_pack": {
+            "items": [
+                {
+                    "citation_id": "cit_001",
+                    "content": (
+                        "Pull requests\n\n"
+                        "On GitHub, a pull request proposes changes from a branch for review before merging."
+                    ),
+                },
+                {
+                    "citation_id": "cit_002",
+                    "content": (
+                        "Workflow\n\n"
+                        "A common contribution workflow is to create a branch, make commits, open a pull request, "
+                        "review the changes, and merge them."
+                    ),
+                },
+            ]
+        },
+    }
+    question = "How does a GitHub pull request workflow use branches, commits, review, and merge?"
+    prompt = build_answer_prompt(question=question, retrieve_payload=retrieve_payload, prompt_version="answer_prompt.v1")
+    context = AnswerRequestContext(question=question, retrieve_payload=retrieve_payload, prompt=prompt, max_output_tokens=64)
+
+    generation = NoopAnswerGenerator().generate(context)
+
+    assert generation.text == (
+        "根据资料可确认：\n"
+        "1. On GitHub, a pull request proposes changes from a branch for review before merging. [cit_001]\n"
+        "2. A common contribution workflow is to create a branch, make commits, open a pull request, review the changes, "
+        "and merge them. [cit_002]"
+    )
+    assert "建议先这样处理" not in generation.text
+    assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
+
+
+def test_answer_intent_classifies_documentation_and_troubleshooting_boundaries():
+    assert classify_answer_intent("How does a GitHub pull request workflow work?") == AnswerIntent.GENERIC
+    assert classify_answer_intent("What should I do if the steam output is weak?") == AnswerIntent.TROUBLESHOOTING
+    assert classify_answer_intent("蒸汽很小怎么办") == AnswerIntent.TROUBLESHOOTING
+
+
+def test_answer_intent_word_matching_avoids_short_token_false_positive():
+    assert contains_any("rapid cleaning cycle", ("api",)) is False
+    assert contains_any("REST API reference", ("api",)) is True
 
 
 def test_noop_answer_generator_fallback_keeps_multiple_allowed_excerpts():

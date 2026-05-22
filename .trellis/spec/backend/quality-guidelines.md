@@ -306,6 +306,60 @@ generation = parse_provider_response(data)
 generation = validate_generation_citations(generation, prompt.allowed_citation_ids)
 ```
 
+## Scenario: Answer Intent and Local Formatting
+
+### 1. Scope / Trigger
+
+- Trigger: changing local answer wording, deterministic noop answer formatting,
+  or rule-based answer intent classification.
+
+### 2. Signatures
+
+- `classify_answer_intent(question) -> AnswerIntent`
+- `NoopAnswerGenerator.generate(context: AnswerRequestContext) -> AnswerGeneration`
+
+### 3. Contracts
+
+- Rule-based answer intent classification belongs in the answer layer, not in
+  FastAPI route handlers, CLI commands, or general request orchestration.
+- Product-manual troubleshooting and safety questions may use action-oriented
+  prefixes such as `建议先这样处理：` and `建议先保证安全：`.
+- Generic documentation/software/web questions such as GitHub workflow, pull
+  request, repository, README, API, and tutorial questions must use neutral
+  documentation framing such as `根据资料可确认：`.
+- Unsupported part-number, disassembly, or replacement questions keep the
+  insufficient-evidence framing even when retrieved evidence contains adjacent
+  maintenance content.
+- English keyword matching for short documentation terms must be word-boundary
+  aware so terms such as `api` do not match unrelated words such as `rapid`.
+- New answer-formatting heuristics should be covered by focused answer-layer
+  tests and should not add more branches to `api.py` or `cli.py`.
+
+### 4. Validation & Error Matrix
+
+- Generic software documentation question with multiple evidence items -> uses
+  neutral documentation framing.
+- Product troubleshooting question with multiple evidence items -> uses
+  action-oriented step framing.
+- Safety question with matching safety evidence -> safety framing takes
+  precedence.
+- Unsupported repair/replacement question -> insufficient-evidence repair
+  framing takes precedence.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a GitHub pull request workflow answer starts with `根据资料可确认：`.
+- Good: a weak-steam product answer starts with `建议先这样处理：`.
+- Bad: adding another route-local or CLI-local keyword list to decide answer
+  wording.
+
+### 6. Tests Required
+
+- Answer generator tests for generic documentation vs troubleshooting prefix
+  boundaries.
+- Intent tests for short-token false positives.
+- Existing safety and unsupported-repair answer tests remain green.
+
 ## Scenario: Answer-Quality Diagnostics Command
 
 ### 1. Scope / Trigger
