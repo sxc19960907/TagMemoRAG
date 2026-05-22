@@ -519,3 +519,36 @@ Improved real manual evidence ranking by separating lexical identity fields from
 ### Next Steps
 
 - None - task complete
+
+
+## Session 69: Manualslib real manual validation
+
+**Date**: 2026-05-22
+**Task**: Manualslib real manual validation
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added explicit ManualsLib URL import tooling that materializes browser-visible manual text into markdown plus metadata sidecars, validated against a real Hisense DH105M3 Series sample from ManualsLib. The sample built as a hashing KB with 122 chunks and exposed a future ranking target around generic drying terms vs program/cycle-selector intent. Focused tests, answer-quality diagnostics, and realmanuals retrieval regression gates passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `71dbed4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
