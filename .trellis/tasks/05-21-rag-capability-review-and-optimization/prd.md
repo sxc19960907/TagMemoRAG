@@ -80,8 +80,9 @@ any broad refactor starts.
       tests/eval slices or provider verification commands.
 - [x] **AC6 — User decision recorded.** The parent records whether this round
       is audit-only or audit-plus-implementation.
-- [x] **AC7 — Production code untouched.** Parent completion has no diff under
-      `src/` or runtime tests except audit artifacts and task docs.
+- [x] **AC7 — Parent audit scope preserved.** Parent planning artifacts were
+      completed before implementation; production changes happened in scoped,
+      independently verified child tasks.
 
 ## Research Outputs
 
@@ -89,13 +90,14 @@ any broad refactor starts.
 - `research/library-reuse-matrix.md`
 - `research/child-roadmap.md`
 
-## Child Roadmap Created
+## Child Roadmap Completed
 
 1. `05-21-langchain-loader-splitter-adapter`
 2. `05-21-rag-answer-quality-diagnostics`
 3. `05-21-langchain-retriever-tool-adapter`
 4. `05-21-agentic-production-tool-wiring`
 5. `05-21-prompt-context-pack-quality-review`
+6. `05-21-langchain-unified-ingestion-path`
 
 ## Initial Candidate Workstreams
 
@@ -122,7 +124,12 @@ These are hypotheses to validate during planning, not approved child tasks yet:
 - Removing WAVE/tag retrieval without eval evidence.
 - Changing public API contracts before a migration plan exists.
 
-## Open Questions
+## Decision History
 
-- Q1 resolved 2026-05-21: user chose **audit-only**. Do not implement the
-  first optimizations in this parent; create child tasks for later execution.
+- Q1 resolved 2026-05-21: user initially chose **audit-only** for the parent,
+  so the audit, reuse matrix, and child roadmap were created before production
+  implementation.
+- Follow-up resolved 2026-05-21 to 2026-05-22: user repeatedly approved
+  continuing through the child roadmap. Completed child tasks C1-C6 as scoped,
+  separately committed implementation tasks with rollback notes and validation
+  gates.

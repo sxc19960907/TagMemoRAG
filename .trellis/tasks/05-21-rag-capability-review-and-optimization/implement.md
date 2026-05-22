@@ -2,7 +2,8 @@
 
 ## 0. Operating Rules
 
-- Audit-only: do not edit production code in this parent.
+- Keep parent changes limited to audit and planning artifacts; production code
+  changes must happen only in scoped child tasks.
 - Ask user only for product/scope decisions that cannot be answered from the
   repo.
 - Use code, tests, docs, and archived tasks as evidence before recommending a
@@ -45,7 +46,8 @@ Output:
 ### Step 4 — Parent Review Gate
 
 - Confirm with the user before starting any child implementation.
-- Parent may be archived once the audit, matrix, and roadmap are reviewed.
+- Parent may be archived once the audit, matrix, roadmap, and approved child
+  tasks are complete.
 
 ## 2. Validation Commands
 
@@ -74,8 +76,10 @@ Expected final command output: empty.
 - [x] Library reuse matrix written.
 - [x] Child roadmap written.
 - [x] Child task directories created in planning status.
-- [x] User has reviewed and approved the roadmap.
-- [x] No production code diff under `src/` or runtime test diff under `tests/`.
+- [x] User reviewed and approved the roadmap.
+- [x] Approved child tasks C1-C6 completed and archived.
+- [x] Parent production-code changes were avoided; implementation happened in
+      child tasks with their own validation gates.
 
 ## 4. Validation Results
 
@@ -83,6 +87,7 @@ Expected final command output: empty.
   only reports the literal validation command in this file.
 - JSONL manifests parse successfully.
 - `git diff --check` passed.
-- Production code remains untouched for this parent.
-- User approved continuing with child tasks 1-5 in roadmap order and
-  explicitly deferred item 6 / broader RAG capability redesign to a later pass.
+- Production code remained untouched for the parent audit commit.
+- User approved continuing with child tasks in roadmap order. Child tasks C1-C6
+  are completed and archived, with full-suite validation run on the final
+  child.
