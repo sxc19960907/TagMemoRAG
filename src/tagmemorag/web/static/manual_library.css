@@ -160,6 +160,84 @@ textarea {
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
 }
 
+.qa-shell {
+  background: #f4f7fa;
+}
+
+.qa-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 420px);
+  gap: 14px;
+  align-items: end;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.qa-header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.qa-main {
+  display: grid;
+  gap: 14px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding-top: 0;
+}
+
+.qa-panel,
+.qa-answer-panel,
+.qa-sources-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.qa-question-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.qa-question-form textarea {
+  min-height: 120px;
+}
+
+.qa-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.qa-actions > button:only-child {
+  justify-self: end;
+}
+
+.qa-token-field {
+  max-width: 360px;
+}
+
+.qa-source-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.qa-source-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.qa-source-item p {
+  margin: 8px 0 0;
+}
+
 .workbench-question-form,
 .answer-panel,
 .quality-detail-block {
@@ -822,6 +900,7 @@ dialog::backdrop {
 
 @media (max-width: 1100px) {
   .topbar,
+  .qa-header,
   .filters,
   .bulk-filters,
   .tag-grid,
@@ -843,7 +922,8 @@ dialog::backdrop {
 
 @media (max-width: 640px) {
   .field-grid,
-  .kb-form {
+  .kb-form,
+  .qa-actions {
     grid-template-columns: 1fr;
   }
 

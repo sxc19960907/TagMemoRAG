@@ -123,3 +123,37 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "include_retrieve" in js.text
     assert "workbench-answer" in js.text
     assert "workbench-evidence" in js.text
+
+
+def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/qa?kb_name=ops")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "Product Manual Q&A" in body
+    assert 'id="qa-question"' in body
+    assert 'id="qa-answer"' in body
+    assert 'id="qa-sources"' in body
+    assert 'id="qa-kb-name"' in body
+    assert "workbench-evidence" not in body
+    assert "workbench-results" not in body
+    assert '"defaultKbName": "ops"' in body
+    assert "/static/manual-library/qa_page.js" in body
+
+
+def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/qa_page.js")
+
+    assert js.status_code == 200
+    assert "/answer" in js.text
+    assert "include_retrieve" in js.text
+    assert "top_k: 5" in js.text
+    assert "source_k: 8" in js.text
+    assert "qa-answer" in js.text
+    assert "plan_id" not in js.text
+    assert "build_id" not in js.text

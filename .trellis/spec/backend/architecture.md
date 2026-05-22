@@ -409,6 +409,20 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 
 **Deferred.** Streaming, multi-turn state, generation cache, tool-calling, prompt/model rollout policy, and faithfulness metrics beyond deterministic citation checks remain follow-up work.
 
+### B6A. User-Facing Q&A Page  ✅ Shipped
+
+**Shipped 2026-05-22.** `GET /qa` serves the non-admin manual question-answer page. It is a thin server-rendered Jinja2 shell plus vanilla JavaScript that calls the existing `/answer` endpoint; it does not introduce a new answer schema or frontend build step.
+
+**Contract.**
+
+- Route: `GET /qa?kb_name=<name>` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing admin page config pattern.
+- Client call: `qa_page.js` submits `POST /answer` with `include_retrieve=true`, `top_k=5`, `source_k=8`, and `mode="classic"`.
+- Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields.
+- Auth: when API auth is enabled, the page can send a Bearer token. When auth is disabled, the token field is hidden.
+- Error UX: known readiness failures such as an unloaded KB are mapped to user-readable copy. The underlying structured API error remains unchanged.
+
+**Tests.** UI route/static tests assert the route renders selected KB config, the JavaScript calls `/answer` with the fixed defaults, and debugging identifiers are absent from the user page asset.
+
 ### B7. Phase 7 — Visual Track  📋 Blueprint
 
 Phase 7 in the archive design bundled OCR and visual embedding into one large milestone. This document splits it into two independent tracks because their cost, complexity, and value profiles are different.

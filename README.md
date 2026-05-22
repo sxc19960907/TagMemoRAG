@@ -506,6 +506,20 @@ Safe recovery flows:
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 
+### User Q&A page
+
+Open the user-facing manual question-answer page at:
+
+```text
+http://127.0.0.1:8000/qa
+```
+
+Use `?kb_name=product-a` to preselect another KB. The page calls
+`POST /answer` with retrieval included, then shows only the answer,
+user-readable refusal/error states, and cited source snippets. It hides
+debugging details such as plan ids, build ids, raw retrieval results, and
+answerability internals; use the RAG workbench below when you need those.
+
 ### RAG workbench
 
 Open the question-answer workbench at:
