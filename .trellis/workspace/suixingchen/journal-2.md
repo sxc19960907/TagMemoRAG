@@ -168,3 +168,36 @@ Turned inline QA citations into clickable chips that focus and highlight matchin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 58: Stepwise QA answer UX
+
+**Date**: 2026-05-22
+**Task**: Stepwise QA answer UX
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Formatted offline QA answers as a recommendation plus numbered steps, rendered numbered lines as lists while preserving citation chips, and verified focused tests plus demo endpoint output.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `033844c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
