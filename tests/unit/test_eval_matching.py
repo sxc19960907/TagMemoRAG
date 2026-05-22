@@ -21,6 +21,23 @@ def test_match_expectations_rejects_missing_text_contains():
     assert match_expectations([result], expected, case_id="case-1") == [set()]
 
 
+def test_match_expectations_normalizes_whitespace_for_text_contains():
+    result = _result(
+        header="Installation",
+        text="Leave at\nleast\t50mm   of space behind the appliance.",
+    )
+    expected = (ExpectedResult(header="Installation", text_contains=("at least 50mm of space",)),)
+
+    assert match_expectations([result], expected, case_id="case-1") == [{0}]
+
+
+def test_match_expectations_normalizes_control_characters_for_text_contains():
+    result = _result(header="Maintenance", text="Clean the pump\u000cfilter every month.")
+    expected = (ExpectedResult(header="Maintenance", text_contains=("pump filter",)),)
+
+    assert match_expectations([result], expected, case_id="case-1") == [{0}]
+
+
 def test_match_expectations_basename_fallback_requires_unique_candidate():
     results = [
         _result(source_file="a/manual.md", text="a"),

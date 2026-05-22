@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import PurePath
+import re
+import unicodedata
 
 from tagmemorag.types import Result
 
@@ -67,11 +69,28 @@ def _matches(
     if expectation.anchor_key and result.anchor_key != expectation.anchor_key:
         return False
     for needle in expectation.text_contains:
-        if needle not in result.text:
+        if not _text_contains(result.text, needle):
             return False
     if expectation.metadata and not _metadata_matches(result.metadata, expectation.metadata):
         return False
     return True
+
+
+def _text_contains(text: str, needle: str) -> bool:
+    if needle in text:
+        return True
+    normalized_needle = _normalize_text_for_contains(needle)
+    return bool(normalized_needle) and normalized_needle in _normalize_text_for_contains(text)
+
+
+def _normalize_text_for_contains(value: str) -> str:
+    normalized_chars = []
+    for char in value:
+        if char.isspace() or unicodedata.category(char)[0] == "C":
+            normalized_chars.append(" ")
+        else:
+            normalized_chars.append(char)
+    return re.sub(r" +", " ", "".join(normalized_chars)).strip()
 
 
 def _metadata_matches(actual: dict, expected: dict) -> bool:
