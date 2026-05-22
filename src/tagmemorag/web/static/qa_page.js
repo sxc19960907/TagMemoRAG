@@ -3,7 +3,15 @@ const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 
 const state = {
   kbName: config.defaultKbName || "default",
+  lastAnswerText: "",
 };
+
+const suggestedQuestions = [
+  "蒸汽很小怎么办？",
+  "不出咖啡怎么办？",
+  "什么时候需要除垢？",
+  "喷嘴怎么清洗？",
+];
 
 const el = {
   token: document.getElementById("qa-api-token"),
@@ -13,9 +21,11 @@ const el = {
   status: document.getElementById("qa-status"),
   answerMeta: document.getElementById("qa-answer-meta"),
   answer: document.getElementById("qa-answer"),
+  copyAnswer: document.getElementById("qa-copy-answer"),
   sourceMeta: document.getElementById("qa-source-meta"),
   sources: document.getElementById("qa-sources"),
   contextNote: document.getElementById("qa-context-note"),
+  suggestions: document.getElementById("qa-suggestions"),
 };
 
 function headers() {
@@ -54,6 +64,10 @@ async function requestAnswer(event) {
     return;
   }
 
+  await askQuestion(question);
+}
+
+async function askQuestion(question) {
   updateLocationKb();
   renderPending();
   el.submit.disabled = true;
@@ -83,18 +97,22 @@ async function requestAnswer(event) {
 }
 
 function renderPending() {
+  state.lastAnswerText = "";
   el.answer.className = "qa-answer-message empty-state";
   el.answer.textContent = "Waiting for answer...";
   el.answerMeta.textContent = "Searching the selected knowledge base";
+  if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
   el.sources.textContent = "Looking for sources...";
   el.sourceMeta.textContent = "Cited source snippets will appear here.";
 }
 
 function renderError(error) {
+  state.lastAnswerText = "";
   el.answer.className = "qa-answer-message error";
   el.answer.textContent = userFacingError(error.message);
   el.answerMeta.textContent = "Request failed";
+  if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
   el.sources.textContent = "No sources available.";
   el.sourceMeta.textContent = "Sources unavailable.";
@@ -106,10 +124,13 @@ function renderAnswer(body) {
   const kind = String(answer.kind || "unknown");
 
   if (kind === "answer") {
+    state.lastAnswerText = String(answer.text || "");
     el.answer.className = "qa-answer-message";
     el.answer.innerHTML = renderAnswerText(answer.text || "");
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
+    if (el.copyAnswer) el.copyAnswer.disabled = !state.lastAnswerText;
   } else {
+    state.lastAnswerText = "";
     el.answer.className = "qa-answer-message warn";
     const reason = answer.text || answer.refusal_reason || "I could not answer from the available manual content.";
     const hints = Array.isArray(answer.missing_evidence_hints) ? answer.missing_evidence_hints : [];
@@ -118,12 +139,37 @@ function renderAnswer(body) {
       ...hints.map((hint) => `<p class="muted">${escapeHtml(hint)}</p>`),
     ].join("");
     el.answerMeta.textContent = "No grounded answer available";
+    if (el.copyAnswer) el.copyAnswer.disabled = true;
   }
 
   if (body.route && body.route.kind === "clarification") {
     renderClarificationCandidates(body.route.candidates || []);
   } else {
     renderSources(answer.citations || [], retrieve.evidence || []);
+  }
+}
+
+function renderSuggestions() {
+  if (!el.suggestions) return;
+  el.suggestions.innerHTML = suggestedQuestions
+    .map((question) => `<button class="qa-suggestion" type="button" data-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`)
+    .join("");
+  el.suggestions.querySelectorAll("[data-question]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const question = button.dataset.question || "";
+      el.question.value = question;
+      askQuestion(question);
+    });
+  });
+}
+
+async function copyAnswer() {
+  if (!state.lastAnswerText) return;
+  try {
+    await navigator.clipboard.writeText(state.lastAnswerText);
+    setStatus("Answer copied.", "success");
+  } catch (_error) {
+    setStatus("Copy failed. Select the answer text to copy it manually.", "error");
   }
 }
 
@@ -288,4 +334,6 @@ function cssEscape(value) {
 }
 
 el.questionForm.addEventListener("submit", requestAnswer);
+if (el.copyAnswer) el.copyAnswer.addEventListener("click", copyAnswer);
+renderSuggestions();
 updateLocationKb();
