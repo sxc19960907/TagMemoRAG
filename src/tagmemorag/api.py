@@ -261,9 +261,15 @@ class AnswerRequest(RetrieveRequest):
     include_retrieve: bool = True
 
 
+class QaConversationTurn(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+    answer: str | None = Field(default=None, max_length=1200)
+
+
 class QaAnswerRequest(BaseModel):
-    question: str
+    question: str = Field(..., min_length=1, max_length=1000)
     include_retrieve: bool = True
+    conversation_context: list[QaConversationTurn] = Field(default_factory=list, max_length=3)
 
 
 class SearchFilters(BaseModel):
@@ -503,6 +509,29 @@ def _load_all_kbs(logger) -> None:
 
 def _normalize_question(question: str) -> str:
     return " ".join(question.strip().split())
+
+
+def _trim_context_text(value: str | None, limit: int) -> str:
+    text = _normalize_question(value or "")
+    return text[:limit]
+
+
+def _qa_contextual_question(request: QaAnswerRequest) -> str:
+    question = _normalize_question(request.question)
+    turns: list[str] = []
+    for turn in request.conversation_context[-2:]:
+        turn_question = _trim_context_text(turn.question, 220)
+        turn_answer = _trim_context_text(turn.answer, 360)
+        if not turn_question:
+            continue
+        if turn_answer:
+            turns.append(f"Previous question: {turn_question}\nPrevious answer: {turn_answer}")
+        else:
+            turns.append(f"Previous question: {turn_question}")
+    if not turns:
+        return question
+    context = "\n\n".join(turns)
+    return f"{context}\n\nCurrent follow-up question: {question}"
 
 
 def _search_param_values(request: SearchRequest) -> dict[str, object]:
@@ -916,7 +945,8 @@ def qa_answer(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    route = _route_qa_question(request.question, api_key)
+    effective_question = _qa_contextual_question(request)
+    route = _route_qa_question(effective_question, api_key)
     if route["kind"] == "not_ready":
         return _qa_not_ready_response(route)
     if route["kind"] == "clarification":
@@ -924,7 +954,7 @@ def qa_answer(
 
     kb_name = str(route["kb_name"])
     answer_request = AnswerRequest(
-        question=request.question,
+        question=effective_question,
         kb_name=kb_name,
         top_k=5,
         source_k=8,
@@ -938,7 +968,7 @@ def qa_answer(
         span_attrs = {
             "tagmemorag.kb_name": state.kb_name,
             "tagmemorag.build_id": state.build_id,
-            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.query_len": len(effective_question),
             "tagmemorag.top_k": answer_request.top_k or settings.search.top_k,
             "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
         }
@@ -950,6 +980,7 @@ def qa_answer(
                 "kb_name": state.kb_name,
                 "reason": route.get("reason", "single_kb"),
             }
+            payload["question"] = request.question
             return payload
     except ServiceError as exc:
         get_metrics().record_search(

@@ -430,7 +430,8 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 
 **Contract.**
 
-- Request: `QaAnswerRequest` with `question` and `include_retrieve`; the browser does not send `kb_name`, `top_k`, `source_k`, or mode controls.
+- Request: `QaAnswerRequest` with `question`, `include_retrieve`, and optional bounded `conversation_context` turns (`question`, optional `answer`). The browser does not send `kb_name`, `top_k`, `source_k`, or mode controls.
+- Conversation context: `/qa/answer` may combine recent page-session context with the current question for routing and retrieval, but it returns the original user question separately and does not persist the raw context. This is a user-page convenience, not the durable multi-turn memory contract deferred from T6.
 - Routing scope: currently loaded KBs allowed by the API key. No loaded KBs returns `route.kind="not_ready"` with a user-readable answer payload.
 - Single-KB case: route directly with `route.kind="answered"` and `reason="single_kb"`.
 - Multi-KB MVP: use bounded lexical signals from KB name and node/header/source/manual metadata. Clear matches route with `reason="lexical_route"`; otherwise return `route.kind="clarification"` and candidate KB labels.

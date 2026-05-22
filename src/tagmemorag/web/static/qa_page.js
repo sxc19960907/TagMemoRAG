@@ -83,10 +83,10 @@ async function requestAnswer(event) {
     return;
   }
 
-  await askQuestion(question);
+  await askQuestion(question, { useConversationContext: shouldUseConversationContext(question) });
 }
 
-async function askQuestion(question) {
+async function askQuestion(question, options = {}) {
   updateLocationKb();
   const turn = addConversationTurn(question);
   renderPending();
@@ -100,6 +100,7 @@ async function askQuestion(question) {
       body: JSON.stringify({
         question,
         include_retrieve: true,
+        conversation_context: options.useConversationContext ? conversationContextForRequest(turn.id) : [],
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -250,6 +251,52 @@ function answerStatusFromBody(body) {
   return "refusal";
 }
 
+function conversationContextForRequest(activeTurnId) {
+  return state.turns
+    .filter((turn) => turn.id !== activeTurnId && turn.body && turn.status === "answered")
+    .slice(0, 2)
+    .reverse()
+    .map((turn) => ({
+      question: turn.question,
+      answer: answerPreviewForContext(turn.body),
+    }));
+}
+
+function answerPreviewForContext(body) {
+  const answerText = String(body?.answer?.text || "").replace(/\s+/g, " ").trim();
+  if (answerText) return answerText.slice(0, 700);
+  const evidence = body?.retrieve?.evidence;
+  if (Array.isArray(evidence) && evidence.length > 0) {
+    return String(evidence[0].text || evidence[0].content || "").replace(/\s+/g, " ").trim().slice(0, 700);
+  }
+  return "";
+}
+
+function shouldUseConversationContext(question) {
+  if (state.turns.length === 0) return false;
+  const text = String(question || "").trim().toLowerCase();
+  if (!text) return false;
+  const followupMarkers = [
+    "还是",
+    "还不",
+    "不行",
+    "没用",
+    "没有",
+    "继续",
+    "下一步",
+    "然后",
+    "这个",
+    "那",
+    "它",
+    "still",
+    "next",
+    "then",
+    "that",
+    "it",
+  ];
+  return text.length <= 40 && followupMarkers.some((marker) => text.includes(marker));
+}
+
 function renderHistory() {
   if (!el.history) return;
   if (state.turns.length === 0) {
@@ -314,7 +361,7 @@ function renderSuggestions() {
     button.addEventListener("click", () => {
       const question = button.dataset.question || "";
       el.question.value = question;
-      askQuestion(question);
+      askQuestion(question, { useConversationContext: false });
     });
   });
 }
@@ -337,7 +384,7 @@ function renderFollowups(answerText, citations) {
     button.addEventListener("click", () => {
       const question = button.dataset.followup || "";
       el.question.value = question;
-      askQuestion(question);
+      askQuestion(question, { useConversationContext: true });
     });
   });
 }

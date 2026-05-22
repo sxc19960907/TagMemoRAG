@@ -168,6 +168,10 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert js.status_code == 200
     assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
+    assert "conversation_context" in js.text
+    assert "conversationContextForRequest" in js.text
+    assert "answerPreviewForContext" in js.text
+    assert "shouldUseConversationContext" in js.text
     assert "renderAnswerText" in js.text
     assert "renderAnswerStep" in js.text
     assert "qa-answer-steps" in js.text
