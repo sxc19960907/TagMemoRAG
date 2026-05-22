@@ -389,3 +389,34 @@ Added /qa follow-up context explainability and correction: API context metadata,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 65: QA answer quality eval
+
+**Date**: 2026-05-22
+**Task**: QA answer quality eval
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added the first fixed /qa product-manual answer-quality slice, extended deterministic answer-quality diagnostics with CJK n-gram matching for Chinese relevance/support checks, covered the new suite in unit and CLI tests, and documented the eval command in architecture.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
