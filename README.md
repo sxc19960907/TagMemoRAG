@@ -1068,6 +1068,13 @@ scripts/seed_general_web_eval.sh
   --min-hit-at-k 0.75
 ```
 
+Pair it with the generic documentation answer-quality diagnostic:
+
+```bash
+.venv/bin/python -m tagmemorag eval answer-quality \
+  --suite tests/fixtures/answer_quality/general_web.jsonl
+```
+
 The first general web baseline covers Python and GitHub documentation with
 `domain=software_docs` and `doc_type=documentation`. The GitHub repository case
 models multi-evidence retrieval explicitly: the repository/folder definition and

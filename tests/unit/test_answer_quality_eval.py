@@ -19,6 +19,7 @@ from tagmemorag.eval.dataset import EvalSuiteError
 
 FIXTURE = Path("tests/fixtures/answer_quality/basic.jsonl")
 QA_FIXTURE = Path("tests/fixtures/answer_quality/qa_product_manual.jsonl")
+GENERAL_WEB_FIXTURE = Path("tests/fixtures/answer_quality/general_web.jsonl")
 
 
 def test_load_answer_quality_suite_valid():
@@ -117,6 +118,21 @@ def test_qa_product_manual_answer_quality_suite_passes():
     assert report.summary.dimensions["citation_supported"] == {"passed": 6, "failed": 0}
 
 
+def test_general_web_answer_quality_suite_passes():
+    cases = load_answer_quality_suite(GENERAL_WEB_FIXTURE)
+    report = run_answer_quality_diagnostics(GENERAL_WEB_FIXTURE)
+
+    assert [case.id for case in cases] == [
+        "general-web-github-repository-readme",
+        "general-web-python-tutorial-purpose",
+        "general-web-unsupported-github-security-claim",
+    ]
+    assert report.summary.passed
+    assert report.summary.cases == 3
+    assert report.summary.dimensions["grounded"] == {"passed": 3, "failed": 0}
+    assert report.summary.dimensions["citation_supported"] == {"passed": 3, "failed": 0}
+
+
 def test_answer_quality_cli_writes_report(tmp_path):
     report_path = tmp_path / "answer-quality.json"
 
@@ -168,3 +184,29 @@ def test_answer_quality_cli_writes_qa_product_manual_report(tmp_path):
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["passed"] is True
     assert report["cases"][0]["id"] == "qa-weak-steam-stepwise-grounded"
+
+
+def test_answer_quality_cli_writes_general_web_report(tmp_path):
+    report_path = tmp_path / "general-web-answer-quality.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "eval",
+            "answer-quality",
+            "--suite",
+            str(GENERAL_WEB_FIXTURE),
+            "--output",
+            str(report_path),
+        ],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "answer-quality eval passed: cases=3" in result.stdout
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["summary"]["passed"] is True
+    assert report["cases"][0]["id"] == "general-web-github-repository-readme"
