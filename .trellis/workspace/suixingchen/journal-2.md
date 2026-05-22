@@ -717,3 +717,36 @@ Made sidecar-declared generic domain/doc_type metadata survive build/search, pre
 ### Next Steps
 
 - None - task complete
+
+
+## Session 75: General web eval suite
+
+**Date**: 2026-05-22
+**Task**: General web eval suite
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a reproducible public web documentation benchmark for the general RAG direction. The suite seeds Python and GitHub docs into .tmp, checks generic software_docs/documentation metadata, excludes the live-corpus suite from fixture-only CI/baseline generation, and documents the hashing baseline plus its current GitHub repository miss as a future retrieval-quality target.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a1d37f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
