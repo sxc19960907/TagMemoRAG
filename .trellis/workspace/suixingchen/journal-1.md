@@ -1780,3 +1780,36 @@ Fixed bulk import preview severity so metadata validation info and warning messa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: Production pilot verification v2
+
+**Date**: 2026-05-22
+**Task**: Production pilot verification v2
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline answer-quality diagnostics stage to production pilot reports, with CLI and production verification forwarding, sanitized report coverage, docs, and full-suite validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f82a15f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
