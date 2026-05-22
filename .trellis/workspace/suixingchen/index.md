@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 44
-- **Last Active**: 2026-05-21
+- **Total Sessions**: 45
+- **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1710 | Active |
+| `journal-1.md` | ~1749 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 45 | 2026-05-22 | Complete RAG capability roadmap | `b4b5569`, `680c284`, `1170ac9`, `7850297`, `03eaccf`, `8dae5c7`, `68e1ad1` | `codex/agent-loop-driver` |
 | 44 | 2026-05-21 | Agentic RAG mode toggle MVP | `2340ca4`, `d3b1e53`, `0270af9`, `3ea8eaf`, `7ddff0b`, `e9cb012`, `f579488` | `codex/agent-loop-driver` |
 | 43 | 2026-05-21 | Record live provider pilot verification | `877d0f8` | `codex/live-pilot-provider-verification` |
 | 42 | 2026-05-20 | Harden verify Docker diagnostics | `1ac772b` | `codex/verify-docker-diagnostics-hardening` |
