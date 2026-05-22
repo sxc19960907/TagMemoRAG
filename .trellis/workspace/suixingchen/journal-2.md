@@ -882,3 +882,36 @@ Added scripts/diag_general_web_answer_eval.py to bridge live general_web retriev
 ### Next Steps
 
 - None - task complete
+
+
+## Session 80: Answer intent classification
+
+**Date**: 2026-05-23
+**Task**: Answer intent classification
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Moved deterministic answer intent rules into the answer layer, preserved product troubleshooting and safety wording, kept generic software documentation answers neutral, and recorded the no-API/CLI-growth convention.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `219253d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
