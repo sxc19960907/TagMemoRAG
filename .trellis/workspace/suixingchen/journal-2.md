@@ -783,3 +783,36 @@ Corrected the general web GitHub repository eval case to model two independently
 ### Next Steps
 
 - None - task complete
+
+
+## Session 77: Aggregate generic multi-evidence answers
+
+**Date**: 2026-05-23
+**Task**: Aggregate generic multi-evidence answers
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved the local extractive answer baseline so generic documentation questions with multiple supporting chunks use a neutral multi-evidence answer prefix and cite each item. The fallback path now keeps up to MAX_EXTRACTIVE_EXCERPTS allowed excerpts instead of only the first excerpt, while preserving safety and unsupported-repair behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7953eb3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
