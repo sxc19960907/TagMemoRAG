@@ -531,8 +531,9 @@ python -m tagmemorag serve --config examples/config/qa-demo.yaml
 
 Then open `/qa` and ask `蒸汽很小怎么办？`. The demo builds the `default` KB
 from `tests/fixtures/coffee_machine.md` into `.tmp/tagmemorag-qa-demo/data`
-and enables the noop answer provider, so the page returns an answer payload
-with cited source snippets without network access or provider keys.
+and enables the deterministic extractive noop answer provider, so the page
+returns an evidence-backed answer with cited source snippets without network
+access or provider keys.
 
 ### RAG workbench
 

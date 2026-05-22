@@ -12,18 +12,32 @@ from tagmemorag.errors import InvalidConfigError
 
 
 def _context() -> AnswerRequestContext:
+    retrieve_payload = {
+        "citations": [{"citation_id": "cit_001"}],
+        "context_pack": {
+            "items": [
+                {
+                    "citation_id": "cit_001",
+                    "content": "Weak steam\n\nWeak steam is usually caused by a blocked nozzle.\nClean the nozzle and check the water tank.",
+                }
+            ]
+        },
+    }
     prompt = build_answer_prompt(
         question="q",
-        retrieve_payload={"citations": [{"citation_id": "cit_001"}], "context_pack": {"items": []}},
+        retrieve_payload=retrieve_payload,
         prompt_version="answer_prompt.v1",
     )
-    return AnswerRequestContext(question="q", retrieve_payload={}, prompt=prompt, max_output_tokens=64)
+    return AnswerRequestContext(question="q", retrieve_payload=retrieve_payload, prompt=prompt, max_output_tokens=64)
 
 
 def test_noop_answer_generator_is_deterministic():
     generation = NoopAnswerGenerator().generate(_context())
 
-    assert generation.text
+    assert generation.text == (
+        "Weak steam is usually caused by a blocked nozzle. "
+        "Clean the nozzle and check the water tank. [cit_001]"
+    )
     assert [c.citation_id for c in generation.citations] == ["cit_001"]
     assert "answer_noop_provider" in generation.warnings
 

@@ -79,7 +79,8 @@ def test_answer_noop_provider_returns_cited_answer(tmp_path, fake_embedder):
     body = response.json()
     answer = body["answer"]
     assert answer["kind"] == "answer"
-    assert answer["text"] == "Answer generation is running in noop mode."
+    assert "蒸汽功能可以打奶泡" in answer["text"]
+    assert answer["text"].endswith(f"[{body['retrieve']['citations'][0]['citation_id']}]")
     assert answer["model_id"] == "noop"
     assert answer["prompt_version"] == "answer_prompt.v1"
     assert answer["citations"] == [{"citation_id": body["retrieve"]["citations"][0]["citation_id"]}]
