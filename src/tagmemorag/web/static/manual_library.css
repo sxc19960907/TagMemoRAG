@@ -290,6 +290,29 @@ textarea {
   margin: 0 0 10px;
 }
 
+.qa-citation-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  margin: 0 2px;
+  border: 1px solid #b7c5d7;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #274f7d;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.qa-citation-chip:hover,
+.qa-citation-chip:focus {
+  border-color: #6d95c3;
+  background: #dcecff;
+  outline: none;
+}
+
 .qa-answer-message.error {
   border-color: #efb4ad;
   background: #fff4f2;
@@ -340,6 +363,14 @@ textarea {
   border-radius: 6px;
   background: var(--surface);
   padding: 12px;
+  scroll-margin: 12px;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.qa-source-item.active {
+  border-color: #6d95c3;
+  background: #f4f8ff;
+  box-shadow: 0 0 0 3px rgb(109 149 195 / 0.18);
 }
 
 .qa-source-item p {

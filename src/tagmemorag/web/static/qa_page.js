@@ -107,7 +107,7 @@ function renderAnswer(body) {
 
   if (kind === "answer") {
     el.answer.className = "qa-answer-message";
-    el.answer.innerHTML = `<p>${escapeHtml(answer.text || "")}</p>`;
+    el.answer.innerHTML = renderAnswerText(answer.text || "");
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
   } else {
     el.answer.className = "qa-answer-message warn";
@@ -132,6 +132,39 @@ function confidenceLabel(confidence) {
   if (confidence >= 0.75) return "High confidence";
   if (confidence >= 0.45) return "Medium confidence";
   return "Low confidence";
+}
+
+function renderAnswerText(text) {
+  const parts = splitCitationMarkers(text || "");
+  const html = parts
+    .map((part) => {
+      if (part.kind === "citation") return renderCitationChip(part.value);
+      return escapeHtml(part.value);
+    })
+    .join("");
+  return `<p>${html}</p>`;
+}
+
+function splitCitationMarkers(text) {
+  const pattern = /\[(cit_\d{3,})\]/g;
+  const parts = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index > cursor) {
+      parts.push({ kind: "text", value: text.slice(cursor, match.index) });
+    }
+    parts.push({ kind: "citation", value: match[1] });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) {
+    parts.push({ kind: "text", value: text.slice(cursor) });
+  }
+  return parts;
+}
+
+function renderCitationChip(citationId) {
+  const safeCitation = escapeHtml(citationId);
+  return `<button class="qa-citation-chip" type="button" data-citation-target="${safeCitation}" aria-label="Show source ${safeCitation}">${safeCitation}</button>`;
 }
 
 function userFacingReason(reason) {
@@ -175,6 +208,7 @@ function renderSources(citations, evidence) {
   el.sources.className = "qa-source-list";
   el.sourceMeta.textContent = `${items.length} source${items.length === 1 ? "" : "s"} cited`;
   el.sources.innerHTML = items.map(renderSourceItem).join("");
+  bindCitationLinks();
 }
 
 function renderClarificationCandidates(candidates) {
@@ -200,19 +234,42 @@ function renderClarificationCandidates(candidates) {
 
 function renderSourceItem(item) {
   const citation = item.citation_id || item.evidence_id || "source";
+  const safeCitation = escapeHtml(citation);
   const source = item.source || item.source_file || "";
   const section = Array.isArray(item.section_path) ? item.section_path.join(" / ") : "";
   const text = item.text || item.content || "";
   return `
-    <article class="qa-source-item">
+    <article id="qa-source-${safeCitation}" class="qa-source-item" data-citation-id="${safeCitation}">
       <div class="evidence-head">
-        <span class="badge">${escapeHtml(citation)}</span>
+        <span class="badge">${safeCitation}</span>
         <span class="muted">${escapeHtml(source)}</span>
       </div>
       ${section ? `<p class="muted">${escapeHtml(section)}</p>` : ""}
       <p>${escapeHtml(text)}</p>
     </article>
   `;
+}
+
+function bindCitationLinks() {
+  el.answer.querySelectorAll("[data-citation-target]").forEach((button) => {
+    button.addEventListener("click", () => focusSource(button.dataset.citationTarget || ""));
+  });
+}
+
+function focusSource(citationId) {
+  const safeSelector = cssEscape(citationId);
+  const source = el.sources.querySelector(`[data-citation-id="${safeSelector}"]`);
+  if (!source) return;
+  el.sources.querySelectorAll(".qa-source-item.active").forEach((item) => item.classList.remove("active"));
+  source.classList.add("active");
+  source.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(value);
+  }
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
 el.questionForm.addEventListener("submit", requestAnswer);

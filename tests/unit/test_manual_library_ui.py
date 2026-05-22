@@ -159,6 +159,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert js.status_code == 200
     assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
+    assert "renderAnswerText" in js.text
+    assert "qa-citation-chip" in js.text
+    assert "data-citation-target" in js.text
+    assert "data-citation-id" in js.text
+    assert "scrollIntoView" in js.text
     assert "kb_name:" not in js.text
     assert "top_k:" not in js.text
     assert "source_k:" not in js.text
