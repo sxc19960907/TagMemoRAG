@@ -265,3 +265,34 @@ Polished /qa answer UX with staged loading, local feedback, follow-up suggestion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 61: QA local conversation UX
+
+**Date**: 2026-05-22
+**Task**: QA local conversation UX
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added local /qa conversation history with pending/answered/error turn tracking, click-to-restore answers and sources, clear history, race-safe active turn rendering, focused tests, and browser smoke verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
