@@ -358,3 +358,34 @@ Upgraded /qa short-term memory to sanitized sessionStorage-backed tab-session re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 64: QA context transparency
+
+**Date**: 2026-05-22
+**Task**: QA context transparency
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added /qa follow-up context explainability and correction: API context metadata, user-facing context notice, history context marker, Ask as new override, focused tests, spec update, and browser smoke verification after server restart.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
