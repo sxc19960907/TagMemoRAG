@@ -1747,3 +1747,36 @@ Completed the approved RAG capability child roadmap: optional LangChain ingestio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 46: Align bulk import severity
+
+**Date**: 2026-05-22
+**Task**: Align bulk import severity
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Fixed bulk import preview severity so metadata validation info and warning messages remain non-blocking, including TAG_ORDERING_HINT from the production pilot follow-up.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ba5a7d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
