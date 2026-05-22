@@ -849,3 +849,36 @@ Added a checked-in answer-quality suite for generic public documentation answers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 79: Live general web answer diagnostic
+
+**Date**: 2026-05-23
+**Task**: Live general web answer diagnostic
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added scripts/diag_general_web_answer_eval.py to bridge live general_web retrieval with the local noop answer generator and answer-quality diagnostics. The script builds the seeded corpus in isolated eval storage, generates grounded/cited answers from retrieved context, emits a concise JSON report, and is covered by a local no-network unit test plus README usage docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `239c3ea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
