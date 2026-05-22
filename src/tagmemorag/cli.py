@@ -16,6 +16,7 @@ from .config_validation import validate_config
 from .embedder import create_embedder
 from .epa_basis import retrain_if_needed, basis_path, load_epa_basis
 from .eval.dataset import EvalSuiteError, EvalThresholds
+from .eval.answer_quality import run_answer_quality_diagnostics
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
@@ -159,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Path to baseline JSON. Suite-level thresholds are clamped to baseline - 0.02 (clipped to existing min_* values).",
     )
+    eval_answer_quality = eval_sub.add_parser("answer-quality")
+    eval_answer_quality.add_argument("--suite", required=True)
+    eval_answer_quality.add_argument("--output", default=None)
 
     auth = sub.add_parser("auth")
     auth_sub = auth.add_subparsers(dest="auth_command", required=True)
@@ -563,6 +567,30 @@ def main(argv: list[str] | None = None) -> int:
             f"recall@k={summary.metrics.recall_at_k:.6f} "
             f"mrr={summary.metrics.mrr:.6f} "
             f"hit@k={summary.metrics.hit_at_k:.6f}"
+        )
+        if not summary.passed:
+            for case in report.cases:
+                for failure in case.failures:
+                    print(f"- {case.id}: {failure}")
+        return 0 if summary.passed else 1
+    if args.command == "eval" and args.eval_command == "answer-quality":
+        try:
+            report = run_answer_quality_diagnostics(args.suite)
+        except EvalSuiteError as exc:
+            print(f"answer-quality eval error: {exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"answer-quality eval error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+        if args.output:
+            report.write_json(args.output)
+        else:
+            print(report.to_json())
+        summary = report.summary
+        print(
+            "answer-quality eval "
+            f"{'passed' if summary.passed else 'failed'}: "
+            f"cases={summary.cases}"
         )
         if not summary.passed:
             for case in report.cases:

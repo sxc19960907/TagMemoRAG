@@ -14,11 +14,11 @@ Evaluate optional RAG diagnostics such as faithfulness/context relevance for ans
 
 ## Acceptance Criteria
 
-- [ ] Diagnostics report schema is bounded and safe.
-- [ ] Existing answer API and prompt behavior are unchanged by default.
-- [ ] At least one grounded and one ungrounded fixture are defined.
-- [ ] Provider/env requirements are explicit and skip safely when absent.
-- [ ] Rollback leaves existing ranking eval unchanged.
+- [x] Diagnostics report schema is bounded and safe.
+- [x] Existing answer API and prompt behavior are unchanged by default.
+- [x] At least one grounded and one ungrounded fixture are defined.
+- [x] Provider/env requirements are explicit and skip safely when absent.
+- [x] Rollback leaves existing ranking eval unchanged.
 
 ## Notes
 

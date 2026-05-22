@@ -89,6 +89,23 @@ uv run python scripts/summarize_eval_case_review.py \
 
 The case review summary is bounded by default. It includes case ids, metrics, failure reasons, negative-hit summaries, and top result source/header pairs. It omits raw queries and snippets unless `--include-query` is explicitly passed for local review.
 
+## Running answer-quality diagnostics
+
+Answer-quality diagnostics are separate from ranking baselines. They use
+hand-authored answer/context fixtures and a deterministic local judge by
+default, so they do not rebuild a KB or call a live provider.
+
+```bash
+uv run python -m tagmemorag eval answer-quality \
+  --suite tests/fixtures/answer_quality/basic.jsonl \
+  --output .tmp/answer-quality/report.json
+```
+
+The report is intentionally bounded: it records case ids, per-dimension
+observations, pass/fail counts, failures, and safe warnings. It does not include
+full context snippets or provider responses. Use this path when reviewing
+groundedness, citation support, refusal behavior, or prompt/context changes.
+
 ## Reading a baseline diff
 
 Every commit that touches a baseline must include a one-line rationale in the commit message. Example shapes:

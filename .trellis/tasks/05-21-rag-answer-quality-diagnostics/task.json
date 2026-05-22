@@ -3,7 +3,7 @@
   "name": "rag-answer-quality-diagnostics",
   "title": "RAG Answer Quality Diagnostics",
   "description": "Evaluate optional RAG diagnostics such as faithfulness/context relevance for answer quality, offline and provider-gated. Planning only until approved.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

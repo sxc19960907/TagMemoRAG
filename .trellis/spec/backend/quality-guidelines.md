@@ -306,6 +306,93 @@ generation = parse_provider_response(data)
 generation = validate_generation_citations(generation, prompt.allowed_citation_ids)
 ```
 
+## Scenario: Answer-Quality Diagnostics Command
+
+### 1. Scope / Trigger
+
+- Trigger: answer-quality diagnostics run from the eval CLI and produce a
+  bounded report for groundedness, relevance, citation support, and refusal
+  behavior.
+
+### 2. Signatures
+
+- CLI:
+  `python -m tagmemorag eval answer-quality --suite <jsonl> [--output <json>]`
+- Backend:
+  `load_answer_quality_suite(path) -> list[AnswerQualityCase]`
+- Backend:
+  `run_answer_quality_diagnostics(suite_path) -> AnswerQualityReport`
+- Backend:
+  `evaluate_answer_quality_case(case) -> AnswerQualityCaseResult`
+
+### 3. Contracts
+
+- Suite rows are JSONL objects with `id`, `question`, `answer`, `contexts`,
+  and `expected`.
+- `contexts` entries include `citation_id` and may include authored fixture
+  text/source.
+- `expected` booleans cover `grounded`, optional `relevant`, optional
+  `citation_supported`, and optional `refusal_expected`.
+- Reports use schema version `answer_quality.v1`.
+- Default report output includes case ids, expected/observed booleans, scores,
+  bounded failures, bounded warnings, and summary counts.
+- Default reports must not include full context snippets, provider responses,
+  secrets, stack traces, or runtime document chunks.
+- The default judge is deterministic and local. Live/provider-backed judges
+  must be explicit, env-gated, and skipped safely when env is absent.
+
+### 4. Validation & Error Matrix
+
+- Missing suite path or unreadable suite -> `EvalSuiteError`, CLI exit `2`.
+- Invalid JSONL row -> `EvalSuiteError` with line number, CLI exit `2`.
+- Duplicate case id -> `EvalSuiteError`, CLI exit `2`.
+- Missing required case fields -> `EvalSuiteError`, CLI exit `2`.
+- Diagnostics pass -> CLI exit `0`.
+- Diagnostics fail expected labels -> CLI exit `1` with bounded failure lines.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a grounded answer cites an existing citation id and support markers
+  match authored context.
+- Base: an ungrounded fixture expects `grounded=false`; observing unsupported
+  evidence is a passing diagnostic case.
+- Bad: report JSON includes the full retrieved context, provider response
+  body, API key env value, or runtime KB chunk text.
+
+### 6. Tests Required
+
+- Loader accepts valid fixtures and rejects duplicate/malformed rows.
+- Grounded fixture passes with `grounded=true`.
+- Ungrounded fixture passes when expected as `grounded=false`.
+- Unknown citation produces a bounded warning and failure when support is
+  expected.
+- Report serialization omits context snippets.
+- CLI writes a report and returns `0` for passing suites.
+- Existing `/answer` and ranking eval tests remain green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```json
+{
+  "id": "case-1",
+  "context": "full retrieved manual text...",
+  "provider_response": {"raw": "..."}
+}
+```
+
+#### Correct
+
+```json
+{
+  "id": "case-1",
+  "passed": false,
+  "observed": {"grounded": false},
+  "failures": ["grounded expected True observed False"]
+}
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger
