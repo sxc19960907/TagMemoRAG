@@ -618,3 +618,36 @@ Imported a runtime-only ManualsLib sample across Dryer, Washer, Refrigerator, an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 72: General RAG robustness direction
+
+**Date**: 2026-05-22
+**Task**: General RAG robustness direction
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Started the general-knowledge RAG robustness track, documented candidate public knowledge-source families, and hardened eval text_contains matching against whitespace/control-character extraction noise. Verified focused eval tests and the real product-manual retrieval gate.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `109d771` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

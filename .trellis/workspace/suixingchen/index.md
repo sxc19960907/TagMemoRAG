@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 71
+- **Total Sessions**: 72
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~620 | Active |
+| `journal-2.md` | ~653 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 72 | 2026-05-22 | General RAG robustness direction | `109d771` | `codex/agent-loop-driver` |
 | 71 | 2026-05-22 | ManualsLib real sample quality slice | `c2b5da7` | `codex/agent-loop-driver` |
 | 70 | 2026-05-22 | ManualsLib OpenCLI batch import | `22380f3` | `codex/agent-loop-driver` |
 | 69 | 2026-05-22 | Manualslib real manual validation | `71dbed4` | `codex/agent-loop-driver` |
