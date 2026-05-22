@@ -650,7 +650,7 @@ def _preview_from_rows(
 
 
 def _issue_from_message(candidate: BulkImportCandidate, message: ValidationMessage) -> BulkPreviewIssue:
-    severity: BulkPreviewSeverity = "warning" if message.code == "UNKNOWN_COLUMN" else "error"
+    severity = _severity_from_message(message)
     return BulkPreviewIssue(
         row=candidate.row,
         manual_id=candidate.manual_id,
@@ -662,6 +662,19 @@ def _issue_from_message(candidate: BulkImportCandidate, message: ValidationMessa
         code=message.code,
         message=message.message,
     )
+
+
+def _severity_from_message(message: ValidationMessage) -> BulkPreviewSeverity:
+    detail_severity = str(message.detail.get("severity") or "").lower()
+    if detail_severity == "info":
+        return "info"
+    if detail_severity == "warning":
+        return "warning"
+    if detail_severity == "error":
+        return "error"
+    if message.code == "UNKNOWN_COLUMN":
+        return "warning"
+    return "error"
 
 
 def _uploaded_for_candidate(
