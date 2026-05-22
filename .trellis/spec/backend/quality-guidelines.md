@@ -393,6 +393,82 @@ generation = validate_generation_citations(generation, prompt.allowed_citation_i
 }
 ```
 
+## Scenario: Answer Prompt Context Quality
+
+### 1. Scope / Trigger
+
+- Trigger: changing answer prompt wording or the retrieval context passed into
+  answer generation.
+
+### 2. Signatures
+
+- `SYSTEM_PROMPT`
+- `build_answer_prompt(question, retrieve_payload, prompt_version) -> AnswerPrompt`
+- `validate_generation_citations(generation, allowed_citation_ids) -> AnswerGeneration`
+- `run_answer_quality_diagnostics(suite_path) -> AnswerQualityReport`
+
+### 3. Contracts
+
+- Retrieved context stays in the user message as untrusted source data.
+- The system prompt must require exact square-bracket citation ids after
+  evidence-backed claims.
+- The system prompt must say to cite only context items that directly support a
+  claim.
+- The system prompt must tell providers to acknowledge conflicting context
+  items and cite the relevant items.
+- The system prompt must tell providers to say evidence is insufficient and not
+  guess when context is insufficient.
+- Prompt/context quality changes must be bounded to prompt text, context
+  packing, fixtures, or tests unless a task explicitly changes answer schemas.
+- Answer-quality reports must remain bounded and omit full context snippets and
+  generated answer text.
+- Live provider verification is optional; when used it must be explicit,
+  env-gated, and safe to skip when env is absent.
+
+### 4. Validation & Error Matrix
+
+- Supported claim without citation -> answer-quality diagnostic observes
+  `citation_supported=false`.
+- Unsupported answer that cites an existing context id -> diagnostic observes
+  `grounded=false` even when `citation_supported=true`.
+- Conflicting evidence -> prompt must instruct the provider to name the
+  conflict instead of choosing an unsupported answer.
+- Insufficient evidence -> prompt must instruct refusal rather than guessing.
+
+### 5. Good/Base/Bad Cases
+
+- Good: answer cites `[cit_001]` only for a claim directly supported by
+  `cit_001`, and says when other context conflicts.
+- Base: offline deterministic diagnostics cover citation miss and conflicting
+  evidence without requiring live LLM calls.
+- Bad: prompt wording encourages citations as decoration, or diagnostics only
+  check that some allowlisted citation id appears.
+
+### 6. Tests Required
+
+- Prompt test asserts direct-support, conflict, and no-guess instructions.
+- Answer-quality fixtures include citation-miss and conflicting-evidence cases.
+- Answer-quality report test proves failure/report output remains bounded.
+- Existing `/answer` API and answer generator tests remain green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+SYSTEM_PROMPT = "Answer using the context and cite sources when useful."
+```
+
+#### Correct
+
+```python
+SYSTEM_PROMPT = (
+    "Only cite a context item when it directly supports the claim. "
+    "If context items conflict, say what is conflicting and cite the relevant items. "
+    "If the context is insufficient, say that the available evidence is insufficient and do not guess."
+)
+```
+
 ## Scenario: LangChain Retriever and Tool Adapters
 
 ### 1. Scope / Trigger

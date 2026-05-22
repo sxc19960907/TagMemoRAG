@@ -26,6 +26,8 @@ def test_load_answer_quality_suite_valid():
         "grounded-steam-cleaning",
         "ungrounded-filter-claim",
         "insufficient-evidence-refusal",
+        "citation-miss-steam-cleaning",
+        "conflicting-evidence-unsupported-choice",
     ]
     assert cases[0].contexts[0].citation_id == "cit_001"
     assert cases[0].expected.grounded is True
@@ -81,9 +83,10 @@ def test_run_answer_quality_diagnostics_report_is_bounded():
 
     assert body["schema_version"] == ANSWER_QUALITY_SCHEMA_VERSION
     assert body["summary"]["passed"] is True
-    assert body["summary"]["cases"] == 3
+    assert body["summary"]["cases"] == 5
     assert "scale in the steam nozzle" not in serialized
     assert "water filter is expired" not in serialized
+    assert "pump must be replaced immediately" not in serialized
 
 
 def test_answer_quality_cli_writes_report(tmp_path):
@@ -106,7 +109,8 @@ def test_answer_quality_cli_writes_report(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert "answer-quality eval passed: cases=3" in result.stdout
+    assert "answer-quality eval passed: cases=5" in result.stdout
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["passed"] is True
+    assert report["summary"]["cases"] == 5
     assert report["cases"][0]["id"] == "grounded-steam-cleaning"

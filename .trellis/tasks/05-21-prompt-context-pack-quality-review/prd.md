@@ -13,12 +13,12 @@ Review context packing and answer prompt quality using diagnostics and citation-
 
 ## Acceptance Criteria
 
-- [ ] New fixture cases cover citation miss and conflicting evidence.
-- [ ] Answer prompt tests and answer API tests are named gates.
-- [ ] If live DeepSeek verification is used, env gating and cost controls are
+- [x] New fixture cases cover citation miss and conflicting evidence.
+- [x] Answer prompt tests and answer API tests are named gates.
+- [x] If live DeepSeek verification is used, env gating and cost controls are
       explicit.
-- [ ] Context pack changes are bounded and reversible.
-- [ ] Rollback is reverting prompt/context changes.
+- [x] Context pack changes are bounded and reversible.
+- [x] Rollback is reverting prompt/context changes.
 
 ## Notes
 
