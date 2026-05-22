@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 51
+- **Total Sessions**: 52
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1947 | Active |
+| `journal-1.md` | ~1980 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 52 | 2026-05-22 | Question routing QA MVP | `03de5e6` | `codex/agent-loop-driver` |
 | 51 | 2026-05-22 | Hide QA KB selector | `2e83530` | `codex/agent-loop-driver` |
 | 50 | 2026-05-22 | QA three-pane layout | `f77f9f9` | `codex/agent-loop-driver` |
 | 49 | 2026-05-22 | User-facing QA page MVP | `97e603a` | `codex/agent-loop-driver` |

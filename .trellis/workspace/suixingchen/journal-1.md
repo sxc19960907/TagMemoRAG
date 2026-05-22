@@ -1945,3 +1945,36 @@ Removed visible knowledge-base selection from the user-facing /qa page while pre
 ### Next Steps
 
 - None - task complete
+
+
+## Session 52: Question routing QA MVP
+
+**Date**: 2026-05-22
+**Task**: Question routing QA MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added /qa/answer so the user-facing QA page sends only a question. Backend routes to an accessible loaded KB, asks clarification for ambiguous multi-KB cases, or returns a not-ready user response. Updated UI, docs, architecture spec, and tests; full unit/e2e suite passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `03de5e6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
