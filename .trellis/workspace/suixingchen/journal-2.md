@@ -234,3 +234,34 @@ Added suggested starter questions and a copy-answer action to the user QA page, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 60: QA answer polish UX
+
+**Date**: 2026-05-22
+**Task**: QA answer polish UX
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Polished /qa answer UX with staged loading, local feedback, follow-up suggestions, expandable source snippets, richer empty state, focused tests, and browser smoke verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
