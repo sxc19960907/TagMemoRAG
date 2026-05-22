@@ -1,9 +1,9 @@
 """Generate or refresh `tests/fixtures/eval/baselines/<embedder>.json`.
 
-The script runs every jsonl suite under `tests/fixtures/eval/` (excluding the
-baselines/ subdirectory) through the eval runner, captures the suite-level
-aggregate metrics, and writes a deterministic JSON snapshot used by the
-quality CI to derive `baseline - 0.02` thresholds.
+The script runs every fixture-only jsonl suite under `tests/fixtures/eval/`
+through the eval runner, captures the suite-level aggregate metrics, and writes
+a deterministic JSON snapshot used by the quality CI to derive
+`baseline - 0.02` thresholds.
 
 Usage:
     uv run python scripts/build_eval_baseline.py \\
@@ -36,6 +36,10 @@ DEFAULT_DOCS_DIR = REPO_ROOT / "tests" / "fixtures" / "product_manuals"
 SUITE_DOCS_OVERRIDES = {
     "coffee.jsonl": REPO_ROOT / "tests" / "fixtures",
 }
+
+# Suites that are useful diagnostics but should not participate in fixture-only
+# baseline generation.
+DEFAULT_EXCLUDED_SUITES = {"general_web.jsonl", "realmanuals.jsonl"}
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
@@ -95,7 +99,11 @@ def _clone_with_data_dir(cfg: Settings, data_dir: Path) -> Settings:
 
 def _iter_suites(suite_dir: Path) -> Iterable[Path]:
     for path in suite_dir.iterdir():
-        if path.is_file() and path.suffix == ".jsonl":
+        if (
+            path.is_file()
+            and path.suffix == ".jsonl"
+            and path.name not in DEFAULT_EXCLUDED_SUITES
+        ):
             yield path
 
 

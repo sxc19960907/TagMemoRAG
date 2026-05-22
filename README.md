@@ -1050,6 +1050,29 @@ uv run python -m tagmemorag eval run \
   --min-recall-at-k 0 --min-mrr 0 --min-hit-at-k 0
 ```
 
+Use the general web suite to validate non-manual public documentation. It is not
+part of the default fixture-only CI gate because the corpus is seeded from live
+public URLs into `.tmp`:
+
+```bash
+scripts/seed_general_web_eval.sh
+
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --docs .tmp/general-web-eval/general_web \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 5 \
+  --min-recall-at-k 0.75 \
+  --min-mrr 0.4 \
+  --min-hit-at-k 0.75
+```
+
+The first general web baseline covers Python and GitHub documentation with
+`domain=software_docs` and `doc_type=documentation`. The current hashing
+baseline intentionally records one missed GitHub repository case, making this a
+useful benchmark for future HTML cleanup and retrieval improvements.
+
 For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
 
 ```bash
