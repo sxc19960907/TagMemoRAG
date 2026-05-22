@@ -486,3 +486,36 @@ Improved real PDF manual retrieval by adding CJK bi/tri-gram lexical matching wi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 68: Manual evidence ranking quality
+
+**Date**: 2026-05-22
+**Task**: Manual evidence ranking quality
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved real manual evidence ranking by separating lexical identity fields from topic fields and rewarding specific multi-term heading/body matches; realmanuals improved from hit@5=0.8, recall@5=0.633333, mrr=0.516667 to hit@5=1.0, recall@5=0.966667, mrr=0.691667. Answer-quality diagnostics and focused retrieval/answer tests passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7d67050` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
