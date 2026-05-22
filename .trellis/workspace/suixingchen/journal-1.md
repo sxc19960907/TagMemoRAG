@@ -1912,3 +1912,36 @@ Refined the user-facing /qa page into a Codex-like three-pane layout with a left
 ### Next Steps
 
 - None - task complete
+
+
+## Session 51: Hide QA KB selector
+
+**Date**: 2026-05-22
+**Task**: Hide QA KB selector
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Removed visible knowledge-base selection from the user-facing /qa page while preserving internal kb_name routing for tenant/KB isolation. Focused UI and answer API tests pass, and browser visual check confirms the user no longer sees KB internals.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e83530` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
