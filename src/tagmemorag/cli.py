@@ -22,6 +22,7 @@ from .logging_setup import configure_logging
 from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import BulkUploadedFile, commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
+from .manualslib_opencli_import import ManualslibOpenCLIError, import_from_opencli
 from .manualslib_import import import_manualslib_url
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
 from .provider_probe import run_provider_probe
@@ -190,6 +191,14 @@ def main(argv: list[str] | None = None) -> int:
     manualslib_import.add_argument("--output-dir", required=True)
     manualslib_import.add_argument("--max-pages", type=int, default=None)
     manualslib_import.add_argument("--timeout-seconds", type=float, default=20.0)
+    manualslib_opencli = manualslib_sub.add_parser("import-opencli")
+    manualslib_opencli.add_argument("--brand", default="hisense")
+    manualslib_opencli.add_argument("--category", default=None)
+    manualslib_opencli.add_argument("--limit", type=int, default=20)
+    manualslib_opencli.add_argument("--output-dir", default=None)
+    manualslib_opencli.add_argument("--max-pages", type=int, default=None)
+    manualslib_opencli.add_argument("--timeout-seconds", type=float, default=20.0)
+    manualslib_opencli.add_argument("--preview", action="store_true")
 
     manual_library = sub.add_parser("manual-library")
     manual_library_sub = manual_library.add_subparsers(dest="manual_library_command", required=True)
@@ -659,6 +668,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "manualslib" and args.manualslib_command == "import-opencli":
+        try:
+            report = import_from_opencli(
+                brand=args.brand,
+                category=args.category,
+                limit=args.limit,
+                output_dir=args.output_dir,
+                preview=args.preview,
+                max_pages=args.max_pages,
+                timeout_seconds=args.timeout_seconds,
+            )
+        except (ManualslibOpenCLIError, ValueError) as exc:
+            body = exc.to_dict() if isinstance(exc, ManualslibOpenCLIError) else {
+                "schema_version": "manualslib_opencli_import.v1",
+                "status": "failed",
+                "error": {"message": str(exc)},
+            }
+            print(json.dumps(body, ensure_ascii=False, indent=2), file=sys.stderr)
+            return 2
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.status in {"preview", "completed"} else 1
     if args.command == "manualslib" and args.manualslib_command == "import-url":
         try:
             result = import_manualslib_url(

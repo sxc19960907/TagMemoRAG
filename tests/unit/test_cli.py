@@ -6,6 +6,7 @@ import sys
 
 from tagmemorag import cli
 from tagmemorag import readiness
+from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
 
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
@@ -801,6 +802,70 @@ manual_library:
     )
     result = json.loads(capsys.readouterr().out)
     assert result["imported_count"] == 1
+
+
+def test_cli_manualslib_import_opencli_preview_wires_arguments(monkeypatch, capsys):
+    captured = {}
+
+    class FakeReport:
+        status = "preview"
+
+        def to_dict(self):
+            return {
+                "schema_version": "manualslib_opencli_import.v1",
+                "status": self.status,
+                "counts": {"discovered": 1, "imported": 0, "skipped": 0, "failed": 0},
+            }
+
+    def fake_import_from_opencli(**kwargs):
+        captured.update(kwargs)
+        return FakeReport()
+
+    monkeypatch.setattr(cli, "import_from_opencli", fake_import_from_opencli)
+
+    exit_code = cli.main(
+        [
+            "manualslib",
+            "import-opencli",
+            "--brand",
+            "hisense",
+            "--category",
+            "Dryer",
+            "--limit",
+            "3",
+            "--preview",
+            "--max-pages",
+            "2",
+            "--timeout-seconds",
+            "4",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured == {
+        "brand": "hisense",
+        "category": "Dryer",
+        "limit": 3,
+        "output_dir": None,
+        "preview": True,
+        "max_pages": 2,
+        "timeout_seconds": 4.0,
+    }
+    assert json.loads(capsys.readouterr().out)["status"] == "preview"
+
+
+def test_cli_manualslib_import_opencli_failure_returns_two(monkeypatch, capsys):
+    def fake_import_from_opencli(**kwargs):
+        raise ManualslibOpenCLIError("opencli returned exit code 66", command=["opencli"], stderr="missing")
+
+    monkeypatch.setattr(cli, "import_from_opencli", fake_import_from_opencli)
+
+    exit_code = cli.main(["manualslib", "import-opencli", "--preview"])
+
+    assert exit_code == 2
+    err = json.loads(capsys.readouterr().err)
+    assert err["status"] == "failed"
+    assert err["error"]["stderr"] == "missing"
 
 
 def test_cli_manual_library_registry_commands(tmp_path, capsys):
