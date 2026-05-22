@@ -69,3 +69,36 @@ Added an offline QA demo path using the coffee fixture, qa-demo config, and seed
 ### Next Steps
 
 - None - task complete
+
+
+## Session 55: Extractive noop demo answers
+
+**Date**: 2026-05-22
+**Task**: Extractive noop demo answers
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Made the local noop answer provider return deterministic evidence-backed excerpts with citations, updated docs/specs, and verified the seeded QA demo endpoint.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `16a544f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
