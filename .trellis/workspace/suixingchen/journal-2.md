@@ -420,3 +420,36 @@ Added the first fixed /qa product-manual answer-quality slice, extended determin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 66: QA answer generator quality
+
+**Date**: 2026-05-22
+**Task**: QA answer generator quality
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved deterministic noop answer generation for product manuals with stepwise troubleshooting, safety-prioritized answers, unsupported repair/part-number refusal framing, stricter relevance filtering, focused tests, answer-quality diagnostics, and real PDF manual validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3c0723b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
