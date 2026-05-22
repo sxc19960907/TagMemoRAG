@@ -651,3 +651,36 @@ Started the general-knowledge RAG robustness track, documented candidate public 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 73: Public web knowledge sampler
+
+**Date**: 2026-05-22
+**Task**: Public web knowledge sampler
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a general knowledge sample-web CLI that fetches public HTML pages into Markdown plus sidecar metadata, preserved remote/domain/doc_type metadata through connector materialization, documented usage, and validated with Python/GitHub docs preview plus a Python docs build/search smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f98dcef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
