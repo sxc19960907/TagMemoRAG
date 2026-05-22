@@ -133,11 +133,16 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     body = response.text
-    assert "Product Manual Q&A" in body
+    assert "Manual Q&A" in body
+    assert 'class="qa-three-pane"' in body
+    assert 'class="qa-left-rail"' in body
+    assert 'class="qa-center-pane"' in body
+    assert 'class="qa-right-rail"' in body
     assert 'id="qa-question"' in body
     assert 'id="qa-answer"' in body
     assert 'id="qa-sources"' in body
     assert 'id="qa-kb-name"' in body
+    assert 'id="qa-current-kb"' in body
     assert "workbench-evidence" not in body
     assert "workbench-results" not in body
     assert '"defaultKbName": "ops"' in body

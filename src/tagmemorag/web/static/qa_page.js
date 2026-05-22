@@ -17,6 +17,8 @@ const el = {
   answer: document.getElementById("qa-answer"),
   sourceMeta: document.getElementById("qa-source-meta"),
   sources: document.getElementById("qa-sources"),
+  currentKb: document.getElementById("qa-current-kb"),
+  contextNote: document.getElementById("qa-context-note"),
 };
 
 function headers() {
@@ -44,6 +46,8 @@ function updateLocationKb() {
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set("kb_name", state.kbName || "default");
   window.history.replaceState({}, "", nextUrl);
+  if (el.currentKb) el.currentKb.textContent = state.kbName || "default";
+  if (el.contextNote) el.contextNote.textContent = "Ask against the selected manual library.";
 }
 
 async function requestAnswer(event) {
@@ -89,7 +93,7 @@ async function requestAnswer(event) {
 }
 
 function renderPending() {
-  el.answer.className = "answer-body empty-state";
+  el.answer.className = "qa-answer-message empty-state";
   el.answer.textContent = "Waiting for answer...";
   el.answerMeta.textContent = "Searching the selected knowledge base";
   el.sources.className = "qa-source-list empty-state";
@@ -98,7 +102,7 @@ function renderPending() {
 }
 
 function renderError(error) {
-  el.answer.className = "answer-body error";
+  el.answer.className = "qa-answer-message error";
   el.answer.textContent = userFacingError(error.message);
   el.answerMeta.textContent = "Request failed";
   el.sources.className = "qa-source-list empty-state";
@@ -112,11 +116,11 @@ function renderAnswer(body) {
   const kind = String(answer.kind || "unknown");
 
   if (kind === "answer") {
-    el.answer.className = "answer-body";
+    el.answer.className = "qa-answer-message";
     el.answer.innerHTML = `<p>${escapeHtml(answer.text || "")}</p>`;
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
   } else {
-    el.answer.className = "answer-body warn";
+    el.answer.className = "qa-answer-message warn";
     const reason = answer.refusal_reason || "I could not answer from the available manual content.";
     const hints = Array.isArray(answer.missing_evidence_hints) ? answer.missing_evidence_hints : [];
     el.answer.innerHTML = [
@@ -203,3 +207,4 @@ el.kbForm.addEventListener("submit", (event) => {
 });
 
 el.questionForm.addEventListener("submit", requestAnswer);
+updateLocationKb();

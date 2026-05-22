@@ -161,76 +161,184 @@ textarea {
 }
 
 .qa-shell {
-  background: #f4f7fa;
+  min-height: 100vh;
+  background: #eef2f6;
 }
 
-.qa-header {
+.qa-three-pane {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(260px, 420px);
-  gap: 14px;
-  align-items: end;
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 18px;
+  grid-template-columns: clamp(112px, 22vw, 230px) minmax(0, 1fr) clamp(116px, 24vw, 320px);
+  gap: 1px;
+  height: 100vh;
+  padding: 0;
+  background: var(--line);
 }
 
-.qa-header h1 {
+.qa-left-rail,
+.qa-center-pane,
+.qa-right-rail {
+  min-width: 0;
+  background: var(--surface);
+}
+
+.qa-left-rail,
+.qa-right-rail {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.qa-left-rail {
+  background: #f8fafc;
+}
+
+.qa-brand h1,
+.qa-center-header h2,
+.qa-sources-header h2 {
   margin: 0;
-  font-size: 24px;
+  letter-spacing: 0;
 }
 
-.qa-main {
+.qa-brand h1 {
+  font-size: 19px;
+}
+
+.qa-context-form {
   display: grid;
-  gap: 14px;
-  max-width: 980px;
-  margin: 0 auto;
-  padding-top: 0;
+  gap: 8px;
 }
 
-.qa-panel,
-.qa-answer-panel,
-.qa-sources-panel {
+.qa-context-card {
+  display: grid;
+  gap: 5px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  padding: 10px;
 }
 
-.qa-question-form {
+.qa-context-card strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.qa-context-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.qa-center-pane {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.qa-center-header,
+.qa-sources-header {
+  display: flex;
+  justify-content: space-between;
   gap: 12px;
-  padding: 16px;
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
 }
 
-.qa-question-form textarea {
-  min-height: 120px;
+.qa-center-header h2,
+.qa-sources-header h2 {
+  font-size: 16px;
 }
 
-.qa-actions {
+.qa-center-header p,
+.qa-sources-header p {
+  max-width: 260px;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.qa-sources-header {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  gap: 10px;
-  align-items: end;
 }
 
-.qa-actions > button:only-child {
-  justify-self: end;
+.qa-sources-header p {
+  max-width: none;
+  text-align: left;
+}
+
+.qa-answer-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: #f5f7fa;
+}
+
+.qa-answer-message {
+  max-width: 780px;
+  min-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+  white-space: pre-wrap;
+  box-shadow: 0 8px 24px rgb(22 38 55 / 0.06);
+}
+
+.qa-answer-message p {
+  margin: 0 0 10px;
+}
+
+.qa-answer-message.error {
+  border-color: #efb4ad;
+  background: #fff4f2;
+  color: var(--danger);
+}
+
+.qa-answer-message.warn {
+  border-color: #efcf8f;
+  background: #fff8eb;
+}
+
+.qa-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 12px 12px;
+}
+
+.qa-composer textarea {
+  min-height: 72px;
+  max-height: 180px;
+  resize: vertical;
+}
+
+.qa-composer button {
+  align-self: end;
+  justify-self: stretch;
+  min-width: 76px;
+  min-height: 40px;
 }
 
 .qa-token-field {
-  max-width: 360px;
+  width: 100%;
 }
 
 .qa-source-list {
   display: grid;
   gap: 10px;
+  align-content: start;
+  overflow: auto;
   padding: 14px;
 }
 
 .qa-source-item {
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fbfdff;
+  background: var(--surface);
   padding: 12px;
 }
 
@@ -898,9 +1006,25 @@ dialog::backdrop {
   padding-bottom: 4px;
 }
 
+@media (max-width: 500px) {
+  .qa-three-pane {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .qa-left-rail,
+  .qa-right-rail {
+    overflow: visible;
+  }
+
+  .qa-center-pane {
+    min-height: 620px;
+  }
+}
+
 @media (max-width: 1100px) {
   .topbar,
-  .qa-header,
   .filters,
   .bulk-filters,
   .tag-grid,
@@ -923,8 +1047,27 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .field-grid,
   .kb-form,
-  .qa-actions {
+  .qa-composer {
     grid-template-columns: 1fr;
+  }
+
+  .qa-center-header,
+  .qa-sources-header {
+    display: grid;
+  }
+
+  .qa-center-header p,
+  .qa-sources-header p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .qa-answer-scroll,
+  .qa-left-rail,
+  .qa-right-rail,
+  .qa-composer {
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   main,

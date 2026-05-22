@@ -12,60 +12,69 @@
     </script>
 
     <div class="app-shell qa-shell">
-      <header class="qa-header">
-        <div class="brand">
-          <span class="eyebrow">TagMemoRAG</span>
-          <h1>Product Manual Q&A</h1>
-        </div>
-        <form class="kb-form qa-kb-form" id="qa-kb-form">
-          <label>
-            <span>Knowledge base</span>
-            <input id="qa-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
-          </label>
-          <button type="submit">Use</button>
-        </form>
-      </header>
+      <main class="qa-three-pane">
+        <aside class="qa-left-rail" aria-label="Question answering context">
+          <div class="brand qa-brand">
+            <span class="eyebrow">TagMemoRAG</span>
+            <h1>Manual Q&A</h1>
+          </div>
 
-      <main class="qa-main">
-        <section class="qa-panel" aria-label="Ask a product manual question">
-          <form id="qa-question-form" class="qa-question-form">
+          <form class="qa-context-form" id="qa-kb-form">
+            <label>
+              <span>Knowledge base</span>
+              <input id="qa-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
+            </label>
+            <button type="submit">Use KB</button>
+          </form>
+
+          <section class="qa-context-card">
+            <span class="eyebrow">Current State</span>
+            <strong id="qa-current-kb">{{ default_kb_name }}</strong>
+            <p id="qa-context-note">Ask against the selected manual library.</p>
+          </section>
+
+          {% if auth_enabled %}
+          <label class="token-field qa-token-field">
+            <span>API token</span>
+            <input id="qa-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+          </label>
+          {% endif %}
+
+          <section class="status-strip qa-status" id="qa-status" role="status" aria-live="polite"></section>
+        </aside>
+
+        <section class="qa-center-pane" aria-label="Answer workspace">
+          <header class="qa-center-header">
+            <div>
+              <span class="eyebrow">Product Manual Assistant</span>
+              <h2>Ask a manual question</h2>
+            </div>
+            <p id="qa-answer-meta">No answer yet</p>
+          </header>
+
+          <div class="qa-answer-scroll">
+            <div id="qa-answer" class="qa-answer-message empty-state">Ask a question to generate an answer.</div>
+          </div>
+
+          <form id="qa-question-form" class="qa-composer">
             <label>
               <span>Question</span>
-              <textarea id="qa-question" rows="4" placeholder="Ask a product-manual question"></textarea>
+              <textarea id="qa-question" rows="3" placeholder="Ask a product-manual question"></textarea>
             </label>
-            <div class="qa-actions">
-              {% if auth_enabled %}
-              <label class="token-field qa-token-field">
-                <span>API token</span>
-                <input id="qa-api-token" type="password" autocomplete="off" placeholder="Bearer token">
-              </label>
-              {% endif %}
-              <button id="qa-submit" class="primary" type="submit">Ask</button>
-            </div>
+            <button id="qa-submit" class="primary" type="submit">Ask</button>
           </form>
         </section>
 
-        <section class="status-strip qa-status" id="qa-status" role="status" aria-live="polite"></section>
-
-        <section class="qa-answer-panel" aria-label="Answer">
-          <div class="pane-header compact">
+        <aside class="qa-right-rail" aria-label="Sources">
+          <header class="qa-sources-header">
             <div>
-              <h2>Answer</h2>
-              <p id="qa-answer-meta">No answer yet</p>
-            </div>
-          </div>
-          <div id="qa-answer" class="answer-body empty-state">Ask a question to generate an answer.</div>
-        </section>
-
-        <section class="qa-sources-panel" aria-label="Sources">
-          <div class="pane-header compact">
-            <div>
+              <span class="eyebrow">Grounding</span>
               <h2>Sources</h2>
-              <p id="qa-source-meta">Cited source snippets will appear here.</p>
             </div>
-          </div>
+            <p id="qa-source-meta">Cited source snippets will appear here.</p>
+          </header>
           <div id="qa-sources" class="qa-source-list empty-state">No sources yet.</div>
-        </section>
+        </aside>
       </main>
     </div>
 
