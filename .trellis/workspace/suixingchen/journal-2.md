@@ -750,3 +750,36 @@ Added a reproducible public web documentation benchmark for the general RAG dire
 ### Next Steps
 
 - None - task complete
+
+
+## Session 76: General web multi-evidence eval
+
+**Date**: 2026-05-22
+**Task**: General web multi-evidence eval
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Corrected the general web GitHub repository eval case to model two independently retrieved evidence chunks instead of requiring both snippets in one chunk. Re-ran the live-seeded public web suite with stricter recall/hit thresholds at 1.0 and documented the multi-evidence behavior in README.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27a4b8e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

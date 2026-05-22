@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 75
+- **Total Sessions**: 76
 - **Last Active**: 2026-05-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~752 | Active |
+| `journal-2.md` | ~785 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 76 | 2026-05-22 | General web multi-evidence eval | `27a4b8e` | `codex/agent-loop-driver` |
 | 75 | 2026-05-22 | General web eval suite | `7a1d37f` | `codex/agent-loop-driver` |
 | 74 | 2026-05-22 | Generic document metadata | `e95a188` | `codex/agent-loop-driver` |
 | 73 | 2026-05-22 | Public web knowledge sampler | `f98dcef` | `codex/agent-loop-driver` |
