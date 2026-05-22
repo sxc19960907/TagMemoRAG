@@ -522,6 +522,18 @@ answer, clarification/error states, and cited source snippets. It hides
 debugging details such as plan ids, build ids, raw retrieval results, and
 answerability internals; use the RAG workbench below when you need those.
 
+For a fully local demo with deterministic offline answering:
+
+```bash
+scripts/seed_qa_demo.sh
+python -m tagmemorag serve --config examples/config/qa-demo.yaml
+```
+
+Then open `/qa` and ask `蒸汽很小怎么办？`. The demo builds the `default` KB
+from `tests/fixtures/coffee_machine.md` into `.tmp/tagmemorag-qa-demo/data`
+and enables the noop answer provider, so the page returns an answer payload
+with cited source snippets without network access or provider keys.
+
 ### RAG workbench
 
 Open the question-answer workbench at:
