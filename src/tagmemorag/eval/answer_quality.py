@@ -269,7 +269,16 @@ def _overlaps_question(question: str, answer: str) -> bool:
 
 def _content_terms(text: str) -> set[str]:
     cleaned = re.sub(r"\[[^\]]+\]|\{\{support:[^}]+\}\}", " ", text.casefold())
-    return {term for term in re.findall(r"[a-z0-9\u4e00-\u9fff]{2,}", cleaned) if term not in {"the", "and", "with", "from"}}
+    terms = {term for term in re.findall(r"[a-z0-9]+", cleaned) if term not in {"the", "and", "with", "from"}}
+    cjk_runs = re.findall(r"[\u4e00-\u9fff]+", cleaned)
+    for run in cjk_runs:
+        if len(run) == 1:
+            continue
+        terms.add(run)
+        terms.update(run[index : index + 2] for index in range(len(run) - 1))
+        if len(run) > 2:
+            terms.update(run[index : index + 3] for index in range(len(run) - 2))
+    return terms
 
 
 def _looks_like_refusal(answer: str) -> bool:

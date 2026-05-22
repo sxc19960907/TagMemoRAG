@@ -534,6 +534,14 @@ The tool reads QueryPlans from SQLite, replays each against the chosen generatio
 
 **T5 shipped 2026-05-19.** `scripts/trellis_rag_eval.py replay` implements the offline MVP: local generation replay from persisted QueryPlans, optional baseline deltas, JSON/Markdown output, plan filters, and historical rerank summary from `rerank_json`. It does not call external reranker vendors during replay and does not evaluate generated `/answer` output.
 
+**QA answer-quality slice.** As of 2026-05-22, `tests/fixtures/answer_quality/qa_product_manual.jsonl` is the first fixed generated-answer quality slice for `/qa`-style product manual answers. It covers weak steam troubleshooting, no-coffee checks, unsupported part-replacement claims, insufficient-evidence refusal, safety stop guidance, and missing citation detection. Run it with:
+
+```text
+python -m tagmemorag eval answer-quality --suite tests/fixtures/answer_quality/qa_product_manual.jsonl
+```
+
+The diagnostics are deterministic and offline. They use lexical support/citation/refusal checks, including CJK n-gram matching for Chinese manual questions; they are not an LLM-as-judge gate.
+
 #### T5 Replay CLI Implementation Contract
 
 **1. Scope / Trigger.** Applies when adding or changing offline replay of persisted QueryPlans, generation-swap gates, replay metrics, or rerank impact reporting.
