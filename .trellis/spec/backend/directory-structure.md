@@ -67,6 +67,7 @@ Entry points:
 - `api.py`: FastAPI request/response models, error handlers, and route wiring.
 - `cli.py`: argparse commands for build, search, and serve.
 - `__main__.py`: forwards `python -m tagmemorag` to `cli.main`.
+- `cli_feedback.py`: feedback CLI command execution.
 - `cli_helpers.py`: shared argparse/file helper functions used by CLI commands.
 - `qa_context.py`: user QA short-context normalization and summary helpers.
 

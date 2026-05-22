@@ -12,6 +12,7 @@ import uvicorn
 
 from .config import load_config
 from .auth.config_store import ConfigAuthStore
+from .cli_feedback import run_feedback_command
 from .cli_helpers import (
     add_bulk_args,
     add_feedback_promote_args,
@@ -38,13 +39,6 @@ from .public_web_import import import_public_web
 from .qdrant_ops import inspect_qdrant
 from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
-from .retrieval_feedback import (
-    create_feedback,
-    export_eval_promotion,
-    list_feedback,
-    preview_eval_promotion,
-    review_feedback,
-)
 from .search_runtime import execute_search, search_ann_enabled, search_debug_enabled, search_debug_payload
 from .state import AppState, build_kb, load_kb, save_kb, start_library_rebuild
 from .tag_governance import (
@@ -1029,50 +1023,8 @@ def main(argv: list[str] | None = None) -> int:
             report = report | {"skipped": False}
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
-    if args.command == "feedback" and args.feedback_command == "submit":
-        cfg = load_config(args.config)
-        configure_logging(cfg.logging.level, cfg.logging.format)
-        payload = json.loads(_read_text_file(args.json))
-        feedback = create_feedback(args.kb, payload, cfg)
-        print(json.dumps({"feedback": feedback.to_dict()}, ensure_ascii=False, indent=2))
-        return 0
-    if args.command == "feedback" and args.feedback_command == "list":
-        cfg = load_config(args.config)
-        configure_logging(cfg.logging.level, cfg.logging.format)
-        rows = list_feedback(args.kb, cfg, status=args.status, outcome=args.outcome, query=args.query, limit=args.limit)
-        print(json.dumps({"kb_name": args.kb, "feedback": [row.to_dict() for row in rows]}, ensure_ascii=False, indent=2))
-        return 0
-    if args.command == "feedback" and args.feedback_command == "review":
-        cfg = load_config(args.config)
-        configure_logging(cfg.logging.level, cfg.logging.format)
-        feedback = review_feedback(
-            args.kb,
-            args.feedback_id,
-            cfg,
-            status=args.status,
-            operator_note=args.operator_note,
-        )
-        print(json.dumps({"feedback": feedback.to_dict()}, ensure_ascii=False, indent=2))
-        return 0
-    if args.command == "feedback" and args.feedback_command == "promote-preview":
-        cfg = load_config(args.config)
-        configure_logging(cfg.logging.level, cfg.logging.format)
-        preview = preview_eval_promotion(args.kb, args.feedback_id, cfg, output_path=args.output)
-        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
-        return 0
-    if args.command == "feedback" and args.feedback_command == "promote":
-        cfg = load_config(args.config)
-        configure_logging(cfg.logging.level, cfg.logging.format)
-        preview = export_eval_promotion(
-            args.kb,
-            args.feedback_id,
-            cfg,
-            output_path=args.output,
-            append=args.append,
-            overwrite=args.overwrite,
-        )
-        print(json.dumps(preview.to_dict(), ensure_ascii=False, indent=2))
-        return 0
+    if args.command == "feedback":
+        return run_feedback_command(args)
     return 1
 
 
