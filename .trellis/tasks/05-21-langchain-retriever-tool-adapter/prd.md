@@ -13,12 +13,12 @@ Expose TagMemoRAG retrieval and agent tools through LangChain-compatible adapter
 
 ## Acceptance Criteria
 
-- [ ] QueryPlan rows are still written by adapter-backed calls.
-- [ ] Replay still works for adapter-backed calls.
-- [ ] Agentic tool registry tests stay green.
-- [ ] No default runtime dependency on LangChain unless the child explicitly
+- [x] QueryPlan rows are still written by adapter-backed calls.
+- [x] Replay still works for adapter-backed calls.
+- [x] Agentic tool registry tests stay green.
+- [x] No default runtime dependency on LangChain unless the child explicitly
       approves an extra.
-- [ ] Rollback is deleting the adapter package.
+- [x] Rollback is deleting the adapter package.
 
 ## Notes
 

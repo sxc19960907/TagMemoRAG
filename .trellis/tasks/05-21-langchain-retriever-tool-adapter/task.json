@@ -3,7 +3,7 @@
   "name": "langchain-retriever-tool-adapter",
   "title": "LangChain Retriever and Tool Adapter",
   "description": "Expose TagMemoRAG retrieval and agent tools through LangChain-compatible adapters without replacing QueryPlan/PlanLog. Planning only until approved.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

@@ -393,6 +393,89 @@ generation = validate_generation_citations(generation, prompt.allowed_citation_i
 }
 ```
 
+## Scenario: LangChain Retriever and Tool Adapters
+
+### 1. Scope / Trigger
+
+- Trigger: exposing TagMemoRAG retrieval or agent tools through LangChain
+  adapter objects.
+
+### 2. Signatures
+
+- Retriever:
+  `TagMemoRAGRetriever(state, settings, embedder, config=None)`
+- Retriever:
+  `TagMemoRAGRetriever.retrieve(query, **kwargs) -> dict`
+- Retriever:
+  `TagMemoRAGRetriever.get_relevant_documents(query, **kwargs) -> list[Document]`
+- Helper:
+  `run_native_retrieve(request, state, settings, embedder, trace_id=None) -> dict`
+- Helper:
+  `retrieve_payload_to_documents(payload) -> list[Document]`
+- Tools:
+  `registry_to_langchain_tools(registry, ctx) -> list[StructuredTool]`
+
+### 3. Contracts
+
+- LangChain imports must be lazy. `import tagmemorag.langchain_adapter` must
+  work without the optional `langchain` extra.
+- Missing LangChain packages raise `LangChainAdapterUnavailable` with a clear
+  optional-extra message.
+- Retriever adapter calls must delegate to native TagMemoRAG retrieval rather
+  than reimplementing search, evidence, QueryPlan, or PlanLog logic.
+- Adapter-backed retrieve calls must write QueryPlan rows when persistence is
+  enabled and respect private-KB persistence rules.
+- LangChain `Document.metadata` may include low-sensitive fields such as
+  `source_file`, `header`, `score`, `chunk_id`, `citation_id`, `plan_id`,
+  `build_id`, and `kb_name`.
+- Document metadata must not include raw query text, full provider responses,
+  secrets, vectors, or unbounded runtime chunks beyond `page_content`.
+- Tool wrappers delegate to `AgentToolRegistry` tools and keep registry
+  behavior unchanged.
+
+### 4. Validation & Error Matrix
+
+- Missing LangChain document/tool classes -> `LangChainAdapterUnavailable`.
+- Adapter-backed retrieve on public KB -> plan row exists and replay loader can
+  read it.
+- Adapter-backed retrieve on private KB -> plan id may be returned, but no
+  persisted plan row is required.
+- Native retrieval failure -> surface the same project exception as native
+  retrieval; do not translate into LangChain-specific errors.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a LangChain retriever call returns `Document` objects and creates a
+  replayable QueryPlan row.
+- Base: code using only native parser/retrieval imports without LangChain
+  installed.
+- Bad: importing the adapter package imports FastAPI/API globals at module load
+  and creates a circular import through parser/manual-library code.
+
+### 6. Tests Required
+
+- Existing loader/splitter adapter tests still pass without LangChain.
+- Retriever adapter writes a QueryPlan row and `ReplayPlanLoader` can read it.
+- Tool wrapper missing-extra path raises `LangChainAdapterUnavailable`.
+- Agentic tool registry tests stay green.
+- Classic retrieval/eval tests stay green.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+from tagmemorag.api import _retrieve_impl  # top-level adapter import
+```
+
+#### Correct
+
+```python
+def run_native_retrieve(...):
+    from tagmemorag import api
+    return api._retrieve_impl(...)
+```
+
 ## Scenario: Production Pilot Command
 
 ### 1. Scope / Trigger
