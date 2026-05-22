@@ -157,11 +157,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     js = client.get("/static/manual-library/qa_page.js")
 
     assert js.status_code == 200
-    assert "/answer" in js.text
+    assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
-    assert "kb_name: state.kbName" in js.text
-    assert "top_k: 5" in js.text
-    assert "source_k: 8" in js.text
+    assert "kb_name:" not in js.text
+    assert "top_k:" not in js.text
+    assert "source_k:" not in js.text
     assert "qa-answer" in js.text
     assert "qa-kb-name" not in js.text
     assert "plan_id" not in js.text

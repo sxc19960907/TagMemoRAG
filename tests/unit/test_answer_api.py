@@ -145,3 +145,83 @@ def test_answer_request_accepts_agentic_surface(tmp_path, fake_embedder):
     body = response.json()
     assert body["answer"]["kind"] == "answer"
     assert body["retrieve"]["plan_id"]
+
+
+def test_qa_answer_routes_single_accessible_kb(tmp_path, fake_embedder):
+    client, state = _client_with_docs(
+        tmp_path,
+        fake_embedder,
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+
+    response = client.post("/qa/answer", json={"question": "蒸汽很小"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == {"kind": "answered", "kb_name": "default", "reason": "single_kb"}
+    assert body["answer"]["kind"] == "answer"
+    assert body["retrieve"]["kb_name"] == state.kb_name
+
+
+def test_qa_answer_clarifies_ambiguous_multi_kb(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs_a = tmp_path / "docs-a"
+    docs_b = tmp_path / "docs-b"
+    docs_a.mkdir()
+    docs_b.mkdir()
+    (docs_a / "manual.md").write_text("# CM1\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs_b / "manual.md").write_text("# TX2\n清洗功能需要定期维护。\n", encoding="utf-8")
+    state_a = build_kb(docs_a, "coffee", cfg, embedder=fake_embedder)
+    state_b = build_kb(docs_b, "washer", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.swap_kb("coffee", state_a)
+    api.app_state.swap_kb("washer", state_b)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "这个怎么处理？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["kind"] == "clarification"
+    assert {candidate["kb_name"] for candidate in body["route"]["candidates"]} == {"coffee", "washer"}
+    assert body["answer"]["kind"] == "clarification"
+
+
+def test_qa_answer_routes_multi_kb_when_question_mentions_context(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs_a = tmp_path / "docs-a"
+    docs_b = tmp_path / "docs-b"
+    docs_a.mkdir()
+    docs_b.mkdir()
+    (docs_a / "manual.md").write_text("# CM1\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs_b / "manual.md").write_text("# TX2\n清洗功能需要定期维护。\n", encoding="utf-8")
+    state_a = build_kb(docs_a, "coffee", cfg, embedder=fake_embedder)
+    state_b = build_kb(docs_b, "washer", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.swap_kb("coffee", state_a)
+    api.app_state.swap_kb("washer", state_b)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "CM1 蒸汽很小怎么办？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["kind"] == "answered"
+    assert body["route"]["kb_name"] == "coffee"
+    assert body["route"]["reason"] == "lexical_route"

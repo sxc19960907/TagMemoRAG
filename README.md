@@ -514,9 +514,11 @@ Open the user-facing manual question-answer page at:
 http://127.0.0.1:8000/qa
 ```
 
-Use `?kb_name=product-a` to preselect another KB. The page calls
-`POST /answer` with retrieval included, then shows only the answer,
-user-readable refusal/error states, and cited source snippets. It hides
+The page calls `POST /qa/answer` with the user's question only. The backend
+routes the question to an accessible loaded KB when it can, asks for
+clarification when multiple manual contexts are plausible, and returns a
+user-readable not-ready state when no KB is loaded. The page shows only the
+answer, clarification/error states, and cited source snippets. It hides
 debugging details such as plan ids, build ids, raw retrieval results, and
 answerability internals; use the RAG workbench below when you need those.
 

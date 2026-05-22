@@ -40,9 +40,6 @@ function escapeHtml(value) {
 }
 
 function updateLocationKb() {
-  const nextUrl = new URL(window.location.href);
-  nextUrl.searchParams.set("kb_name", state.kbName || "default");
-  window.history.replaceState({}, "", nextUrl);
   if (el.contextNote) {
     el.contextNote.textContent = "Ask a question and get an answer grounded in the available manuals.";
   }
@@ -63,15 +60,11 @@ async function requestAnswer(event) {
   setStatus("Asking...");
 
   try {
-    const response = await fetch("/answer", {
+    const response = await fetch("/qa/answer", {
       method: "POST",
       headers: headers(),
       body: JSON.stringify({
-        kb_name: state.kbName,
         question,
-        top_k: 5,
-        source_k: 8,
-        mode: "classic",
         include_retrieve: true,
       }),
     });
@@ -118,7 +111,7 @@ function renderAnswer(body) {
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
   } else {
     el.answer.className = "qa-answer-message warn";
-    const reason = answer.refusal_reason || "I could not answer from the available manual content.";
+    const reason = answer.text || answer.refusal_reason || "I could not answer from the available manual content.";
     const hints = Array.isArray(answer.missing_evidence_hints) ? answer.missing_evidence_hints : [];
     el.answer.innerHTML = [
       `<p>${escapeHtml(userFacingReason(reason))}</p>`,
@@ -127,7 +120,11 @@ function renderAnswer(body) {
     el.answerMeta.textContent = "No grounded answer available";
   }
 
-  renderSources(answer.citations || [], retrieve.evidence || []);
+  if (body.route && body.route.kind === "clarification") {
+    renderClarificationCandidates(body.route.candidates || []);
+  } else {
+    renderSources(answer.citations || [], retrieve.evidence || []);
+  }
 }
 
 function confidenceLabel(confidence) {
@@ -142,6 +139,7 @@ function userFacingReason(reason) {
   if (normalized === "generation disabled") return "Answer generation is not enabled for this server.";
   if (normalized === "generation failed") return "The answer service could not generate a response.";
   if (normalized === "insufficient evidence") return "I could not find enough manual evidence to answer that.";
+  if (normalized === "needs clarification") return "I need one more detail before I can choose the right manual.";
   return normalized;
 }
 
@@ -177,6 +175,27 @@ function renderSources(citations, evidence) {
   el.sources.className = "qa-source-list";
   el.sourceMeta.textContent = `${items.length} source${items.length === 1 ? "" : "s"} cited`;
   el.sources.innerHTML = items.map(renderSourceItem).join("");
+}
+
+function renderClarificationCandidates(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    el.sources.className = "qa-source-list empty-state";
+    el.sources.textContent = "No candidate manuals available.";
+    el.sourceMeta.textContent = "More detail needed.";
+    return;
+  }
+  el.sources.className = "qa-source-list";
+  el.sourceMeta.textContent = "Possible manual contexts";
+  el.sources.innerHTML = candidates
+    .map((candidate) => `
+      <article class="qa-source-item">
+        <div class="evidence-head">
+          <span>${escapeHtml(candidate.label || candidate.kb_name || "Manual")}</span>
+        </div>
+        <p class="muted">Add the product name, model, or error code to route this question.</p>
+      </article>
+    `)
+    .join("");
 }
 
 function renderSourceItem(item) {

@@ -411,17 +411,32 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 
 ### B6A. User-Facing Q&A Page  ✅ Shipped
 
-**Shipped 2026-05-22.** `GET /qa` serves the non-admin manual question-answer page. It is a thin server-rendered Jinja2 shell plus vanilla JavaScript that calls the existing `/answer` endpoint; it does not introduce a new answer schema or frontend build step.
+**Shipped 2026-05-22.** `GET /qa` serves the non-admin manual question-answer page. It is a thin server-rendered Jinja2 shell plus vanilla JavaScript with no frontend build step.
 
 **Contract.**
 
-- Route: `GET /qa?kb_name=<name>` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing admin page config pattern.
-- Client call: `qa_page.js` submits `POST /answer` with `include_retrieve=true`, `top_k=5`, `source_k=8`, and `mode="classic"`.
+- Route: `GET /qa` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing page config pattern. `kb_name` may still appear in the URL for compatibility, but the user page must not render it as an editable concept.
+- Client call: `qa_page.js` submits `POST /qa/answer` with only the question and display options. The browser does not choose a KB.
 - Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields.
 - Auth: when API auth is enabled, the page can send a Bearer token. When auth is disabled, the token field is hidden.
 - Error UX: known readiness failures such as an unloaded KB are mapped to user-readable copy. The underlying structured API error remains unchanged.
 
-**Tests.** UI route/static tests assert the route renders selected KB config, the JavaScript calls `/answer` with the fixed defaults, and debugging identifiers are absent from the user page asset.
+**Tests.** UI route/static tests assert the route renders the user shell, hides KB controls, calls `/qa/answer`, and keeps debugging identifiers absent from the user page asset.
+
+### B6B. User QA Question Routing  ✅ Shipped
+
+**Shipped 2026-05-22.** `POST /qa/answer` is the user-facing answer entry point for `/qa`. It lets the browser send only the user's question while the backend routes to an accessible loaded KB, answers with the existing `/answer` implementation, or asks for clarification when the route is ambiguous.
+
+**Contract.**
+
+- Request: `QaAnswerRequest` with `question` and `include_retrieve`; the browser does not send `kb_name`, `top_k`, `source_k`, or mode controls.
+- Routing scope: currently loaded KBs allowed by the API key. No loaded KBs returns `route.kind="not_ready"` with a user-readable answer payload.
+- Single-KB case: route directly with `route.kind="answered"` and `reason="single_kb"`.
+- Multi-KB MVP: use bounded lexical signals from KB name and node/header/source/manual metadata. Clear matches route with `reason="lexical_route"`; otherwise return `route.kind="clarification"` and candidate KB labels.
+- Answering path: routed requests call the same retrieve/answer implementation as `/answer` with `top_k=5`, `source_k=8`, and `mode="classic"`.
+- Admin/debug paths remain explicit: `/answer`, `/retrieve`, and `/admin/rag-workbench` still accept `kb_name`.
+
+**Tests.** API tests cover single-KB routing, ambiguous multi-KB clarification, and lexical multi-KB routing. UI asset tests assert `/qa` calls `/qa/answer` without sending `kb_name`.
 
 ### B7. Phase 7 — Visual Track  📋 Blueprint
 

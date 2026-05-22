@@ -261,6 +261,11 @@ class AnswerRequest(RetrieveRequest):
     include_retrieve: bool = True
 
 
+class QaAnswerRequest(BaseModel):
+    question: str
+    include_retrieve: bool = True
+
+
 class SearchFilters(BaseModel):
     manual_id: str | None = None
     brand: str | None = None
@@ -902,6 +907,179 @@ def answer(
         )
         set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
         raise
+
+
+@app.post("/qa/answer")
+def qa_answer(
+    request: QaAnswerRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    route = _route_qa_question(request.question, api_key)
+    if route["kind"] == "not_ready":
+        return _qa_not_ready_response(route)
+    if route["kind"] == "clarification":
+        return _qa_clarification_response(request, route)
+
+    kb_name = str(route["kb_name"])
+    answer_request = AnswerRequest(
+        question=request.question,
+        kb_name=kb_name,
+        top_k=5,
+        source_k=8,
+        mode="classic",
+        include_retrieve=request.include_retrieve,
+    )
+    ensure_kb_access(api_key, kb_name)
+    state = app_state.get_current(kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(request.question),
+            "tagmemorag.top_k": answer_request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.qa.answer", **span_attrs):
+            retrieve_payload = _retrieve_impl(answer_request, http_request, state, t0)
+            payload = _build_answer_response(answer_request, retrieve_payload)
+            payload["route"] = {
+                "kind": "answered",
+                "kb_name": state.kb_name,
+                "reason": route.get("reason", "single_kb"),
+            }
+            return payload
+    except ServiceError as exc:
+        get_metrics().record_search(
+            kb_name=kb_name,
+            cache_status="none",
+            outcome="error",
+            duration=time.perf_counter() - t0,
+            error_code=exc.code.value,
+        )
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
+        raise
+
+
+def _route_qa_question(question: str, api_key: ApiKey) -> dict[str, object]:
+    candidates: list[dict[str, object]] = []
+    for kb_name in app_state.list_kbs():
+        if not api_key.allows_kb(kb_name):
+            continue
+        try:
+            state = app_state.get_kb(kb_name)
+        except KbNotLoadedError:
+            continue
+        candidates.append({
+            "kb_name": kb_name,
+            "label": _qa_kb_label(state),
+            "score": _qa_route_score(question, state),
+        })
+
+    if not candidates:
+        return {"kind": "not_ready", "candidates": []}
+    if len(candidates) == 1:
+        return {"kind": "answered", "kb_name": candidates[0]["kb_name"], "reason": "single_kb"}
+
+    ranked = sorted(candidates, key=lambda item: (-float(item["score"]), str(item["kb_name"])))
+    best = ranked[0]
+    second_score = float(ranked[1]["score"])
+    if float(best["score"]) >= 2 and float(best["score"]) >= second_score + 1:
+        return {"kind": "answered", "kb_name": best["kb_name"], "reason": "lexical_route"}
+    return {"kind": "clarification", "candidates": [_qa_public_candidate(item) for item in ranked[:5]]}
+
+
+def _qa_not_ready_response(route: dict[str, object]) -> dict[str, object]:
+    return {
+        "schema_version": "qa_answer.v1",
+        "route": {"kind": "not_ready", "candidates": route.get("candidates", [])},
+        "answer": {
+            "kind": "error",
+            "text": "The manual assistant is not ready yet. Please import manuals and rebuild the knowledge base before asking questions.",
+            "confidence": 0.0,
+            "citations": [],
+            "refusal_reason": "kb_not_ready",
+            "missing_evidence_hints": ["kb_not_ready"],
+            "model_id": None,
+            "model_version": None,
+            "prompt_version": None,
+            "warnings": [],
+        },
+        "warnings": ["qa_route:not_ready"],
+    }
+
+
+def _qa_clarification_response(request: QaAnswerRequest, route: dict[str, object]) -> dict[str, object]:
+    candidates = route.get("candidates", [])
+    return {
+        "schema_version": "qa_answer.v1",
+        "route": {"kind": "clarification", "candidates": candidates},
+        "answer": {
+            "kind": "clarification",
+            "text": "Which product or manual is this question about?",
+            "confidence": 0.0,
+            "citations": [],
+            "refusal_reason": "needs_clarification",
+            "missing_evidence_hints": ["choose_product_or_manual"],
+            "model_id": None,
+            "model_version": None,
+            "prompt_version": None,
+            "warnings": [],
+        },
+        "warnings": ["qa_route:needs_clarification"],
+        "question": request.question,
+    }
+
+
+def _qa_public_candidate(candidate: dict[str, object]) -> dict[str, object]:
+    return {
+        "kb_name": candidate["kb_name"],
+        "label": candidate["label"],
+    }
+
+
+def _qa_kb_label(state: GraphState) -> str:
+    labels: list[str] = []
+    for _, data in list(state.graph.nodes(data=True))[:50]:
+        metadata = data.get("metadata") or {}
+        for key in ("manual_title", "title", "product_model", "product_category", "brand"):
+            value = metadata.get(key) or data.get(key)
+            if value:
+                labels.append(str(value))
+    return labels[0] if labels else state.kb_name
+
+
+def _qa_route_score(question: str, state: GraphState) -> int:
+    query = question.casefold()
+    score = 0
+    if state.kb_name.casefold() in query:
+        score += 3
+    seen: set[str] = set()
+    for _, data in list(state.graph.nodes(data=True))[:80]:
+        metadata = data.get("metadata") or {}
+        values = [
+            data.get("header"),
+            data.get("path"),
+            data.get("source_file"),
+            metadata.get("manual_title"),
+            metadata.get("title"),
+            metadata.get("brand"),
+            metadata.get("product_category"),
+            metadata.get("product_model"),
+            metadata.get("manual_id"),
+        ]
+        for value in values:
+            if not value:
+                continue
+            text = str(value).casefold()
+            if text in seen:
+                continue
+            seen.add(text)
+            if len(text) >= 2 and text in query:
+                score += 2
+    return score
 
 
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
