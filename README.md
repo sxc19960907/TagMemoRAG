@@ -1075,6 +1075,17 @@ Pair it with the generic documentation answer-quality diagnostic:
   --suite tests/fixtures/answer_quality/general_web.jsonl
 ```
 
+To run the live seeded retrieval output through the local extractive answer
+generator and answer-quality checks:
+
+```bash
+.venv/bin/python scripts/diag_general_web_answer_eval.py \
+  --docs .tmp/general-web-eval/general_web \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web
+```
+
 The first general web baseline covers Python and GitHub documentation with
 `domain=software_docs` and `doc_type=documentation`. The GitHub repository case
 models multi-evidence retrieval explicitly: the repository/folder definition and
