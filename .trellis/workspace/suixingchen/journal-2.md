@@ -948,3 +948,36 @@ Extracted QA context formatting from api.py and reusable argparse/file helpers f
 ### Next Steps
 
 - None - task complete
+
+
+## Session 82: CLI feedback command extraction
+
+**Date**: 2026-05-23
+**Task**: CLI feedback command extraction
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Moved feedback CLI command execution out of cli.py into cli_feedback.py, added direct command-module tests, and kept the existing feedback workflow behavior unchanged.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b0225c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
