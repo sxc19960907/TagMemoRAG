@@ -554,6 +554,19 @@ python -m tagmemorag eval run \
 
 The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence. Lexical scoring must also keep identity fields (`source_file`, `manual_id`, `product_model`, category tags) separate from topic fields: identity fields may match exact model/code tokens for narrowing, but ordinary topic terms should be rewarded from headings/body text. Specific multi-term body matches (for example `hot air bottom heater`) need enough headroom to outrank broad table-of-contents headings like `Choosing the Cooking System`.
 
+**Mixed-domain shared-KB slice.** As of 2026-05-23, `tests/fixtures/eval/mixed_knowledge.jsonl` validates that real product manuals and public web documentation can coexist in one shared KB without obvious top-ranked cross-domain pollution. Run it after seeding public web docs:
+
+```text
+scripts/seed_general_web_eval.sh
+.venv/bin/python scripts/diag_mixed_domain_eval.py \
+  --stage-from-defaults \
+  --suite tests/fixtures/eval/mixed_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb mixed_knowledge
+```
+
+The diagnostic stages real PDFs from `product_manuals/` and seeded public docs from `.tmp/general-web-eval/general_web` into a temporary corpus, then runs the standard eval runner with a single `kb_name`. Cases use positive expectations and wrong-domain negatives. Because it depends on runtime/materialized docs, it is excluded from fixture-only baseline CI and should be run explicitly alongside `general_web.jsonl` and `realmanuals.jsonl` when retrieval ranking, metadata narrowing, parser behavior, or answer evidence selection changes.
+
 **Third-party real manual samples.** ManualsLib-style browser pages can be used to expand local validation without committing third-party manual PDFs. Import tooling should accept explicit operator-supplied manual URLs, extract the visible OCR/text layer from page HTML into `.md` plus `<manual>.metadata.json`, preserve source attribution in metadata, and keep fetched samples under `.tmp/` or another runtime directory unless a later curation task explicitly decides to check in a derived fixture. Avoid broad brand-page crawling and do not bypass download/authentication gates; small, category-diverse samples are enough to expose ranking noise such as generic `drying` terms outranking `program`/`cycle selector` intent.
 
 #### T5 Replay CLI Implementation Contract

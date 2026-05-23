@@ -39,7 +39,7 @@ SUITE_DOCS_OVERRIDES = {
 
 # Suites that are useful diagnostics but should not participate in fixture-only
 # baseline generation.
-DEFAULT_EXCLUDED_SUITES = {"general_web.jsonl", "realmanuals.jsonl"}
+DEFAULT_EXCLUDED_SUITES = {"general_web.jsonl", "mixed_knowledge.jsonl", "realmanuals.jsonl"}
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
 

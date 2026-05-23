@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SUITE_DIR = REPO_ROOT / "tests" / "fixtures" / "eval"
 BASELINE_PATH = SUITE_DIR / "baselines" / "hashing.json"
 DEFAULT_DOCS_DIR = REPO_ROOT / "tests" / "fixtures" / "product_manuals"
-DEFAULT_EXCLUDED_SUITES = {"general_web.jsonl", "realmanuals.jsonl"}
+DEFAULT_EXCLUDED_SUITES = {"general_web.jsonl", "mixed_knowledge.jsonl", "realmanuals.jsonl"}
 
 EMBEDDER_HASHING = "hashing"
 EMBEDDER_SILICONFLOW = "siliconflow"
@@ -215,10 +215,10 @@ def _iter_gated_suites(suite_dir: Path) -> list[Path]:
     """Return suites covered by the baseline gate.
 
     `realmanuals.jsonl` is an informational production-PDF diagnostic fixture
-    evaluated by `scripts/diag_realmanuals_eval.py`. `general_web.jsonl`
-    depends on a reproducible but network-seeded `.tmp` corpus from
-    `scripts/seed_general_web_eval.sh`, so it is run as an explicit benchmark,
-    not by the strict fixture-only hashing baseline CI.
+    evaluated by `scripts/diag_realmanuals_eval.py`. `general_web.jsonl` and
+    `mixed_knowledge.jsonl` depend on a reproducible but network-seeded `.tmp`
+    corpus from `scripts/seed_general_web_eval.sh`, so they are run as explicit
+    benchmarks, not by the strict fixture-only hashing baseline CI.
     """
     return sorted(
         p

@@ -1091,6 +1091,24 @@ The first general web baseline covers Python and GitHub documentation with
 models multi-evidence retrieval explicitly: the repository/folder definition and
 the README/Markdown explanation may be returned as separate chunks.
 
+Use the mixed-domain diagnostic to validate that real manuals and public docs
+can coexist in one shared KB without obvious top-ranked cross-domain pollution:
+
+```bash
+scripts/seed_general_web_eval.sh
+
+.venv/bin/python scripts/diag_mixed_domain_eval.py \
+  --stage-from-defaults \
+  --suite tests/fixtures/eval/mixed_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb mixed_knowledge
+```
+
+`--stage-from-defaults` copies real PDFs from `product_manuals/` and seeded
+public docs from `.tmp/general-web-eval/general_web` into a temporary mixed
+corpus. The suite uses one shared `kb_name` plus positive and negative
+expectations, so it catches both missed evidence and wrong-domain top results.
+
 For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
 
 ```bash
