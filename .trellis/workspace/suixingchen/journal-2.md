@@ -1113,3 +1113,36 @@ Reduced api.py by extracting Pydantic request models into api_models.py, QA rout
 ### Next Steps
 
 - None - task complete
+
+
+## Session 87: Complete API entrypoint split
+
+**Date**: 2026-05-23
+**Task**: Complete API entrypoint split
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Finished API slimming by reducing api.py to FastAPI wiring plus compatibility wrappers. Extracted search/retrieve/answer execution into api_search.py, feedback execution into api_feedback.py, admin/cache/generation helpers into api_admin.py, and manual route execution into api_manual_routes.py. API-focused tests passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3a8582a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
