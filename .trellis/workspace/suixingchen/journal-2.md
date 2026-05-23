@@ -1014,3 +1014,36 @@ Moved ManualsLib and public-web source import CLI execution out of cli.py into c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 84: CLI provider command extraction
+
+**Date**: 2026-05-23
+**Task**: CLI provider command extraction
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Moved provider probe and production-provider smoke/verify command execution out of cli.py into cli_provider.py, added direct command-module tests, and kept existing CLI behavior covered.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `085d059` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
