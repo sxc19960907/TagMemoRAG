@@ -1080,3 +1080,36 @@ Finished the CLI slimming pass by reducing cli.py to a thin parser/dispatch wrap
 ### Next Steps
 
 - None - task complete
+
+
+## Session 86: Slim API entrypoint
+
+**Date**: 2026-05-23
+**Task**: Slim API entrypoint
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Reduced api.py by extracting Pydantic request models into api_models.py, QA routing helpers into api_qa.py, and manual-library parsing/rebuild/diagnostics helpers into api_manual.py. Preserved tagmemorag.api imports and verified API-focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da9f6a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
