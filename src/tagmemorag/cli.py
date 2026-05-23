@@ -21,6 +21,7 @@ from .cli_helpers import (
     read_text_file,
     split_csv,
 )
+from .cli_provider import run_production_provider_command, run_provider_command
 from .cli_source_import import run_knowledge_command, run_manualslib_command
 from .config_validation import validate_config
 from .embedder import create_embedder
@@ -33,7 +34,6 @@ from .manual_bundle import export_bundle, import_bundle, inspect_bundle
 from .manual_bulk_import import commit_bulk_import, preview_bulk_import
 from .manual_library import build_dirty_state_report, migrate_sidecars_to_registry, registry_inspect, verify_registry_blobs
 from .metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
-from .provider_probe import run_provider_probe
 from .qdrant_ops import inspect_qdrant
 from .readiness import run_readiness_smoke
 from .rebuild_queue import RebuildQueue
@@ -60,16 +60,12 @@ from .production_pilot import (
 from .production_provider_smoke import (
     DEFAULT_PROVIDER_SMOKE_CONFIG,
     DEFAULT_PROVIDER_SMOKE_QUESTION,
-    run_production_provider_smoke,
-    write_provider_smoke_report,
 )
 from .production_provider_verify import (
     DEFAULT_VERIFY_MANUAL,
     DEFAULT_VERIFY_OUTPUT,
     DEFAULT_VERIFY_QUESTION,
     DEFAULT_VERIFY_WORKDIR,
-    run_production_provider_verify,
-    write_verify_report,
 )
 from .tag_cooccurrence import cooccurrence_path, load_cooccurrence
 from .tag_intrinsic_residuals import train_intrinsic_residuals_for_kb
@@ -828,88 +824,10 @@ def main(argv: list[str] | None = None) -> int:
         configure_logging(cfg.logging.level, cfg.logging.format)
         print(json.dumps(inspect_qdrant(args.kb, cfg), ensure_ascii=False, indent=2))
         return 0
-    if args.command == "provider" and args.provider_command == "probe":
-        selected = []
-        if args.all:
-            selected.append("all")
-        for name in ("embedding", "answer", "reranker", "qdrant", "s3"):
-            if getattr(args, name):
-                selected.append(name)
-        report = run_provider_probe(args.config, selected=selected or ["all"], kb_name=args.kb)
-        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
-        return 1 if report.status == "failed" else 0
-    if args.command == "production-provider" and args.production_provider_command == "smoke":
-        try:
-            report = run_production_provider_smoke(
-                config_path=args.config,
-                kb_name=args.kb,
-                manual_paths=args.manual,
-                metadata_path=args.metadata,
-                metadata_format=args.metadata_format,
-                workdir=args.workdir,
-                question=args.question,
-                rebuild_mode=args.rebuild_mode,
-                answer_top_k=args.answer_top_k,
-                answer_source_k=args.answer_source_k,
-                reset_qdrant_collection=args.reset_qdrant_collection,
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"production-provider smoke error: {type(exc).__name__}: {exc}", file=sys.stderr)
-            return 2
-        if args.output:
-            write_provider_smoke_report(report, args.output, fmt=args.format)
-        else:
-            if args.format == "markdown":
-                print(report.to_markdown(), end="")
-            else:
-                print(report.to_json())
-        return 1 if report.status == "failed" else 0
-    if args.command == "production-provider" and args.production_provider_command == "verify":
-        thresholds = EvalThresholds(
-            min_recall_at_k=args.pilot_min_recall_at_k,
-            min_mrr=args.pilot_min_mrr,
-            min_hit_at_k=args.pilot_min_hit_at_k,
-        )
-        try:
-            report = run_production_provider_verify(
-                level=args.level,
-                config_path=args.config,
-                kb_name=args.kb,
-                manual_paths=args.manual or [DEFAULT_VERIFY_MANUAL],
-                metadata_path=args.metadata,
-                metadata_format=args.metadata_format,
-                workdir=args.workdir,
-                output_path=args.output,
-                output_format=args.format,
-                question=args.question,
-                start_docker=not args.skip_docker,
-                ensure_bucket=not args.skip_bucket,
-                reset_qdrant=not args.no_reset_qdrant,
-                check_only=args.check_only,
-                pilot_suite_path=args.pilot_suite,
-                pilot_docs_path=args.pilot_docs,
-                pilot_workdir=args.pilot_workdir,
-                pilot_output_path=args.pilot_output,
-                pilot_output_format=args.pilot_format,
-                pilot_top_k=args.pilot_top_k,
-                pilot_source_k=args.pilot_source_k,
-                pilot_thresholds=thresholds,
-                pilot_hashing_baseline_path=args.pilot_hashing_baseline,
-                pilot_production_baseline_path=args.pilot_production_baseline,
-                pilot_informational_suites=_split_csv(args.pilot_informational_suites),
-                pilot_accepted_suites=_split_csv(args.pilot_accepted_suites),
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"production-provider verify error: {type(exc).__name__}: {exc}", file=sys.stderr)
-            return 2
-        if args.verify_output:
-            write_verify_report(report, args.verify_output, fmt=args.verify_format)
-        if not args.verify_output:
-            if args.verify_format == "markdown":
-                print(report.to_markdown(), end="")
-            else:
-                print(report.to_json())
-        return 1 if report.status == "failed" else 0
+    if args.command == "provider":
+        return run_provider_command(args)
+    if args.command == "production-provider":
+        return run_production_provider_command(args)
     if args.command == "readiness" and args.readiness_command == "smoke":
         report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))

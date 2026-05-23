@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import cli_provider
 from tagmemorag import cli_source_import
 from tagmemorag import readiness
 from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
@@ -224,8 +225,8 @@ def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, ca
     def fake_write(report, path, *, fmt):
         captured["written"] = (report.status, path, fmt)
 
-    monkeypatch.setattr(cli, "run_production_provider_smoke", fake_run)
-    monkeypatch.setattr(cli, "write_provider_smoke_report", fake_write)
+    monkeypatch.setattr(cli_provider, "run_production_provider_smoke", fake_run)
+    monkeypatch.setattr(cli_provider, "write_provider_smoke_report", fake_write)
 
     exit_code = cli.main(
         [

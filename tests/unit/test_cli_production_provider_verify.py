@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from tagmemorag import cli
+from tagmemorag import cli_provider
 from tagmemorag.production_provider_verify import ProductionProviderVerifyReport
 
 
@@ -19,7 +20,7 @@ def test_cli_production_provider_verify_forwards_options(monkeypatch, capsys):
             checks=[],
         )
 
-    monkeypatch.setattr(cli, "run_production_provider_verify", fake_verify)
+    monkeypatch.setattr(cli_provider, "run_production_provider_verify", fake_verify)
 
     exit_code = cli.main(
         [
@@ -69,7 +70,7 @@ def test_cli_production_provider_verify_writes_summary(monkeypatch, tmp_path, ca
             checks=[],
         )
 
-    monkeypatch.setattr(cli, "run_production_provider_verify", fake_verify)
+    monkeypatch.setattr(cli_provider, "run_production_provider_verify", fake_verify)
 
     verify_output = tmp_path / "verify.json"
     exit_code = cli.main(

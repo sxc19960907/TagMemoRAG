@@ -69,6 +69,7 @@ Entry points:
 - `__main__.py`: forwards `python -m tagmemorag` to `cli.main`.
 - `cli_feedback.py`: feedback CLI command execution.
 - `cli_helpers.py`: shared argparse/file helper functions used by CLI commands.
+- `cli_provider.py`: provider probe and production-provider CLI command execution.
 - `cli_source_import.py`: ManualsLib and public-web source import CLI command execution.
 - `qa_context.py`: user QA short-context normalization and summary helpers.
 
