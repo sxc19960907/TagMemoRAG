@@ -38,6 +38,45 @@ Opened the next Trellis journal because journal-1.md reached the 2000-line thres
 - None - task complete
 
 
+## Session 88: Mixed-domain RAG robustness diagnostic
+
+**Date**: 2026-05-23
+**Task**: Mixed-domain RAG robustness benchmark
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Returned to the RAG quality mainline after API slimming. Added a shared-KB mixed-domain retrieval diagnostic that stages real product manuals and seeded public web docs into one corpus, then verifies positives plus wrong-domain negatives. Real validation passed on `product_manuals/` plus `.tmp/general-web-eval/general_web`.
+
+### Main Changes
+
+- Added `tests/fixtures/eval/mixed_knowledge.jsonl` for real-manual and software-doc queries under one `mixed_knowledge` KB.
+- Added `scripts/diag_mixed_domain_eval.py` with `--stage-from-defaults` to build the mixed temporary corpus and run the standard eval runner.
+- Excluded `mixed_knowledge.jsonl` from fixture-only baseline/CI runs because it depends on materialized external docs.
+- Documented the diagnostic in README and `.trellis/spec/backend/architecture.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb0feba` | test(rag): add mixed-domain robustness diagnostic |
+| `7b92859` | chore(task): archive 05-23-mixed-domain-rag-robustness |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_diag_mixed_domain_eval.py tests/unit/test_run_eval_ci.py tests/unit/test_diag_general_web_answer_eval.py tests/unit/test_realmanuals_fixture.py tests/unit/test_cli.py::test_cli_pilot_run_passes_baseline_flags -q`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/mixed-domain-report.json`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Improve intra-document ranking for long public web pages: mixed-domain validation passed with no cross-domain pollution, but GitHub/Python exact evidence ranked at positions 2-3 rather than always top-1.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
