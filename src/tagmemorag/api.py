@@ -8,7 +8,6 @@ import json
 import sys
 import time
 from io import StringIO
-from typing import Literal, cast
 import uuid
 
 from pathlib import Path
@@ -18,7 +17,6 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import numpy as np
-from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
@@ -30,13 +28,55 @@ from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .cache.lru_ttl import LRUTTLCache
+from .api_models import (
+    AgenticRequestOverrides,
+    AnchorRequest,
+    AnswerRequest,
+    BudgetSpec,
+    CacheClearRequest,
+    FeedbackPromoteRequest,
+    FeedbackReviewRequest,
+    FeedbackSubmitRequest,
+    GhostTagSpec,
+    IndexGenBuildShadowRequest,
+    IndexGenCancelShadowRequest,
+    IndexGenRetireRequest,
+    IndexGenSwapRequest,
+    ManualLibraryRebuildRequest,
+    ManualMetadataUpdateRequest,
+    ManualMetadataValidationRequest,
+    ManualTagSuggestRequest,
+    QaAnswerRequest,
+    QaConversationTurn,
+    RebuildRequest,
+    RetrieveRequest,
+    SearchFilters,
+    SearchRequest,
+    TagPolicyUpdateRequest,
+    TagRewriteRequest,
+)
+from .api_manual import (
+    bulk_uploaded_files,
+    manual_library_diagnostics,
+    metadata_text_from_bulk_form,
+    parse_alias_mode,
+    parse_bulk_mode,
+    parse_metadata_form,
+    parse_rewrite_mode,
+    parse_selected_rows,
+    request_library_rebuild,
+    require_rebuild_queue,
+    resolved_filter_dict,
+    safe_audit_detail,
+)
+from .api_qa import qa_clarification_response, qa_not_ready_response, route_qa_question
 from .config import Settings, load_config
 from .document_assets import create_asset_store, load_asset_manifest
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
 from .manuals import metadata_from_node, public_tags_from_metadata
-from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
+from .manual_bulk_import import commit_bulk_import, preview_bulk_import
 from .manual_library import (
     build_dirty_state_report,
     delete_manual,
@@ -45,21 +85,18 @@ from .manual_library import (
     list_records,
     load_manifest,
     registry_enabled,
-    registry_inspect,
     replace_manual_file,
     update_manual_metadata,
     upsert_manual,
     validate_metadata,
-    verify_registry_blobs,
 )
 from .manual_registry import create_registry
-from .metadata_narrowing import NarrowingDecision, infer_metadata_narrowing, merge_inferred_filters
 from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .qa_context import context_meta, contextual_question, normalize_question, trim_context_text
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
-from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
+from .retrieval import VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
 from .retrieval import VisualRetrievalResolver
 from .retrieval_feedback import (
     create_feedback,
@@ -76,9 +113,9 @@ from .search_runtime import (
     search_debug_payload,
 )
 from .wave_tag_spike import GhostTag
-from .state import AppState, load_kb, start_library_rebuild
+from .state import AppState, load_kb
 from .storage.json_anchor import JsonAnchorStore
-from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
+from .tag_suggestions import suggest_tags
 from .visual_retrieval import create_visual_components
 from .tag_governance import (
     commit_tag_rewrite,
@@ -181,227 +218,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
 app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
-
-
-class GhostTagSpec(BaseModel):
-    """Caller-supplied tag with explicit vector, bypassing the KB tag store.
-
-    `vector` length must equal the model embedding dim at request time;
-    mismatched ghosts are silently skipped and counted in `info.ghost_skipped_dim_mismatch`.
-    """
-
-    name: str = Field(..., min_length=1, max_length=128)
-    vector: list[float] = Field(..., min_length=1)
-    is_core: bool = False
-
-
-class SearchRequest(BaseModel):
-    question: str
-    top_k: int | None = None
-    source_k: int | None = None
-    steps: int | None = None
-    decay: float | None = None
-    amplitude_cutoff: float | None = None
-    aggregate: str | None = None
-    kb_name: str = "default"
-    filters: "SearchFilters | None" = None
-    debug: bool | None = None
-    # Phase 2b-2: caller-supplied "spotlight" tags. Only take effect under
-    # `wave_phase1.dynamic_boost_factor_strategy="pyramid"` (PRD R10);
-    # otherwise they round-trip through `info.core_tags_input/resolved` for
-    # diagnostics with no impact on weights.
-    core_tags: list[str] = Field(default_factory=list)
-    ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
-    # T2: optional per-request budget override; missing fields fall through to
-    # Settings.queryplan.default_*. None means "use settings defaults entirely".
-    budget: "BudgetSpec | None" = None
-    mode: Literal["classic", "agentic"] | None = None
-    agentic: "AgenticRequestOverrides | None" = None
-
-
-class AgenticRequestOverrides(BaseModel):
-    decision_enabled: bool | None = None
-    max_iterations: int | None = Field(default=None, ge=0)
-    max_agent_tokens: int | None = Field(default=None, ge=1)
-    max_tool_calls: int | None = Field(default=None, ge=0)
-
-
-class BudgetSpec(BaseModel):
-    """T2: optional per-request resource budget override.
-
-    Missing fields fall through to Settings.queryplan.default_*. The
-    deadline_at lifecycle field on the runtime Budget is computed by
-    build_plan and never appears in the API surface.
-    """
-
-    latency_ms: int | None = Field(default=None, ge=1)
-    rerank_tier: Literal["off", "tier1", "tier2"] | None = None
-    max_evidence: int | None = Field(default=None, ge=1)
-    allow_external_reranker: bool | None = None
-
-    def to_planner_dict(self) -> dict:
-        """Convert to the dict shape expected by build_plan(budget_spec=...)."""
-        out: dict = {}
-        if self.latency_ms is not None:
-            out["latency_ms"] = self.latency_ms
-        if self.rerank_tier is not None:
-            out["rerank_tier"] = self.rerank_tier
-        if self.max_evidence is not None:
-            out["max_evidence"] = self.max_evidence
-        if self.allow_external_reranker is not None:
-            out["allow_external_reranker"] = self.allow_external_reranker
-        return out
-
-
-class RetrieveRequest(SearchRequest):
-    token_budget: int = Field(default=DEFAULT_TOKEN_BUDGET, ge=0, le=128000)
-
-
-class AnswerRequest(RetrieveRequest):
-    answer_token_budget: int | None = Field(default=None, ge=1, le=128000)
-    include_retrieve: bool = True
-
-
-class QaConversationTurn(BaseModel):
-    question: str = Field(..., min_length=1, max_length=500)
-    answer: str | None = Field(default=None, max_length=1200)
-
-
-class QaAnswerRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=1000)
-    include_retrieve: bool = True
-    conversation_context: list[QaConversationTurn] = Field(default_factory=list, max_length=3)
-
-
-class SearchFilters(BaseModel):
-    manual_id: str | None = None
-    brand: str | None = None
-    product_category: str | None = None
-    product_model: str | None = None
-    language: str | None = None
-    tags: list[str] = Field(default_factory=list)
-
-    def to_filter_dict(self) -> dict[str, object]:
-        return {
-            "manual_id": self.manual_id,
-            "brand": self.brand,
-            "product_category": self.product_category,
-            "product_model": self.product_model,
-            "language": self.language,
-            "tags": self.tags,
-        }
-
-
-class RebuildRequest(BaseModel):
-    docs_dir: str
-    kb_name: str = "default"
-
-
-class ManualMetadataValidationRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-    mode: str = "create"
-    current_manual_id: str | None = None
-
-
-class ManualMetadataUpdateRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-
-
-class ManualTagSuggestRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-    text_sample: str = Field(default="", max_length=4000)
-    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=24)
-
-
-class ManualLibraryRebuildRequest(BaseModel):
-    kb_name: str = "default"
-    mode: str = "full"
-    allow_fallback: bool = True
-
-
-class TagPolicyUpdateRequest(BaseModel):
-    kb_name: str = "default"
-    policy: dict[str, object]
-
-
-class TagRewriteRequest(BaseModel):
-    kb_name: str = "default"
-    source_tags: list[str]
-    target_tag: str
-    mode: str = "merge"
-    update_policy: bool = False
-    policy_alias_mode: str | None = None
-
-
-class AnchorRequest(BaseModel):
-    node_id: int
-    label: str
-    boost: float = Field(default=2.0, gt=0)
-    propagation_boost: float = Field(default=1.0, gt=0)
-    kb_name: str = "default"
-
-
-class CacheClearRequest(BaseModel):
-    kb_name: str | None = None
-
-
-class IndexGenBuildShadowRequest(BaseModel):
-    kb_name: str = "default"
-    docs_dir: str | None = None
-    embedding_model_id: str | None = None
-    embedding_model_version: str | None = None
-    parser_version: str | None = None
-    chunker_version: str | None = None
-    index_schema_version: int | None = None
-
-
-class IndexGenCancelShadowRequest(BaseModel):
-    kb_name: str = "default"
-
-
-class IndexGenSwapRequest(BaseModel):
-    kb_name: str = "default"
-
-
-class IndexGenRetireRequest(BaseModel):
-    kb_name: str = "default"
-    generation: int
-    force: bool = False
-
-
-class FeedbackSubmitRequest(BaseModel):
-    kb_name: str = "default"
-    trace_id: str = ""
-    search_id: str = ""
-    retrieve_id: str = ""
-    build_id: str = ""
-    query: str = Field(..., max_length=1000)
-    outcome: str
-    selected_results: list[dict[str, object]] = Field(default_factory=list, max_length=20)
-    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
-    selected_context_item_ids: list[str] = Field(default_factory=list, max_length=20)
-    answerable: bool | None = None
-    failure_reason: str = Field(default="", max_length=120)
-    expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
-    note: str = Field(default="", max_length=2000)
-    plan_id: str | None = Field(default=None, max_length=120)
-
-
-class FeedbackReviewRequest(BaseModel):
-    kb_name: str = "default"
-    status: str | None = None
-    operator_note: str | None = Field(default=None, max_length=2000)
-
-
-class FeedbackPromoteRequest(BaseModel):
-    kb_name: str = "default"
-    feedback_ids: list[str]
-    output_path: str | None = None
-    append: bool = False
-    overwrite: bool = False
 
 
 @app.get("/admin/manual-library")
@@ -566,7 +382,7 @@ def _spotlight_cache_suffix(request: SearchRequest) -> str:
 
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
     params = _search_param_values(request)
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    filter_dict, _narrowing = resolved_filter_dict(request, state, settings)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
@@ -592,7 +408,7 @@ def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
 
 def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
     params = _search_param_values(request)
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    filter_dict, _narrowing = resolved_filter_dict(request, state, settings)
     canonical_filters = normalize_filters(filter_dict)
     strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
     debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
@@ -631,7 +447,7 @@ def _build_and_log_plan(request: SearchRequest, state: GraphState):
     from .queryplan import PlanLog, build_plan
     from .agentic.surface import resolve_agentic_mode, stamp_plan_mode
 
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
+    filter_dict, _narrowing = resolved_filter_dict(request, state, settings)
     budget_spec = request.budget.to_planner_dict() if request.budget else None
     if request.agentic is not None:
         budget_spec = dict(budget_spec or {})
@@ -937,13 +753,13 @@ def qa_answer(
 ):
     effective_question = _qa_contextual_question(request)
     context_meta = _qa_context_meta(request)
-    route = _route_qa_question(effective_question, api_key)
+    route = route_qa_question(effective_question, api_key, app_state)
     if route["kind"] == "not_ready":
-        payload = _qa_not_ready_response(route)
+        payload = qa_not_ready_response(route)
         payload["context"] = context_meta
         return payload
     if route["kind"] == "clarification":
-        payload = _qa_clarification_response(request, route)
+        payload = qa_clarification_response(request, route)
         payload["context"] = context_meta
         return payload
 
@@ -988,125 +804,6 @@ def qa_answer(
         )
         set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
         raise
-
-
-def _route_qa_question(question: str, api_key: ApiKey) -> dict[str, object]:
-    candidates: list[dict[str, object]] = []
-    for kb_name in app_state.list_kbs():
-        if not api_key.allows_kb(kb_name):
-            continue
-        try:
-            state = app_state.get_kb(kb_name)
-        except KbNotLoadedError:
-            continue
-        candidates.append({
-            "kb_name": kb_name,
-            "label": _qa_kb_label(state),
-            "score": _qa_route_score(question, state),
-        })
-
-    if not candidates:
-        return {"kind": "not_ready", "candidates": []}
-    if len(candidates) == 1:
-        return {"kind": "answered", "kb_name": candidates[0]["kb_name"], "reason": "single_kb"}
-
-    ranked = sorted(candidates, key=lambda item: (-float(item["score"]), str(item["kb_name"])))
-    best = ranked[0]
-    second_score = float(ranked[1]["score"])
-    if float(best["score"]) >= 2 and float(best["score"]) >= second_score + 1:
-        return {"kind": "answered", "kb_name": best["kb_name"], "reason": "lexical_route"}
-    return {"kind": "clarification", "candidates": [_qa_public_candidate(item) for item in ranked[:5]]}
-
-
-def _qa_not_ready_response(route: dict[str, object]) -> dict[str, object]:
-    return {
-        "schema_version": "qa_answer.v1",
-        "route": {"kind": "not_ready", "candidates": route.get("candidates", [])},
-        "answer": {
-            "kind": "error",
-            "text": "The manual assistant is not ready yet. Please import manuals and rebuild the knowledge base before asking questions.",
-            "confidence": 0.0,
-            "citations": [],
-            "refusal_reason": "kb_not_ready",
-            "missing_evidence_hints": ["kb_not_ready"],
-            "model_id": None,
-            "model_version": None,
-            "prompt_version": None,
-            "warnings": [],
-        },
-        "warnings": ["qa_route:not_ready"],
-    }
-
-
-def _qa_clarification_response(request: QaAnswerRequest, route: dict[str, object]) -> dict[str, object]:
-    candidates = route.get("candidates", [])
-    return {
-        "schema_version": "qa_answer.v1",
-        "route": {"kind": "clarification", "candidates": candidates},
-        "answer": {
-            "kind": "clarification",
-            "text": "Which product or manual is this question about?",
-            "confidence": 0.0,
-            "citations": [],
-            "refusal_reason": "needs_clarification",
-            "missing_evidence_hints": ["choose_product_or_manual"],
-            "model_id": None,
-            "model_version": None,
-            "prompt_version": None,
-            "warnings": [],
-        },
-        "warnings": ["qa_route:needs_clarification"],
-        "question": request.question,
-    }
-
-
-def _qa_public_candidate(candidate: dict[str, object]) -> dict[str, object]:
-    return {
-        "kb_name": candidate["kb_name"],
-        "label": candidate["label"],
-    }
-
-
-def _qa_kb_label(state: GraphState) -> str:
-    labels: list[str] = []
-    for _, data in list(state.graph.nodes(data=True))[:50]:
-        metadata = data.get("metadata") or {}
-        for key in ("manual_title", "title", "product_model", "product_category", "brand"):
-            value = metadata.get(key) or data.get(key)
-            if value:
-                labels.append(str(value))
-    return labels[0] if labels else state.kb_name
-
-
-def _qa_route_score(question: str, state: GraphState) -> int:
-    query = question.casefold()
-    score = 0
-    if state.kb_name.casefold() in query:
-        score += 3
-    seen: set[str] = set()
-    for _, data in list(state.graph.nodes(data=True))[:80]:
-        metadata = data.get("metadata") or {}
-        values = [
-            data.get("header"),
-            data.get("path"),
-            data.get("source_file"),
-            metadata.get("manual_title"),
-            metadata.get("title"),
-            metadata.get("brand"),
-            metadata.get("product_category"),
-            metadata.get("product_model"),
-            metadata.get("manual_id"),
-        ]
-        for value in values:
-            if not value:
-                continue
-            text = str(value).casefold()
-            if text in seen:
-                continue
-            seen.add(text)
-            if len(text) >= 2 and text in query:
-                score += 2
-    return score
 
 
 def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
@@ -1212,7 +909,7 @@ def _search_impl(request: SearchRequest, http_request: Request, state: GraphStat
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict, narrowing = _resolved_filter_dict(request, state)
+        filter_dict, narrowing = resolved_filter_dict(request, state, settings)
         ghost_tag_args = tuple(
             GhostTag(
                 name=str(g.name),
@@ -1473,7 +1170,7 @@ def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: Graph
             {"aggregate": aggregate},
         )
     with start_span("tagmemorag.retrieve.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict, narrowing = _resolved_filter_dict(request, state)
+        filter_dict, narrowing = resolved_filter_dict(request, state, settings)
         ghost_tag_args = tuple(
             GhostTag(
                 name=str(g.name),
@@ -1964,10 +1661,23 @@ async def upload_manual(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, kb_name)
-    metadata_obj = _parse_metadata_form(metadata)
+    metadata_obj = parse_metadata_form(metadata)
     content = await file.read()
     record = upsert_manual(kb_name, metadata_obj, content, settings, overwrite=overwrite or settings.manual_library.allow_overwrite)
-    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="upload") if trigger_rebuild else {}
+    rebuild_payload = (
+        request_library_rebuild(
+            kb_name,
+            mode="auto",
+            allow_fallback=True,
+            trigger="upload",
+            settings=settings,
+            app_state=app_state,
+            embedder=embedder,
+            get_rebuild_queue=_get_rebuild_queue,
+        )
+        if trigger_rebuild
+        else {}
+    )
     structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=record.manual_id, action="upsert", status=record.status)
     return {"record": record.to_dict(), "rebuild_required": True, **rebuild_payload}
 
@@ -1985,15 +1695,15 @@ async def preview_manual_bulk_import(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, kb_name)
-    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
-    uploaded = await _bulk_uploaded_files(files)
+    metadata_text = await metadata_text_from_bulk_form(metadata, metadata_file)
+    uploaded = await bulk_uploaded_files(files)
     preview = preview_bulk_import(
         kb_name,
         metadata_text,
         metadata_format,
         uploaded,
         settings,
-        mode=_parse_bulk_mode(mode),
+        mode=parse_bulk_mode(mode),
         overwrite=overwrite,
     )
     structlog.get_logger().info(
@@ -2023,19 +1733,32 @@ async def import_manual_bulk(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, kb_name)
-    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
-    uploaded = await _bulk_uploaded_files(files)
+    metadata_text = await metadata_text_from_bulk_form(metadata, metadata_file)
+    uploaded = await bulk_uploaded_files(files)
     result = commit_bulk_import(
         kb_name,
         metadata_text,
         metadata_format,
         uploaded,
         settings,
-        mode=_parse_bulk_mode(mode),
+        mode=parse_bulk_mode(mode),
         overwrite=overwrite,
-        selected_rows=_parse_selected_rows(selected_rows),
+        selected_rows=parse_selected_rows(selected_rows),
     )
-    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="bulk_import") if trigger_rebuild and result.imported_count else {}
+    rebuild_payload = (
+        request_library_rebuild(
+            kb_name,
+            mode="auto",
+            allow_fallback=True,
+            trigger="bulk_import",
+            settings=settings,
+            app_state=app_state,
+            embedder=embedder,
+            get_rebuild_queue=_get_rebuild_queue,
+        )
+        if trigger_rebuild and result.imported_count
+        else {}
+    )
     structlog.get_logger().info(
         "manual_bulk_import",
         kb_name=kb_name,
@@ -2160,12 +1883,15 @@ def get_manual_library_diagnostics(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, kb_name)
-    return _manual_library_diagnostics(
+    return manual_library_diagnostics(
         kb_name,
         verify_blobs=verify_blobs,
         include_jobs=include_jobs,
         job_status=job_status,
         api_key=api_key,
+        settings=settings,
+        app_state=app_state,
+        get_rebuild_queue=_get_rebuild_queue,
     )
 
 
@@ -2197,7 +1923,7 @@ def get_manual_library_registry_audit(
                 "version": event.version,
                 "actor_id": event.actor_id,
                 "created_at": event.created_at,
-                "detail": _safe_audit_detail(event.detail),
+                "detail": safe_audit_detail(event.detail),
             }
             for event in newest_first
         ],
@@ -2240,7 +1966,7 @@ def preview_manual_library_tag_rewrite(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, request.kb_name)
-    mode = _parse_rewrite_mode(request.mode)
+    mode = parse_rewrite_mode(request.mode)
     preview = preview_tag_rewrite(
         request.kb_name,
         settings,
@@ -2258,8 +1984,8 @@ def commit_manual_library_tag_rewrite(
     _: None = Depends(rate_limit_dep),
 ):
     ensure_kb_access(api_key, request.kb_name)
-    mode = _parse_rewrite_mode(request.mode)
-    alias_mode = _parse_alias_mode(request.policy_alias_mode)
+    mode = parse_rewrite_mode(request.mode)
+    alias_mode = parse_alias_mode(request.policy_alias_mode)
     result = commit_tag_rewrite(
         request.kb_name,
         settings,
@@ -2288,11 +2014,15 @@ def rebuild_manual_library(
     ensure_kb_access(api_key, request.kb_name)
     if request.mode not in {"full", "incremental", "auto"}:
         raise ServiceError(ErrorCode.INVALID_INPUT, "rebuild mode must be full, incremental, or auto.", {"mode": request.mode})
-    return _request_library_rebuild(
+    return request_library_rebuild(
         request.kb_name,
         mode=request.mode,
         allow_fallback=request.allow_fallback,
         trigger="api",
+        settings=settings,
+        app_state=app_state,
+        embedder=embedder,
+        get_rebuild_queue=_get_rebuild_queue,
         top_level=True,
     )
 
@@ -2306,7 +2036,7 @@ def list_rebuild_jobs(
 ):
     if kb_name is not None:
         ensure_kb_access(api_key, kb_name)
-    queue = _require_rebuild_queue()
+    queue = require_rebuild_queue(settings, _get_rebuild_queue)
     jobs = [
         job
         for job in queue.list_jobs(kb_name=kb_name, status=status)
@@ -2321,7 +2051,7 @@ def inspect_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
+    queue = require_rebuild_queue(settings, _get_rebuild_queue)
     job = queue.inspect(job_id)
     ensure_kb_access(api_key, str(job["kb_name"]))
     return job
@@ -2333,7 +2063,7 @@ def cancel_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
+    queue = require_rebuild_queue(settings, _get_rebuild_queue)
     job = queue.get(job_id)
     ensure_kb_access(api_key, job.kb_name)
     cancelled = queue.cancel(job_id)
@@ -2346,7 +2076,7 @@ def retry_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
+    queue = require_rebuild_queue(settings, _get_rebuild_queue)
     job = queue.get(job_id)
     ensure_kb_access(api_key, job.kb_name)
     retried = queue.retry(job_id)
@@ -2474,232 +2204,8 @@ def admin_generation_status(
     return meta.to_dict()
 
 
-def _parse_metadata_form(metadata: str) -> dict[str, object]:
-    try:
-        parsed = json.loads(metadata)
-    except json.JSONDecodeError as exc:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be valid JSON.", {"error": str(exc)}) from exc
-    if not isinstance(parsed, dict):
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be a JSON object.")
-    return parsed
-
-
-def _parse_rewrite_mode(value: str):
-    mode = value.strip().lower()
-    if mode not in {"merge", "rename"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be merge or rename.", {"mode": value})
-    return mode
-
-
-def _parse_alias_mode(value: str | None):
-    if value is None or not str(value).strip():
-        return None
-    mode = str(value).strip().lower()
-    if mode not in {"synonym", "deprecated"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "policy_alias_mode must be synonym or deprecated.", {"policy_alias_mode": value})
-    return mode
-
-
-def _governed_filter_dict(kb_name: str, filters: SearchFilters | None) -> dict[str, object]:
-    filter_dict = filters.to_filter_dict() if filters else {}
-    tags = filter_dict.get("tags")
-    if isinstance(tags, list) and tags:
-        policy = load_tag_policy(kb_name, settings)
-        filter_dict["tags"] = resolve_tags_for_search([str(tag) for tag in tags], policy)
-    return filter_dict
-
-
-def _resolved_filter_dict(request: SearchRequest, state: GraphState) -> tuple[dict[str, object], NarrowingDecision]:
-    explicit_filters = _governed_filter_dict(request.kb_name, request.filters)
-    narrowing = infer_metadata_narrowing(
-        query_text=request.question,
-        graph=state.graph,
-        explicit_filters=explicit_filters,
-        enabled=settings.search.metadata_narrowing_enabled,
-        category_policy=settings.search.metadata_narrowing_category_policy,
-        brand_policy=settings.search.metadata_narrowing_brand_policy,
-        min_candidates=settings.search.metadata_narrowing_min_candidates,
-    )
-    return merge_inferred_filters(explicit_filters, narrowing), narrowing
-
-
-async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:
-    if metadata_file is not None:
-        content = await metadata_file.read()
-        try:
-            return content.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ServiceError(ErrorCode.INVALID_INPUT, "metadata_file must be UTF-8 text.", {"error": str(exc)}) from exc
-    if not metadata.strip():
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata or metadata_file is required.")
-    return metadata
-
-
-async def _bulk_uploaded_files(files: list[UploadFile] | None) -> list[BulkUploadedFile]:
-    uploaded: list[BulkUploadedFile] = []
-    for file in files or []:
-        if not file.filename:
-            continue
-        uploaded.append(BulkUploadedFile(filename=file.filename, content=await file.read()))
-    return uploaded
-
-
-def _parse_selected_rows(selected_rows: str) -> set[int] | None:
-    if not selected_rows.strip():
-        return None
-    try:
-        parsed = json.loads(selected_rows)
-    except json.JSONDecodeError as exc:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.", {"error": str(exc)}) from exc
-    if not isinstance(parsed, list):
-        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.")
-    rows: set[int] = set()
-    for item in parsed:
-        try:
-            rows.add(int(item))
-        except (TypeError, ValueError) as exc:
-            raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must contain only row numbers.", {"value": item}) from exc
-    return rows
-
-
-def _parse_bulk_mode(mode: str) -> BulkImportMode:
-    if mode not in {"create_only", "upsert", "dry_run"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create_only, upsert, or dry_run.", {"mode": mode})
-    return cast(BulkImportMode, mode)
-
-
-def _request_library_rebuild(
-    kb_name: str,
-    *,
-    mode: str,
-    allow_fallback: bool,
-    trigger: str,
-    top_level: bool = False,
-) -> dict[str, object]:
-    if settings.manual_library.rebuild_queue_enabled:
-        queue = _get_rebuild_queue()
-        job, coalesced = queue.enqueue(kb_name, mode=mode, allow_fallback=allow_fallback, trigger=trigger)
-        payload = job.to_dict(coalesced=coalesced)
-        return payload if top_level else {"rebuild_task": None, "rebuild_job": payload}
-    task = start_library_rebuild(
-        app_state,
-        kb_name,
-        settings,
-        embedder=embedder,
-        mode=mode,
-        allow_fallback=allow_fallback,
-    )
-    payload = task.to_dict()
-    return payload if top_level else {"rebuild_task": payload}
-
-
-def _manual_library_diagnostics(
-    kb_name: str,
-    *,
-    verify_blobs: bool,
-    include_jobs: bool,
-    job_status: str | None,
-    api_key: ApiKey,
-) -> dict[str, object]:
-    graph_state = app_state.kbs.get(kb_name)
-    registry = registry_inspect(kb_name, settings)
-    dirty_report = build_dirty_state_report(kb_name, settings, graph_state=graph_state)
-    blob_health: dict[str, object] = {
-        "checked": False,
-        "checked_count": 0,
-        "missing_count": 0,
-        "missing": [],
-        "blob_backend": settings.manual_library.blob_backend,
-    }
-    if registry.get("enabled") and verify_blobs:
-        verified = verify_registry_blobs(kb_name, settings)
-        blob_health.update(
-            {
-                "checked": True,
-                "checked_count": int(verified.get("checked_count") or 0),
-                "missing_count": int(verified.get("missing_count") or 0),
-                "missing": verified.get("missing") or [],
-            }
-        )
-    elif registry.get("enabled"):
-        blob_health["status"] = "unchecked"
-    else:
-        blob_health["status"] = "registry_disabled"
-
-    jobs: list[dict[str, object]] = []
-    if settings.manual_library.rebuild_queue_enabled and include_jobs:
-        queue = _get_rebuild_queue()
-        jobs = [
-            job
-            for job in queue.list_jobs(kb_name=kb_name, status=job_status)
-            if api_key.allows_kb(str(job.get("kb_name") or ""))
-        ]
-    queue_payload = {"enabled": settings.manual_library.rebuild_queue_enabled, "jobs": jobs}
-    operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
-    return {
-        "kb_name": kb_name,
-        "registry": registry,
-        "blob_health": blob_health,
-        "dirty": {
-            "pending_changes": bool(dirty_report.get("pending_changes")),
-            "dirty_manual_count": int(dirty_report.get("dirty_manual_count") or 0),
-            "dirty_manuals": dirty_report.get("dirty_manuals") or [],
-            "recovery_actions": dirty_report.get("recovery_actions") or [],
-            "operations_summary": operations,
-        },
-        "rebuild_queue": queue_payload,
-        "last_rebuild": {
-            "current_build_id": dirty_report.get("current_build_id") or "",
-            "last_successful_build_id": dirty_report.get("last_successful_build_id") or "",
-            "last_impact_summary": dirty_report.get("last_impact_summary"),
-            "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
-        },
-        "recommendations": _diagnostic_recommendations(registry, blob_health, dirty_report, jobs),
-    }
-
-
-def _diagnostic_recommendations(
-    registry: dict[str, object],
-    blob_health: dict[str, object],
-    dirty_report: dict[str, object],
-    jobs: list[dict[str, object]],
-) -> list[dict[str, str]]:
-    recommendations: list[dict[str, str]] = []
-    if registry.get("enabled") and not blob_health.get("checked"):
-        recommendations.append({"code": "verify_blobs", "label": "Verify registry blobs", "severity": "info"})
-    if int(blob_health.get("missing_count") or 0) > 0:
-        recommendations.append({"code": "restore_object_store", "label": "Restore missing blob objects before rebuild", "severity": "warning"})
-    if dirty_report.get("pending_changes"):
-        recommendations.append({"code": "inspect_dirty", "label": "Inspect dirty manuals", "severity": "warning"})
-    if any(str(job.get("status")) == "failed" for job in jobs):
-        recommendations.append({"code": "retry_rebuild", "label": "Retry failed queued rebuild", "severity": "warning"})
-    if any(str(job.get("status")) in {"queued", "retrying"} for job in jobs):
-        recommendations.append({"code": "inspect_queue", "label": "Inspect queued rebuild work", "severity": "info"})
-    qdrant_sync = dirty_report.get("last_qdrant_sync")
-    if isinstance(qdrant_sync, dict) and qdrant_sync.get("fallback_reason"):
-        recommendations.append({"code": "force_full_rebuild", "label": "Force a full rebuild after Qdrant fallback", "severity": "warning"})
-    if not registry.get("enabled"):
-        recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
-    return recommendations
-
-
-def _safe_audit_detail(detail: dict[str, object]) -> dict[str, object]:
-    allowed = {"source_file", "status", "checksum", "blob_backend", "size_bytes", "content_type"}
-    return {
-        key: value
-        for key, value in detail.items()
-        if key in allowed and (isinstance(value, (str, int, float, bool)) or value is None)
-    }
-
-
 def _get_rebuild_queue() -> RebuildQueue:
     global rebuild_queue
     if rebuild_queue is None or rebuild_queue.app_state is not app_state or rebuild_queue.cfg is not settings:
         rebuild_queue = RebuildQueue(app_state, settings, embedder=embedder)
     return rebuild_queue
-
-
-def _require_rebuild_queue() -> RebuildQueue:
-    if not settings.manual_library.rebuild_queue_enabled:
-        raise ServiceError(ErrorCode.INVALID_REQUEST, "Rebuild queue is not enabled.", {})
-    return _get_rebuild_queue()

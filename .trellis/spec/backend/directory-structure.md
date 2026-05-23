@@ -64,7 +64,10 @@ Stateful layer:
 
 Entry points:
 
-- `api.py`: FastAPI request/response models, error handlers, and route wiring.
+- `api.py`: canonical FastAPI app, global runtime state, middleware, error handlers, and route wiring.
+- `api_manual.py`: API-layer manual-library parsing, rebuild request, diagnostics, and audit helpers.
+- `api_models.py`: FastAPI/Pydantic request models re-exported by `api.py` for compatibility.
+- `api_qa.py`: API-layer QA routing and clarification/not-ready response helpers.
 - `cli.py`: thin package CLI entry point that builds the parser and dispatches parsed args.
 - `__main__.py`: forwards `python -m tagmemorag` to `cli.main`.
 - `cli_basic.py`: build/search/serve/config/langchain/retrain-residuals/auth CLI command execution.
