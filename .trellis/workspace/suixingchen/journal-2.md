@@ -1047,3 +1047,36 @@ Moved provider probe and production-provider smoke/verify command execution out 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 85: Complete CLI entrypoint split
+
+**Date**: 2026-05-23
+**Task**: Complete CLI entrypoint split
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Finished the CLI slimming pass by reducing cli.py to a thin parser/dispatch wrapper, moving parser construction to cli_parser.py, command routing to cli_dispatch.py, and remaining command execution into cli_basic.py, cli_eval.py, and cli_manual.py. CLI-focused tests passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b801c2d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
