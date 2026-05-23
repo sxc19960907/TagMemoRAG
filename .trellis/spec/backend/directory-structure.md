@@ -65,10 +65,15 @@ Stateful layer:
 Entry points:
 
 - `api.py`: FastAPI request/response models, error handlers, and route wiring.
-- `cli.py`: argparse commands for build, search, and serve.
+- `cli.py`: thin package CLI entry point that builds the parser and dispatches parsed args.
 - `__main__.py`: forwards `python -m tagmemorag` to `cli.main`.
+- `cli_basic.py`: build/search/serve/config/langchain/retrain-residuals/auth CLI command execution.
+- `cli_dispatch.py`: top-level CLI command dispatch table.
+- `cli_eval.py`: eval, answer-quality, readiness, pilot, and epa CLI command execution.
 - `cli_feedback.py`: feedback CLI command execution.
 - `cli_helpers.py`: shared argparse/file helper functions used by CLI commands.
+- `cli_manual.py`: manual-bulk, manual-library, tag, and qdrant CLI command execution.
+- `cli_parser.py`: argparse parser construction and command flag registration.
 - `cli_provider.py`: provider probe and production-provider CLI command execution.
 - `cli_source_import.py`: ManualsLib and public-web source import CLI command execution.
 - `qa_context.py`: user QA short-context normalization and summary helpers.

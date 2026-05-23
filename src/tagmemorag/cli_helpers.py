@@ -3,7 +3,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .embedder import create_embedder
 from .manual_bulk_import import BulkUploadedFile
+
+
+def create_embedder_from_config(cfg):
+    return create_embedder(
+        cfg.model.name,
+        cfg.model.device,
+        cfg.model.batch_size,
+        cfg.model.dim,
+        provider=cfg.model.provider,
+        base_url=cfg.model.base_url,
+        embeddings_url=cfg.model.embeddings_url,
+        api_key_env=cfg.model.api_key_env,
+        timeout_seconds=cfg.model.timeout_seconds,
+        dimensions=cfg.model.dimensions,
+        normalize=cfg.model.normalize,
+    )
 
 
 def add_bulk_args(parser: argparse.ArgumentParser, *, include_import_args: bool) -> None:

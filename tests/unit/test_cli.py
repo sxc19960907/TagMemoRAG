@@ -5,6 +5,8 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import cli_basic
+from tagmemorag import cli_eval
 from tagmemorag import cli_provider
 from tagmemorag import cli_source_import
 from tagmemorag import readiness
@@ -309,7 +311,7 @@ def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
             workdir="/tmp/tagmemorag-readiness-test",
         )
 
-    monkeypatch.setattr(cli, "run_readiness_smoke", _failed_smoke)
+    monkeypatch.setattr(cli_eval, "run_readiness_smoke", _failed_smoke)
 
     exit_code = cli.main(["readiness", "smoke"])
 
@@ -336,7 +338,7 @@ def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):
             next_steps=["Retain the pilot report."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
     output = tmp_path / "pilot.json"
 
     exit_code = cli.main(["pilot", "run", "--output", str(output)])
@@ -365,7 +367,7 @@ def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
             next_steps=["Review warning stages."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
 
     exit_code = cli.main([
         "pilot",
@@ -401,7 +403,7 @@ def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
             next_steps=["Investigate failed stage(s): eval."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
 
     exit_code = cli.main(["pilot", "run", "--format", "markdown"])
 
@@ -803,7 +805,7 @@ server:
         called["app"] = app
         called["kwargs"] = kwargs
 
-    monkeypatch.setattr(cli.uvicorn, "run", fake_run)
+    monkeypatch.setattr(cli_basic.uvicorn, "run", fake_run)
 
     assert cli.main(["serve", "--config", str(config)]) == 0
     assert called["kwargs"]["host"] == "127.0.0.9"
