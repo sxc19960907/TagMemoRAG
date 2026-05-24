@@ -68,6 +68,64 @@ def test_release_readiness_passes_clean_report_set(tmp_path):
     assert "actual_top_k" not in json.dumps(body, ensure_ascii=False)
 
 
+def test_release_readiness_surfaces_optional_ranking_pressure_without_warning(tmp_path):
+    paths = _reports(tmp_path)
+    _write(
+        tmp_path / "general_web_ranking_pressure.json",
+        {
+            "schema_version": "general_web_ranking_pressure.v1",
+            "summary": {
+                "ranking_pressure_count": 2,
+                "highest_pressure_rank_count": 5,
+            },
+            "items": [
+                {
+                    "case_id": "github-hello-world-repository",
+                    "top_results": [{"rank": 1, "action_cues": 6}],
+                }
+            ],
+        },
+    )
+
+    report = run_release_readiness(report_paths=paths)
+    body = report.to_dict()
+    general_web = next(stage for stage in body["stages"] if stage["name"] == "general_web_retrieval")
+    serialized = json.dumps(body, ensure_ascii=False)
+
+    assert body["status"] == "passed"
+    assert general_web["status"] == "passed"
+    assert general_web["detail"]["ranking_pressure_count"] == 2
+    assert general_web["detail"]["highest_pressure_rank_count"] == 5
+    assert any("non-blocking general-web ranking pressure" in step for step in body["next_steps"])
+    assert "github-hello-world-repository" not in serialized
+    assert "top_results" not in serialized
+
+
+def test_release_readiness_ignores_missing_optional_ranking_pressure_report(tmp_path):
+    paths = _reports(tmp_path)
+    paths["general_web_ranking_pressure"] = str(tmp_path / "missing-ranking-pressure.json")
+
+    report = run_release_readiness(report_paths=paths)
+    body = report.to_dict()
+    general_web = next(stage for stage in body["stages"] if stage["name"] == "general_web_retrieval")
+
+    assert body["status"] == "passed"
+    assert "ranking_pressure_count" not in general_web["detail"]
+    assert not any("ranking pressure" in step for step in body["next_steps"])
+
+
+def test_release_readiness_ignores_malformed_optional_ranking_pressure_report(tmp_path):
+    paths = _reports(tmp_path)
+    _write(tmp_path / "general_web_ranking_pressure.json", ["not", "an", "object"])
+
+    report = run_release_readiness(report_paths=paths)
+    body = report.to_dict()
+    general_web = next(stage for stage in body["stages"] if stage["name"] == "general_web_retrieval")
+
+    assert body["status"] == "passed"
+    assert "ranking_pressure_count" not in general_web["detail"]
+
+
 def test_release_readiness_warns_for_known_current_quality_gaps(tmp_path):
     paths = _reports(tmp_path)
     _write(

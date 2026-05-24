@@ -10,6 +10,7 @@ RELEASE_READINESS_SCHEMA_VERSION = "release_readiness.v1"
 
 DEFAULT_REPORT_PATHS = {
     "general_web_retrieval": ".tmp/eval/general-web-after-evidence-prior.json",
+    "general_web_ranking_pressure": ".tmp/eval/general-web-ranking-pressure.json",
     "multiformat_retrieval": ".tmp/eval/multiformat-after-fit-compaction.json",
     "mixed_domain_retrieval": ".tmp/eval/mixed-domain-after-evidence-prior.json",
     "realmanuals_retrieval": ".tmp/eval/realmanuals-after-evidence-prior.json",
@@ -101,15 +102,21 @@ class ReleaseReadinessReport:
 
 def run_release_readiness(*, report_paths: Mapping[str, str | Path] | None = None) -> ReleaseReadinessReport:
     paths = {key: str(value) for key, value in (report_paths or DEFAULT_REPORT_PATHS).items()}
+    optional = _optional_ranking_pressure(paths.get("general_web_ranking_pressure", ""))
     stages: list[ReleaseReadinessStage] = []
     for name in ("general_web_retrieval", "multiformat_retrieval", "mixed_domain_retrieval", "realmanuals_retrieval"):
-        stages.append(_retrieval_stage(name, paths.get(name, "")))
+        stages.append(_retrieval_stage(name, paths.get(name, ""), optional if name == "general_web_retrieval" else {}))
     for name in ("general_web_context", "general_web_context_tight", "multiformat_context", "multiformat_context_tight"):
         stages.append(_context_stage(name, paths.get(name, "")))
     for name in ("general_web_answer", "multiformat_answer", "product_qa_answer_quality"):
         stages.append(_answer_stage(name, paths.get(name, "")))
     status = _aggregate_status(stages)
-    return ReleaseReadinessReport(status=status, stages=stages, next_steps=_next_steps(status, stages), report_paths=paths)
+    return ReleaseReadinessReport(
+        status=status,
+        stages=stages,
+        next_steps=_next_steps(status, stages, optional),
+        report_paths=paths,
+    )
 
 
 def write_release_readiness_report(report: ReleaseReadinessReport, path: str | Path, *, fmt: str = "json") -> None:
@@ -124,7 +131,7 @@ def write_release_readiness_report(report: ReleaseReadinessReport, path: str | P
     output_path.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8")
 
 
-def _retrieval_stage(name: str, path: str) -> ReleaseReadinessStage:
+def _retrieval_stage(name: str, path: str, optional_detail: dict[str, Any] | None = None) -> ReleaseReadinessStage:
     data, error = _read_json(path)
     if error is not None:
         return ReleaseReadinessStage(name, "failed", {"path": path}, error=error)
@@ -136,6 +143,8 @@ def _retrieval_stage(name: str, path: str) -> ReleaseReadinessStage:
         "recall_at_k": round(float(summary.get("recall_at_k") or 0.0), 6),
         "mrr": round(float(summary.get("mrr") or 0.0), 6),
     }
+    if optional_detail:
+        detail.update(optional_detail)
     failures = []
     risks = []
     if detail["hit_at_k"] < gates["min_hit_at_k"]:
@@ -209,7 +218,7 @@ def _aggregate_status(stages: list[ReleaseReadinessStage]) -> str:
     return "passed"
 
 
-def _next_steps(status: str, stages: list[ReleaseReadinessStage]) -> list[str]:
+def _next_steps(status: str, stages: list[ReleaseReadinessStage], ranking_pressure: dict[str, Any] | None = None) -> list[str]:
     failed = [stage.name for stage in stages if stage.status == "failed"]
     warning = [stage.name for stage in stages if stage.status == "warning"]
     if status == "failed":
@@ -227,10 +236,45 @@ def _next_steps(status: str, stages: list[ReleaseReadinessStage]) -> list[str]:
         if any(name.endswith("_context_tight") for name in warning):
             steps.insert(1, "Prioritize remaining tight-budget context completeness gaps.")
         return steps
-    return [
+    steps = [
         "Retain this report with the release record.",
         "Run live provider and deployment environment checks for the target release profile.",
     ]
+    if ranking_pressure and int(ranking_pressure.get("ranking_pressure_count") or 0) > 0:
+        steps.append(
+            "Track non-blocking general-web ranking pressure before the next retrieval-quality batch: "
+            f"{int(ranking_pressure.get('ranking_pressure_count') or 0)} case(s), "
+            f"highest pressure ranks={int(ranking_pressure.get('highest_pressure_rank_count') or 0)}."
+        )
+    return steps
+
+
+def _optional_ranking_pressure(path: str) -> dict[str, Any]:
+    data, error = _read_optional_json(path)
+    if error is not None:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    raw_summary = data.get("summary")
+    if not isinstance(raw_summary, dict):
+        return {}
+    summary = dict(raw_summary)
+    count = int(summary.get("ranking_pressure_count") or 0)
+    if count <= 0:
+        return {}
+    return {
+        "ranking_pressure_count": count,
+        "highest_pressure_rank_count": int(summary.get("highest_pressure_rank_count") or 0),
+    }
+
+
+def _read_optional_json(path: str) -> tuple[dict[str, Any], dict[str, str] | None]:
+    if not path:
+        return {}, {"type": "MissingOptionalReportPath", "reason": "optional_report_path_not_configured"}
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8")), None
+    except (OSError, json.JSONDecodeError):
+        return {}, {"type": "OptionalReportReadError", "reason": "optional_report_unavailable"}
 
 
 def _compact_detail(detail: dict[str, Any]) -> str:
