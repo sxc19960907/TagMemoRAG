@@ -96,6 +96,68 @@ def test_lexical_search_prioritizes_specific_multi_term_manual_body():
     assert matches[0].node_id == 1
 
 
+def test_lexical_search_prioritizes_dense_body_hits_over_broad_page_chrome():
+    graph = build_graph(
+        [
+            Chunk(
+                "GitHub Docs navigation repository README Markdown project search menu.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "A repository is a folder that contains related items. README files are written in Markdown.",
+                "About repositories and README files",
+                ("Hello World - GitHub Docs", "About repositories"),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub repository README Markdown project folder", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_prioritizes_body_phrase_over_repeated_page_title_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The Python Tutorial documentation source modules index navigation.",
+                "The Python Tutorial — Python documentation",
+                ("The Python Tutorial",),
+                2,
+                1,
+                "public_web/python.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "The Python interpreter and the extensive standard library are freely available in source or binary form.",
+                "The Python Tutorial — Python documentation",
+                ("The Python Tutorial",),
+                2,
+                2,
+                "public_web/python.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "Python standard library source binary modules documentation", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
 def test_lexical_search_does_not_reward_source_file_category_as_topic_hit():
     graph = build_graph(
         [

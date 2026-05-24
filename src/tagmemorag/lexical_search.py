@@ -47,6 +47,7 @@ class _SearchField:
     weight: float
     allow_term_hits: bool = True
     allow_identity_hits: bool = True
+    allow_proximity_hits: bool = False
 
 
 def lexical_search(
@@ -61,6 +62,7 @@ def lexical_search(
     model_boost: float = 0.12,
 ) -> list[LexicalMatch]:
     tokens = extract_lexical_tokens(query, min_token_chars=min_token_chars)
+    ordered_terms = _ordered_ordinary_terms(query, min_token_chars=min_token_chars)
     if not tokens or candidate_k <= 0:
         return []
     eligible = set(graph.nodes) if eligible_node_ids is None else set(eligible_node_ids)
@@ -77,6 +79,7 @@ def lexical_search(
             boost=float(boost),
             exact_code_boost=float(exact_code_boost),
             model_boost=float(model_boost),
+            ordered_terms=ordered_terms,
             cap=cap,
         )
         if score > 0.0:
@@ -166,7 +169,7 @@ def _node_search_fields(node: Mapping[str, Any]) -> list[_SearchField]:
     body = str(node.get("text", ""))
     fields = [
         _SearchField(heading, 1.0, allow_term_hits=True, allow_identity_hits=True),
-        _SearchField(body, 0.9, allow_term_hits=True, allow_identity_hits=False),
+        _SearchField(body, 0.9, allow_term_hits=True, allow_identity_hits=False, allow_proximity_hits=True),
         _SearchField(identity, 0.85, allow_term_hits=False, allow_identity_hits=True),
     ]
     return fields
@@ -179,6 +182,7 @@ def _score_fields(
     boost: float,
     exact_code_boost: float,
     model_boost: float,
+    ordered_terms: Sequence[str] = (),
     cap: float,
 ) -> tuple[float, str]:
     score = 0.0
@@ -203,9 +207,48 @@ def _score_fields(
             if text_hits:
                 score += boost * field.weight * min(4, text_hits)
                 best_mode = _max_mode(best_mode, "ordinary")
+            if field.allow_proximity_hits:
+                proximity_hits = _proximity_hits(normalized, ordered_terms)
+                if proximity_hits:
+                    score += boost * field.weight * 0.5 * min(2, proximity_hits)
+                    best_mode = _max_mode(best_mode, "ordinary")
     if score <= 0.0:
         return 0.0, ""
     return min(score, cap), best_mode or "ordinary"
+
+
+def _ordered_ordinary_terms(query: str, *, min_token_chars: int) -> tuple[str, ...]:
+    terms: list[str] = []
+    for raw in _ALNUM_RE.findall(query.lower()):
+        token = raw.strip("-_")
+        if not token or token.isdigit():
+            continue
+        compact = _compact_token(token)
+        if len(compact) >= 4 and any(ch.isalpha() for ch in compact) and any(ch.isdigit() for ch in compact):
+            continue
+        if _CODE_RE.match(token) or _CODE_RE.match(compact):
+            continue
+        if len(token) >= min_token_chars and token not in _STOP_WORDS:
+            terms.append(token)
+    return tuple(terms)
+
+
+def _proximity_hits(normalized: str, ordered_terms: Sequence[str]) -> int:
+    if len(ordered_terms) < 2:
+        return 0
+    hits = 0
+    for left, right in zip(ordered_terms, ordered_terms[1:]):
+        if _terms_within_window(normalized, left, right):
+            hits += 1
+    return hits
+
+
+def _terms_within_window(text: str, left: str, right: str, *, max_gap_words: int = 2) -> bool:
+    pattern = re.compile(
+        rf"\b{re.escape(left)}\b(?:\W+\w+){{0,{max_gap_words}}}\W+\b{re.escape(right)}\b",
+        re.IGNORECASE,
+    )
+    return bool(pattern.search(text))
 
 
 def _contains_token_variant(normalized: str, compact: str, token: str) -> bool:

@@ -554,6 +554,8 @@ python -m tagmemorag eval run \
 
 The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence. Lexical scoring must also keep identity fields (`source_file`, `manual_id`, `product_model`, category tags) separate from topic fields: identity fields may match exact model/code tokens for narrowing, but ordinary topic terms should be rewarded from headings/body text. Specific multi-term body matches (for example `hot air bottom heater`) need enough headroom to outrank broad table-of-contents headings like `Choosing the Cooking System`.
 
+As of 2026-05-24, lexical scoring gives a small bounded bonus for adjacent/near-adjacent ordinary query terms only in chunk body text. This is intended for long web documentation where repeated page titles and navigation text can tie with the actual evidence chunk (for example `standard library` and `source or binary`). Do not apply this proximity bonus to identity metadata or page-title-only fields; those fields are useful for narrowing but should not look like evidence-bearing prose.
+
 **Mixed-domain shared-KB slice.** As of 2026-05-23, `tests/fixtures/eval/mixed_knowledge.jsonl` validates that real product manuals and public web documentation can coexist in one shared KB without obvious top-ranked cross-domain pollution. Run it after seeding public web docs:
 
 ```text
