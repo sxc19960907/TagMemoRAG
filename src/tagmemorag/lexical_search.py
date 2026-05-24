@@ -195,6 +195,7 @@ def _score_fields(
     cap: float,
 ) -> tuple[float, str]:
     score = 0.0
+    evidence_tiebreak = 0.0
     best_mode = ""
     for field in fields:
         normalized = field.text.lower()
@@ -211,7 +212,8 @@ def _score_fields(
                     best_mode = _max_mode(best_mode, "model")
                     break
         if field.allow_term_hits:
-            text_hits = sum(1 for token in tokens["ordinary"] if token in normalized)
+            normalized_words = _normalized_word_set(normalized)
+            text_hits = sum(1 for token in tokens["ordinary"] if _ordinary_term_hit(normalized, normalized_words, token))
             text_hits += sum(1 for token in tokens["cjk"] if token in normalized)
             if text_hits:
                 score += boost * field.weight * min(4, text_hits)
@@ -226,9 +228,11 @@ def _score_fields(
                     if compact_hits:
                         score += boost * field.weight * 0.35 * min(2, compact_hits)
                         best_mode = _max_mode(best_mode, "ordinary")
+                    evidence_tiebreak += boost * 0.01 * min(8, text_hits)
+                    evidence_tiebreak += boost * 0.015 * min(4, compact_hits)
     if score <= 0.0:
         return 0.0, ""
-    return min(score, cap), best_mode or "ordinary"
+    return min(score, cap) + min(boost * 0.12, evidence_tiebreak), best_mode or "ordinary"
 
 
 def _ordered_ordinary_terms(query: str, *, min_token_chars: int) -> tuple[str, ...]:
@@ -268,7 +272,8 @@ def _terms_within_window(text: str, left: str, right: str, *, max_gap_words: int
 def _compact_window_hits(text: str, terms: set[str], *, window_words: int = 14) -> int:
     if len(terms) < 3:
         return 0
-    words = _ALNUM_RE.findall(text.lower())
+    normalized_terms = {_normalize_english_term(term) for term in terms}
+    words = [_normalize_english_term(word) for word in _ALNUM_RE.findall(text.lower())]
     if len(words) < 24:
         return 0
     best = 0
@@ -280,6 +285,27 @@ def _compact_window_hits(text: str, terms: set[str], *, window_words: int = 14) 
         if best >= 5:
             break
     return max(0, best - 2)
+
+
+def _ordinary_term_hit(text: str, normalized_words: set[str], token: str) -> bool:
+    return token in text or _normalize_english_term(token) in normalized_words
+
+
+def _normalized_word_set(text: str) -> set[str]:
+    return {_normalize_english_term(word) for word in _ALNUM_RE.findall(text.lower())}
+
+
+def _normalize_english_term(token: str) -> str:
+    value = token.lower().strip("-_")
+    if len(value) > 4 and value.endswith("ies"):
+        return value[:-3] + "y"
+    if len(value) > 5 and value.endswith("sses"):
+        return value[:-2]
+    if len(value) > 4 and value.endswith(("ches", "shes", "xes", "zes")):
+        return value[:-2]
+    if len(value) > 3 and value.endswith("s") and not value.endswith("ss"):
+        return value[:-1]
+    return value
 
 
 def _is_web_document(node: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool:

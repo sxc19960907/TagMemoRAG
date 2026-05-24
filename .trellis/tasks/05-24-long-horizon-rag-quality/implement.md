@@ -28,4 +28,11 @@
 
 9. [x] Rerun the full baseline matrix.
 10. [x] Update specs/journal with the final result and next recommended phase.
-11. [ ] Commit coherent changes.
+11. [x] Commit coherent changes.
+
+## Phase 5: Ranking Quality Follow-Up
+
+12. [x] Diagnose public-web tie cases from the post-context-expansion matrix.
+13. [x] Implement a bounded lexical evidence tie-break and plural normalization.
+14. [x] Rerun retrieval and answer diagnostics across general web, multi-format, mixed-domain, real manuals, and product-manual answer quality.
+15. [ ] Commit coherent changes.

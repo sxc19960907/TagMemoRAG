@@ -191,6 +191,38 @@ def test_lexical_search_rewards_compact_body_evidence_terms():
     assert matches[0].node_id == 1
 
 
+def test_lexical_search_normalizes_simple_english_plural_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The overview mentions repositories and files in broad navigation.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "You can think of a repository as a folder that contains related items. "
+                "Repository files include README files written in Markdown.",
+                "About repositories",
+                ("Hello World - GitHub Docs", "About repositories"),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub repositories README files Markdown project folders", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
 def test_lexical_search_does_not_reward_source_file_category_as_topic_hit():
     graph = build_graph(
         [

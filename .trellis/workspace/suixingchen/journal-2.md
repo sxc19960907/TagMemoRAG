@@ -1580,3 +1580,38 @@ Ran a longer real-data quality batch across public web, multi-format, mixed-doma
 ### Next Steps
 
 - Consider a ranking-layer evidence usefulness score to demote table-of-contents and other low-answerability chunks while preserving useful adjacent context.
+
+
+## Session 89: Public-web lexical evidence tie-break
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Continued the long-horizon RAG quality task after the sparse-heading context batch. Diagnosed public-web low-MRR cases and found repeated title/identity fields saturating lexical scores. Added lightweight English plural normalization plus a bounded body-only evidence tie-break to improve public-web ordering without disturbing product manuals or mixed-domain retrieval.
+
+### Main Changes
+
+- Normalized simple English plural ordinary terms in lexical matching.
+- Added a tiny post-cap body evidence tie-break based on body term hits and compact evidence windows.
+- Added unit coverage for plural normalization on GitHub repository/README style evidence.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_lexical_search.py tests/unit/test_search_runtime_phase1.py tests/unit/test_retrieval.py -q`
+- [OK] general-web retrieval: 7 cases, hit@k=1.0, recall@k=0.928571, MRR=0.579932
+- [OK] realmanuals retrieval: 10 cases, hit@k=1.0, recall@k=0.966667, MRR=0.708333
+- [OK] multi-format retrieval: 3 cases, hit@k=1.0, recall@k=1.0, MRR=0.611111
+- [OK] mixed-domain retrieval: 4 cases, hit@k=1.0, MRR=1.0
+- [OK] general-web and multi-format answer diagnostics
+- [OK] product-manual QA answer quality
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Avoid pushing lexical boosts much further; the next quality step should be a first-class evidence usefulness/reranking signal for definition-style and answer-bearing chunks.

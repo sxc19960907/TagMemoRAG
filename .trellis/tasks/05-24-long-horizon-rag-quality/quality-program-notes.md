@@ -99,3 +99,49 @@ Local test command:
 Next recommended phase:
 
 - Move from context rescue to ranking quality: demote directory/table-of-contents style chunks or add a first-class lightweight evidence usefulness score. The current batch proved that sparse heading chunks are useful entry points, but they should not be the only text passed to generation.
+
+## Phase 5 Ranking Quality Batch
+
+Target: public-web lexical tie cases where many chunks share the same page title, source identity, and repeated query terms.
+
+Diagnosis:
+
+- Several general-web cases had relevant evidence inside top-k but below broader overview/navigation chunks.
+- `github-hello-world-repository` had only one of two relevant chunks in top-8 (`recall@k=0.5`).
+- `irs-free-file-agi-guided-tax` ranked the AGI threshold evidence at rank 3 (`mrr=0.333333`) because many IRS chunks saturated the lexical cap.
+- Raw lexical diagnostics showed repeated title/identity fields and capped scores producing large tie groups.
+
+Kept improvement:
+
+- Added lightweight English singular/plural normalization for ordinary lexical terms, e.g. `repositories` -> `repository`, `files` -> `file`, and `branches` -> `branch`.
+- Added a bounded body-only evidence tie-break after the lexical cap. The maximum tie-break is `boost * 0.12`, so it breaks ties without turning into a broad score boost.
+- The tie-break only uses body term density and compact-window evidence; identity fields still help matching but do not dominate the tie-break.
+
+Regression matrix:
+
+| Slice | Cases | hit@k | recall@k | MRR | Status |
+|-------|-------|-------|----------|-----|--------|
+| General web retrieval | 7 | 1.000000 | 0.928571 | 0.579932 | passed |
+| Multi-format retrieval | 3 | 1.000000 | 1.000000 | 0.611111 | passed |
+| Mixed-domain retrieval | 4 | 1.000000 | 1.000000 | 1.000000 | passed |
+| Real manuals retrieval | 10 | 1.000000 | 0.966667 | 0.708333 | passed |
+
+Observed wins:
+
+- General-web recall improved from `0.857143` to `0.928571`.
+- `github-hello-world-repository` recall improved from `0.5` to `1.0`; the second relevant repository-as-folder chunk entered rank 8.
+- `irs-free-file-agi-guided-tax` MRR improved from `0.333333` to `0.5`; the AGI threshold chunk moved from rank 3 to rank 2.
+
+Answer diagnostics:
+
+- General web answer: 7 cases, failed=0.
+- Multi-format answer: 3 cases, failed=0.
+- Product-manual QA answer quality: 6 cases passed.
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_lexical_search.py tests/unit/test_search_runtime_phase1.py tests/unit/test_retrieval.py -q` -> 37 passed.
+
+Remaining gap:
+
+- `github-hello-world-repository` still has relevant evidence at ranks 6 and 8. Improving this further likely needs a first-class usefulness/reranking signal for definition-style chunks, not a stronger lexical boost.
