@@ -1,0 +1,3 @@
+{"path":"README.md","reason":"Primary user-facing eval and retrieval tuning guidance."}
+{"path":"docs/eval-baseline-workflow.md","reason":"Detailed eval workflow documentation where the reranking gate belongs."}
+{"path":"scripts/reranking_eval_gate.py","reason":"CLI documented by this task."}

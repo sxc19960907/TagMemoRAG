@@ -89,6 +89,34 @@ uv run python scripts/summarize_eval_case_review.py \
 
 The case review summary is bounded by default. It includes case ids, metrics, failure reasons, negative-hit summaries, and top result source/header pairs. It omits raw queries and snippets unless `--include-query` is explicitly passed for local review.
 
+## Running the reranking evaluation gate
+
+Use the reranking evaluation gate before shipping any general-purpose reranking
+or evidence-usefulness change. It compares retained baseline and candidate JSON
+reports; it does not run retrieval, call providers, or inspect raw document
+content.
+
+```bash
+uv run python scripts/reranking_eval_gate.py \
+  --baseline-readiness .tmp/eval/release-readiness-with-ranking-pressure.json \
+  --candidate-readiness .tmp/eval/rerank-batch-release-readiness.json \
+  --baseline-ranking-pressure .tmp/eval/general-web-ranking-pressure.json \
+  --candidate-ranking-pressure .tmp/eval/rerank-batch-ranking-pressure.json \
+  --format markdown
+```
+
+Exit code `0` means the candidate satisfies the bounded gate. Exit code `1`
+means a ship gate failed: release readiness is not `passed`, general-web
+hit/recall/MRR decreased, ranking-pressure counts increased, or a tracked
+pressure case moved later. Exit code `2` means an input report could not be read
+or parsed.
+
+The gate output intentionally contains only readiness status, aggregate metrics,
+pressure counts, and checked-in fixture case ids. It must not include raw query
+text, snippets, `actual_top_k`, vectors, provider responses, secrets, or full
+candidate lists. Keep generated `.tmp` reports out of git; commit only bounded
+summaries in task notes when needed.
+
 ## Running answer-quality diagnostics
 
 Answer-quality diagnostics are separate from ranking baselines. They use

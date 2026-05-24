@@ -1095,6 +1095,23 @@ the README/Markdown explanation may be returned as separate chunks. The MDN and
 IRS cases likewise include complementary evidence so answer-quality checks see
 more than a single easy snippet.
 
+Before shipping a reranking or evidence-usefulness change, compare baseline and
+candidate retained reports with the offline reranking evaluation gate:
+
+```bash
+.venv/bin/python scripts/reranking_eval_gate.py \
+  --baseline-readiness .tmp/eval/release-readiness-with-ranking-pressure.json \
+  --candidate-readiness .tmp/eval/rerank-batch-release-readiness.json \
+  --baseline-ranking-pressure .tmp/eval/general-web-ranking-pressure.json \
+  --candidate-ranking-pressure .tmp/eval/rerank-batch-ranking-pressure.json \
+  --format markdown
+```
+
+The gate fails if release readiness is no longer `passed`, if general-web
+hit/recall/MRR regresses, if ranking pressure gets worse, or if tracked GitHub
+pressure cases move later. Its output is bounded to metrics and checked-in case
+ids; do not commit generated `.tmp` reports.
+
 Use the multi-format real-knowledge suite to validate format diversity with
 real public sources. It materializes HTML-derived Markdown, a text-based public
 PDF, and DOCX-derived Markdown under `.tmp` before running the normal build and
