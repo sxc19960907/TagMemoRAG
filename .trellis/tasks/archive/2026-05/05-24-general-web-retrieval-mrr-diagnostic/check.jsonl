@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Check changes against backend retrieval, general-web eval, and public-web source retention contracts."}
+{"file": ".trellis/tasks/archive/2026-05/05-24-general-rag-release-warning-hardening/diagnostic-notes.md", "reason": "Ensure this task does not reintroduce rejected broad evidence-prior behavior."}
