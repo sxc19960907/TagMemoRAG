@@ -62,3 +62,39 @@ Decision:
   baseline.
 - Next child should be an observational evidence-usefulness dry run that emits a
   bounded report without changing retrieval order.
+
+## 2026-05-24 Child 3: Evidence Usefulness Dry Run
+
+Child task: `05-24-evidence-usefulness-dry-run`
+
+Result:
+
+- Added `src/tagmemorag/evidence_usefulness_diagnostic.py`.
+- Added `scripts/diag_evidence_usefulness.py`.
+- Added focused unit coverage for summary calculations, privacy omissions,
+  Markdown rendering, and CLI invalid input handling.
+- Focused tests: `26 passed`.
+- Local dry run on `.tmp/eval/general-web-after-evidence-refinement.json`:
+  - cases: `7`
+  - matched cases: `7`
+  - average matched usefulness: `0.568571`
+  - average pre-match usefulness: `0.123810`
+  - matched beats pre-match count: `7`
+  - useful evidence under-ranked count: `0`
+- Privacy keyword scan over generated JSON/Markdown found no forbidden raw
+  payload markers checked by this task.
+- Batch gate after the dry run: `passed`, release readiness `passed`,
+  reranking gate `passed`, failed checks `[]`.
+
+Classification: `ship`
+
+Decision:
+
+- Do not convert the usefulness score into runtime ranking weight yet. The
+  general-web pressure cases show matched evidence has stronger usefulness
+  cues than earlier unmatched ranks, so a naive usefulness boost would be an
+  under-evidenced production change.
+- Next child should diagnose same-page multi-evidence ordering for the two
+  GitHub Hello World low-MRR cases. Focus on rank-local features, duplicate
+  page/header effects, and expected-label alignment before proposing any
+  scoring candidate.

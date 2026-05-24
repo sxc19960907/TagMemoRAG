@@ -1,9 +1,9 @@
 {
-  "id": "general-rag-stability-program",
-  "name": "general-rag-stability-program",
-  "title": "General RAG stability program",
+  "id": "evidence-usefulness-dry-run",
+  "name": "evidence-usefulness-dry-run",
+  "title": "Evidence usefulness dry run",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -18,12 +18,8 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [
-    "05-24-baseline-batch-self-check",
-    "05-24-gate-batch-runner",
-    "05-24-evidence-usefulness-dry-run"
-  ],
-  "parent": null,
+  "children": [],
+  "parent": "05-24-general-rag-stability-program",
   "relatedFiles": [],
   "notes": "",
   "meta": {}
