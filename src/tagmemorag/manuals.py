@@ -25,7 +25,7 @@ MANUAL_METADATA_FIELDS = (
     "checksum",
     "notes",
 )
-GENERIC_METADATA_FIELDS = ("domain", "doc_type", "remote_id", "url")
+GENERIC_METADATA_FIELDS = ("domain", "doc_type", "remote_id", "url", "source_format")
 
 
 @dataclass(frozen=True)

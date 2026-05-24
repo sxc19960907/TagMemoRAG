@@ -65,6 +65,7 @@ def test_manual_node_attrs_honors_generic_sidecar_metadata():
             "doc_type": "documentation",
             "remote_id": "https://docs.python.org/3/tutorial/index.html",
             "url": "https://docs.python.org/3/tutorial/index.html",
+            "source_format": "html",
         },
     )
 
@@ -78,4 +79,5 @@ def test_manual_node_attrs_honors_generic_sidecar_metadata():
     assert attrs["remote_id"] == "https://docs.python.org/3/tutorial/index.html"
     assert attrs["attributes"]["manual_id"] == "python-tutorial"
     assert attrs["attributes"]["url"] == "https://docs.python.org/3/tutorial/index.html"
+    assert attrs["attributes"]["source_format"] == "html"
     assert "category:software-docs" in attrs["tags"]

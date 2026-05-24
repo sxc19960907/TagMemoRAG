@@ -1095,6 +1095,37 @@ the README/Markdown explanation may be returned as separate chunks. The MDN and
 IRS cases likewise include complementary evidence so answer-quality checks see
 more than a single easy snippet.
 
+Use the multi-format real-knowledge suite to validate format diversity with
+real public sources. It materializes HTML-derived Markdown, a text-based public
+PDF, and DOCX-derived Markdown under `.tmp` before running the normal build and
+eval pipeline:
+
+```bash
+.venv/bin/python scripts/seed_multiformat_real_knowledge.py \
+  --output-dir .tmp/multiformat-real-knowledge \
+  --kb multiformat_real
+
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8 \
+  --min-recall-at-k 0.0 \
+  --min-mrr 0.0 \
+  --min-hit-at-k 0.0
+
+.venv/bin/python scripts/diag_multiformat_answer_eval.py \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+```
+
+The committed suite stores source URLs and expected evidence only. Downloaded
+PDF/DOCX files and converted Markdown remain runtime artifacts.
+
 Use the mixed-domain diagnostic to validate that real manuals and public docs
 can coexist in one shared KB without obvious top-ranked cross-domain pollution:
 

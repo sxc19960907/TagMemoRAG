@@ -49,6 +49,7 @@ def document_metadata_from_manual(metadata: ManualMetadata) -> DocumentMetadata:
         "checksum": metadata.checksum,
         "remote_id": metadata.extra.get("remote_id", ""),
         "url": metadata.extra.get("url", ""),
+        "source_format": metadata.extra.get("source_format", ""),
     }
     tags = _dedupe_tags(
         (

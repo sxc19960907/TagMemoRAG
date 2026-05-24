@@ -576,6 +576,28 @@ scripts/seed_general_web_eval.sh
 
 This slice should be run explicitly when parser behavior, public-web import, ranking, context packing, or answer generation changes. Keep sources stable and official; avoid news/current-event pages because wording churn turns the benchmark into a maintenance burden instead of a quality signal.
 
+**Multi-format real knowledge slice.** As of 2026-05-24, `scripts/seed_multiformat_real_knowledge.py` materializes an opt-in real-source corpus that covers HTML-derived Markdown, a text-based public PDF, and DOCX-derived Markdown. DOCX is handled as source materialization, not as a new native parser suffix: the script safely reads OpenXML text from the zipped `word/document.xml`, writes Markdown plus metadata, and then the normal `.md/.pdf` build path indexes the corpus. Metadata sidecars preserve `source_format` (`html`, `pdf`, `docx`) along with `domain`, `doc_type`, `remote_id`, and `url`, so eval cases can verify both content and format lineage. Run it with:
+
+```text
+.venv/bin/python scripts/seed_multiformat_real_knowledge.py \
+  --output-dir .tmp/multiformat-real-knowledge \
+  --kb multiformat_real
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+.venv/bin/python scripts/diag_multiformat_answer_eval.py \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+```
+
+Use this slice before broad parser, source-ingestion, ranking, context-packing, or answer-synthesis changes. Do not commit downloaded third-party PDF/DOCX/HTML bodies; only scripts, source URLs, metadata contracts, and eval expectations belong in git.
+
 **Mixed-domain shared-KB slice.** As of 2026-05-23, `tests/fixtures/eval/mixed_knowledge.jsonl` validates that real product manuals and public web documentation can coexist in one shared KB without obvious top-ranked cross-domain pollution. Run it after seeding public web docs:
 
 ```text

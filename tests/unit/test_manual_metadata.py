@@ -63,6 +63,7 @@ def test_manual_metadata_from_sidecar_preserves_generic_extra_fields(tmp_path):
                 "doc_type": "documentation",
                 "remote_id": "https://docs.python.org/3/tutorial/index.html",
                 "url": "https://docs.python.org/3/tutorial/index.html",
+                "source_format": "html",
             }
         ),
         encoding="utf-8",
@@ -76,10 +77,12 @@ def test_manual_metadata_from_sidecar_preserves_generic_extra_fields(tmp_path):
         "doc_type": "documentation",
         "remote_id": "https://docs.python.org/3/tutorial/index.html",
         "url": "https://docs.python.org/3/tutorial/index.html",
+        "source_format": "html",
     }
     attrs = metadata.to_node_attrs()
     assert attrs["domain"] == "software_docs"
     assert attrs["doc_type"] == "documentation"
+    assert attrs["source_format"] == "html"
 
 
 def test_fallback_manual_metadata_uses_relative_path_and_parent_category(tmp_path):
