@@ -569,6 +569,8 @@ scripts/seed_general_web_eval.sh
 
 The diagnostic stages real PDFs from `product_manuals/` and seeded public docs from `.tmp/general-web-eval/general_web` into a temporary corpus, then runs the standard eval runner with a single `kb_name`. Cases use positive expectations and wrong-domain negatives. Because it depends on runtime/materialized docs, it is excluded from fixture-only baseline CI and should be run explicitly alongside `general_web.jsonl` and `realmanuals.jsonl` when retrieval ranking, metadata narrowing, parser behavior, or answer evidence selection changes.
 
+Multi-evidence questions should list every independently useful supporting chunk as a `relevant` entry instead of forcing one canonical chunk. For example, the GitHub repository/README query is supported by both the repository/folder definition and the README/Markdown explanation. Omitting one turns useful answer evidence into an artificial ranking miss and makes retrieval diagnostics less aligned with answer quality.
+
 **Third-party real manual samples.** ManualsLib-style browser pages can be used to expand local validation without committing third-party manual PDFs. Import tooling should accept explicit operator-supplied manual URLs, extract the visible OCR/text layer from page HTML into `.md` plus `<manual>.metadata.json`, preserve source attribution in metadata, and keep fetched samples under `.tmp/` or another runtime directory unless a later curation task explicitly decides to check in a derived fixture. Avoid broad brand-page crawling and do not bypass download/authentication gates; small, category-diverse samples are enough to expose ranking noise such as generic `drying` terms outranking `program`/`cycle selector` intent.
 
 #### T5 Replay CLI Implementation Contract
