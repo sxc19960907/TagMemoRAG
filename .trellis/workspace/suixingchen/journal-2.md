@@ -235,6 +235,48 @@ Extended the complementary evidence work from context selection into final answe
 - Move back to the main RAG quality track with answer synthesis/reranking improvements that can help arbitrary knowledge bases, not just product manuals.
 
 
+## Session 93: Real web knowledge benchmark
+
+**Date**: 2026-05-24
+**Task**: Real web knowledge eval benchmark
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Expanded the opt-in general-web benchmark from two software documentation pages into a broader real-public-document slice. The seed script now materializes Python, GitHub, MDN HTTP caching, USAGov passport, and IRS Free File pages into `.tmp`; committed fixtures store only URLs and expected evidence strings, not fetched third-party content.
+
+### Main Changes
+
+- Added MDN, USAGov, and IRS source groups to `scripts/seed_general_web_eval.sh` with distinct `domain` and `doc_type` metadata.
+- Added real-web retrieval cases for HTTP caching directives, lost/stolen passport guidance, and IRS Free File AGI/guided-tax information.
+- Added a no-network unit test to keep the seed script covering multiple real domains.
+- Documented the expanded real-web eval slice in README and `.trellis/spec/backend/architecture.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `db67363` | chore(task): archive 05-24-real-web-knowledge-eval |
+| `f53ae5c` | test(rag): expand real web knowledge benchmark |
+
+### Testing
+
+- [OK] `scripts/seed_general_web_eval.sh`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/general_web.jsonl --docs .tmp/general-web-eval/general_web --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/real-web-knowledge-eval.json` (`cases=7`, `hit@k=0.857143`, `mrr=0.528571`)
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --output .tmp/eval/real-web-knowledge-answer.json` (`cases=7 failed=0`)
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/real-web-knowledge-mixed.json`
+- [OK] `.venv/bin/python -m pytest tests/unit/test_general_web_seed_script.py tests/unit/test_public_web_import.py tests/unit/test_diag_general_web_answer_eval.py tests/unit/test_diag_mixed_domain_eval.py tests/unit/test_run_eval_ci.py -q`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Use the expanded real-web benchmark before future retrieval or answer-synthesis tuning, and consider adding more document types only when they are stable enough to fetch reproducibly.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
