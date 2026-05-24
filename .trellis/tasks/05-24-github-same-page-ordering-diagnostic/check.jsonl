@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify privacy omissions, deterministic tests, and adjacent gate stability."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Verify offline-only diagnostic behavior and no runtime ranking changes."}

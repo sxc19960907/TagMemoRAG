@@ -1,9 +1,9 @@
 {
-  "id": "general-rag-stability-program",
-  "name": "general-rag-stability-program",
-  "title": "General RAG stability program",
+  "id": "github-same-page-ordering-diagnostic",
+  "name": "github-same-page-ordering-diagnostic",
+  "title": "GitHub same-page ordering diagnostic",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -18,13 +18,8 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [
-    "05-24-baseline-batch-self-check",
-    "05-24-gate-batch-runner",
-    "05-24-evidence-usefulness-dry-run",
-    "05-24-github-same-page-ordering-diagnostic"
-  ],
-  "parent": null,
+  "children": [],
+  "parent": "05-24-general-rag-stability-program",
   "relatedFiles": [],
   "notes": "",
   "meta": {}

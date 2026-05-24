@@ -98,3 +98,41 @@ Decision:
   GitHub Hello World low-MRR cases. Focus on rank-local features, duplicate
   page/header effects, and expected-label alignment before proposing any
   scoring candidate.
+
+## 2026-05-24 Child 4: GitHub Same-Page Ordering Diagnostic
+
+Child task: `05-24-github-same-page-ordering-diagnostic`
+
+Result:
+
+- Added `src/tagmemorag/same_page_ordering_diagnostic.py`.
+- Added `scripts/diag_same_page_ordering.py`.
+- Added focused unit coverage for repeated source/header detection, score-gap
+  summaries, near-tie summaries, privacy omissions, Markdown rendering, and
+  invalid input handling.
+- Focused tests: `33 passed`.
+- Local dry run on `.tmp/eval/general-web-after-evidence-refinement.json`:
+  - same-page pressure count: `2`
+  - same-page not-usefulness count: `2`
+  - highest pressure rank count: `5`
+  - average top-to-first-match score gap: `0.309000`
+  - near-tie case count: `0`
+  - `github-hello-world-repository`: first matched rank `6`, pressure ranks
+    `5`, repeated source/header `8/8`, score gap `0.436000`
+  - `github-hello-world-pull-request`: first matched rank `4`, pressure ranks
+    `3`, repeated source/header `8/8`, score gap `0.182000`
+- Privacy keyword scan over generated JSON/Markdown found no forbidden raw
+  payload markers checked by this task.
+- Batch gate after the dry run: `passed`, release readiness `passed`,
+  reranking gate `passed`, failed checks `[]`.
+
+Classification: `ship`
+
+Decision:
+
+- The remaining general-web ranking pressure is concentrated in same-page,
+  same-header GitHub results where matched evidence is useful but lower-scored.
+- Next child may design a bounded candidate for same-source/header diversity or
+  same-page representative ordering. The candidate must remain default-off or
+  diagnostic-only until it passes baseline, candidate, and release-readiness
+  gates without degrading non-GitHub slices.
