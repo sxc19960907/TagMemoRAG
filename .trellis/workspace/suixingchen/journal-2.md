@@ -277,6 +277,48 @@ Expanded the opt-in general-web benchmark from two software documentation pages 
 - Use the expanded real-web benchmark before future retrieval or answer-synthesis tuning, and consider adding more document types only when they are stable enough to fetch reproducibly.
 
 
+## Session 94: Multi-format real knowledge benchmark
+
+**Date**: 2026-05-24
+**Task**: Multi-format real knowledge benchmark
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an opt-in benchmark lane for real online knowledge documents across HTML, PDF, and DOCX-style sources. HTML still uses the existing public-web importer, PDF is downloaded and indexed by the native text-PDF parser, and DOCX is safely converted from OpenXML text into Markdown before indexing. Fetched third-party content remains under `.tmp`; committed files contain only source URLs, metadata contracts, scripts, and eval expectations.
+
+### Main Changes
+
+- Added `scripts/seed_multiformat_real_knowledge.py` to materialize MDN HTML, IRS PDF, and EPA DOCX sources into a shared local corpus.
+- Added `scripts/diag_multiformat_answer_eval.py` and `tests/fixtures/eval/multiformat_real_knowledge.jsonl`.
+- Preserved `source_format` metadata through manual/document metadata so eval can verify format lineage.
+- Added no-network unit tests for DOCX extraction and multi-format materialization.
+- Documented the multi-format real-knowledge slice in README and `.trellis/spec/backend/architecture.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9cd42ee` | chore(task): archive 05-24-multiformat-real-knowledge-benchmark |
+| `bb2296f` | test(rag): add multi-format real knowledge benchmark |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_multiformat_real_knowledge.py tests/unit/test_manual_metadata.py tests/unit/test_document_metadata.py tests/unit/test_run_eval_ci.py -q`
+- [OK] `.venv/bin/python scripts/seed_multiformat_real_knowledge.py --output-dir .tmp/multiformat-real-knowledge --kb multiformat_real`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --docs .tmp/multiformat-real-knowledge/multiformat_real --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/multiformat-real-knowledge.json` (`cases=3`, `hit@k=0.666667`, `mrr=0.444444`)
+- [OK] `.venv/bin/python scripts/diag_multiformat_answer_eval.py --docs .tmp/multiformat-real-knowledge/multiformat_real --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --output .tmp/eval/multiformat-real-answer.json` (`cases=3 failed=0`)
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Use the multi-format benchmark to drive the next optimization pass. The first obvious pressure point is improving recall/ranking on long real PDF/DOCX-derived documents without overfitting one fixture.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
