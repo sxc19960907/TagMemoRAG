@@ -48,6 +48,7 @@ class _SearchField:
     allow_term_hits: bool = True
     allow_identity_hits: bool = True
     allow_proximity_hits: bool = False
+    allow_compact_evidence_hits: bool = False
 
 
 def lexical_search(
@@ -167,9 +168,17 @@ def _node_search_fields(node: Mapping[str, Any]) -> list[_SearchField]:
         ]
     )
     body = str(node.get("text", ""))
+    is_web_document = _is_web_document(node, metadata)
     fields = [
         _SearchField(heading, 1.0, allow_term_hits=True, allow_identity_hits=True),
-        _SearchField(body, 0.9, allow_term_hits=True, allow_identity_hits=False, allow_proximity_hits=True),
+        _SearchField(
+            body,
+            0.9,
+            allow_term_hits=True,
+            allow_identity_hits=False,
+            allow_proximity_hits=True,
+            allow_compact_evidence_hits=is_web_document,
+        ),
         _SearchField(identity, 0.85, allow_term_hits=False, allow_identity_hits=True),
     ]
     return fields
@@ -212,6 +221,11 @@ def _score_fields(
                 if proximity_hits:
                     score += boost * field.weight * 0.5 * min(2, proximity_hits)
                     best_mode = _max_mode(best_mode, "ordinary")
+                if field.allow_compact_evidence_hits:
+                    compact_hits = _compact_window_hits(normalized, tokens["ordinary"])
+                    if compact_hits:
+                        score += boost * field.weight * 0.35 * min(2, compact_hits)
+                        best_mode = _max_mode(best_mode, "ordinary")
     if score <= 0.0:
         return 0.0, ""
     return min(score, cap), best_mode or "ordinary"
@@ -249,6 +263,28 @@ def _terms_within_window(text: str, left: str, right: str, *, max_gap_words: int
         re.IGNORECASE,
     )
     return bool(pattern.search(text))
+
+
+def _compact_window_hits(text: str, terms: set[str], *, window_words: int = 14) -> int:
+    if len(terms) < 3:
+        return 0
+    words = _ALNUM_RE.findall(text.lower())
+    if len(words) < 24:
+        return 0
+    best = 0
+    for index in range(len(words)):
+        window = words[index : index + window_words]
+        if len(window) < 3:
+            break
+        best = max(best, len({term for term in terms if term in window}))
+        if best >= 5:
+            break
+    return max(0, best - 2)
+
+
+def _is_web_document(node: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool:
+    source_file = str(node.get("source_file", ""))
+    return source_file.startswith("public_web/")
 
 
 def _contains_token_variant(normalized: str, compact: str, token: str) -> bool:

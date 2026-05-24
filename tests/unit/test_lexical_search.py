@@ -158,6 +158,39 @@ def test_lexical_search_prioritizes_body_phrase_over_repeated_page_title_terms()
     assert matches[0].node_id == 1
 
 
+def test_lexical_search_rewards_compact_body_evidence_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The overview mentions pull requests in the GitHub workflow. "
+                "Branches and commits are covered later. Review and merge steps appear near the end.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "Pull requests are the heart of collaboration on GitHub. "
+                "When you open a pull request, you are requesting that someone review and pull in your contribution.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub pull request workflow branches commits review merge contribution", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
 def test_lexical_search_does_not_reward_source_file_category_as_topic_hit():
     graph = build_graph(
         [

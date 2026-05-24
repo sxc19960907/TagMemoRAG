@@ -38,6 +38,45 @@ Opened the next Trellis journal because journal-1.md reached the 2000-line thres
 - None - task complete
 
 
+## Session 94: Complementary evidence ranking
+
+**Date**: 2026-05-24
+**Task**: Improve complementary evidence ranking
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Investigated the remaining low-MRR real public-web cases after HTML cleanup. The relevant evidence was generally recalled but ranked behind broad overview/reference chunks because lexical scoring rewarded scattered query-term overlap more than compact answer-bearing evidence. Added a bounded public-web-only compact-window bonus for body text, preserving product-manual and mixed-domain behavior.
+
+### Main Changes
+
+- Added compact-window lexical scoring for `public_web/` body fields only.
+- Added a deterministic lexical regression where a definition-style pull-request evidence chunk beats a broad overview chunk.
+- Documented the public-web-only boundary and the rejected broader repeated-term variant.
+
+### Git Commits
+
+(Pending)
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_lexical_search.py tests/unit/test_eval_runner.py tests/unit/test_diag_general_web_answer_eval.py -q`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/general_web.jsonl --docs .tmp/general-web-eval/general_web --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/complementary-general-web-compact-only.json`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --output .tmp/eval/complementary-general-web-answer-final.json`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/complementary-mixed-domain-compact-only.json`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --docs .tmp/multiformat-real-knowledge/multiformat_real --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/complementary-multiformat-final.json`
+- [OK] `.venv/bin/python scripts/diag_multiformat_answer_eval.py --docs .tmp/multiformat-real-knowledge/multiformat_real --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --output .tmp/eval/complementary-multiformat-answer-final.json`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/realmanuals.jsonl --docs product_manuals --config examples/config/local-hashing-npz.yaml --kb realmanuals --top-k 5 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/complementary-realmanuals-final.json`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- For further gains on GitHub/MDN multi-evidence cases, prefer an explicit reranker or context-level complementary objective over broader lexical boosts.
+
+
 ## Session 88: Mixed-domain RAG robustness diagnostic
 
 **Date**: 2026-05-23
