@@ -1800,3 +1800,43 @@ Worked down release-readiness MRR warnings with a conservative final-ordering im
 - Remaining release warnings are general-web retrieval MRR and tight-budget multi-format context completeness.
 - For general-web, diagnose multi-evidence cases before adding any broader reranking boost.
 - For tight-budget multi-format, prefer an evidence compressor or chunk-boundary fix over more context ordering heuristics.
+
+
+## Session 88: Long-horizon RAG quality completion
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality completion
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Completed and archived the long-horizon RAG quality program after verifying the latest retrieval, context, answer-quality, and release-readiness batches. Preserved unrelated untracked files and left older completed tasks untouched.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9266c7c` | (see git log) |
+| `0f07064` | (see git log) |
+| `dc4304c` | (see git log) |
+| `655e8e5` | (see git log) |
+| `2e7fa85` | (see git log) |
+| `91fba71` | (see git log) |
+| `3b71a10` | (see git log) |
+| `20101eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 87
-- **Last Active**: 2026-05-23
+- **Total Sessions**: 88
+- **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1148 | Active |
+| `journal-2.md` | ~1842 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 88 | 2026-05-24 | Long-horizon RAG quality completion | `9266c7c`, `0f07064`, `dc4304c`, `655e8e5`, `2e7fa85`, `91fba71`, `3b71a10`, `20101eb` | `codex/agent-loop-driver` |
 | 87 | 2026-05-23 | Complete API entrypoint split | `3a8582a` | `codex/agent-loop-driver` |
 | 86 | 2026-05-23 | Slim API entrypoint | `da9f6a4` | `codex/agent-loop-driver` |
 | 85 | 2026-05-23 | Complete CLI entrypoint split | `b801c2d` | `codex/agent-loop-driver` |
