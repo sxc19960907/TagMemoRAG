@@ -390,7 +390,17 @@ def _context_item_bundle(
         merged_content = (content.rstrip() + "\n\n" + candidate_content.strip()).strip()
         merged_tokens = _estimate_tokens(merged_content)
         if merged_tokens > remaining_tokens:
-            continue
+            compacted_candidate = _compact_context_candidate_to_fit(
+                candidate,
+                query_text=query_text,
+                max_tokens=max(1, remaining_tokens - used_tokens),
+            )
+            if not compacted_candidate:
+                continue
+            merged_content = (content.rstrip() + "\n\n" + compacted_candidate.strip()).strip()
+            merged_tokens = _estimate_tokens(merged_content)
+            if merged_tokens > remaining_tokens:
+                continue
         content = merged_content
         used_tokens = merged_tokens
         evidence_id = str(candidate.get("evidence_id") or "")
@@ -404,6 +414,21 @@ def _context_item_bundle(
         "citation_ids": [item for item in citation_ids if item],
         "estimated_tokens": used_tokens,
     }
+
+
+def _compact_context_candidate_to_fit(
+    item: dict[str, Any],
+    *,
+    query_text: str,
+    max_tokens: int,
+) -> str:
+    if max_tokens <= 0 or item.get("content_type") == "visual_asset" or not query_text:
+        return ""
+    content = str(item.get("text") or "")
+    compacted = _compact_context_content(content, query_text=query_text, max_tokens=max_tokens)
+    if _estimate_tokens(compacted) <= max_tokens and compacted.strip() != content.strip():
+        return compacted
+    return ""
 
 
 def _merge_candidates(
@@ -427,7 +452,7 @@ def _merge_candidates(
             -abs(int(candidate.get("node_id") or 0) - int(item.get("node_id") or 0)),
         ),
         reverse=True,
-    )[:2]
+    )[:3]
 
 
 def _can_merge_context_evidence(

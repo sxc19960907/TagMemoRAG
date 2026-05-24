@@ -10,15 +10,15 @@ RELEASE_READINESS_SCHEMA_VERSION = "release_readiness.v1"
 
 DEFAULT_REPORT_PATHS = {
     "general_web_retrieval": ".tmp/eval/general-web-after-evidence-prior.json",
-    "multiformat_retrieval": ".tmp/eval/multiformat-after-evidence-prior.json",
+    "multiformat_retrieval": ".tmp/eval/multiformat-after-fit-compaction.json",
     "mixed_domain_retrieval": ".tmp/eval/mixed-domain-after-evidence-prior.json",
     "realmanuals_retrieval": ".tmp/eval/realmanuals-after-evidence-prior.json",
     "general_web_context": ".tmp/eval/context-quality-general-web-after-adjacent-merge.json",
     "general_web_context_tight": ".tmp/eval/context-quality-general-web-budget260-after-adjacent-merge.json",
     "multiformat_context": ".tmp/eval/context-quality-multiformat-after-adjacent-merge.json",
-    "multiformat_context_tight": ".tmp/eval/context-quality-multiformat-budget260-after-adjacent-merge.json",
+    "multiformat_context_tight": ".tmp/eval/context-quality-multiformat-budget260-after-fit-compaction.json",
     "general_web_answer": ".tmp/eval/general-web-answer-after-evidence-prior.json",
-    "multiformat_answer": ".tmp/eval/multiformat-answer-after-evidence-prior.json",
+    "multiformat_answer": ".tmp/eval/multiformat-answer-after-fit-compaction.json",
     "product_qa_answer_quality": ".tmp/eval/product-qa-answer-quality-after-evidence-prior.json",
 }
 
@@ -218,11 +218,15 @@ def _next_steps(status: str, stages: list[ReleaseReadinessStage]) -> list[str]:
             "Do not treat this branch as release-ready until failed gates are green.",
         ]
     if status == "warning":
-        return [
+        steps = [
             "Review warning stages before release signoff: " + ", ".join(warning) + ".",
-            "Prioritize MRR/ranking improvements and the remaining tight-budget multi-format context gap.",
             "Keep this report with the release record and rerun it after the next quality batch.",
         ]
+        if any(name.endswith("_retrieval") for name in warning):
+            steps.insert(1, "Prioritize MRR/ranking improvements for warning retrieval stages.")
+        if any(name.endswith("_context_tight") for name in warning):
+            steps.insert(1, "Prioritize remaining tight-budget context completeness gaps.")
+        return steps
     return [
         "Retain this report with the release record.",
         "Run live provider and deployment environment checks for the target release profile.",

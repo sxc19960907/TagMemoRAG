@@ -344,6 +344,45 @@ def test_context_pack_merges_adjacent_supporting_evidence_under_budget():
     assert "Images and stylesheets" not in item["content"]
 
 
+def test_context_pack_compacts_lower_rank_adjacent_support_to_fit_budget():
+    primary = (
+        "max-age=0 and must-revalidate are older cache-control workarounds for validation. "
+        "They are related to no-cache but not the clearest explanation."
+    )
+    adjacent = (
+        "The no-store directive prevents storing a response. "
+        "A no-cache directive still forces validation before reuse."
+    )
+    lower_rank_expected = (
+        "The no-cache directive does not prevent the storing of responses. "
+        "Instead, it prevents the reuse of responses without revalidation. "
+        "Unrelated browser history and image cache details follow in this long paragraph."
+    )
+    payload = build_retrieve_response(
+        results=[
+            _page_result(10, 0.99, primary, "chunk-primary", page=4, section="HTTP caching"),
+            _page_result(11, 0.90, adjacent, "chunk-adjacent", page=4, section="HTTP caching"),
+            _page_result(12, 0.80, lower_rank_expected, "chunk-expected", page=4, section="HTTP caching"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=85,
+        query_text="no-cache directive validation revalidation storing responses",
+    )
+
+    item = payload["context_pack"]["items"][0]
+
+    assert item["evidence_refs"] == ["ev_001", "ev_002", "ev_003"]
+    assert item["citation_ids"] == ["cit_001", "cit_002", "cit_003"]
+    assert "max-age=0" in item["content"]
+    assert "forces validation before reuse" in item["content"]
+    assert "does not prevent the storing of responses" in item["content"]
+    assert "Unrelated browser history" not in item["content"]
+
+
 def test_retrieve_inspect_payload_is_safe_and_bounded():
     payload = build_retrieve_response(
         results=[_result()],
