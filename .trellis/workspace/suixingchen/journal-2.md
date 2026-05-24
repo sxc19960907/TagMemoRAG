@@ -1759,3 +1759,44 @@ Added a bounded release-readiness report that consumes the retained real-data ev
 ### Next Steps
 
 - Use the release-readiness warnings as the next quality backlog: improve MRR/ranking first, then address the remaining tight-budget multi-format context gap.
+
+
+## Session 94: Evidence-prior ranking
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Worked down release-readiness MRR warnings with a conservative final-ordering improvement. The kept change uses query-aware lexical evidence usefulness only as an exact-score tie breaker, so it can demote directory/short-heading chunks without overriding the core vector/graph/lexical score.
+
+### Main Changes
+
+- Added `lexical_evidence_score` for local, deterministic evidence usefulness.
+- Passed `query_text` and lexical token settings into `wave_search`.
+- Ordered exact-score ties by evidence usefulness after the original boosted score.
+- Updated release-readiness default report paths to the evidence-prior reports.
+- Documented a rejected additive-prior attempt that improved MRR but regressed general-web recall.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_lexical_search.py tests/unit/test_graph_wave.py -q`
+- [OK] general-web retrieval: hit@k=1.0, recall@k=0.928571, MRR=0.651361
+- [OK] multi-format retrieval: hit@k=1.0, recall@k=1.0, MRR=0.777778
+- [OK] realmanuals retrieval on `product_manuals`: hit@k=1.0, recall@k=0.966667, MRR=0.775000
+- [OK] mixed-domain retrieval: hit@k=1.0, MRR=1.0
+- [OK] general-web answer: 7 cases, failed=0
+- [OK] multi-format answer: 3 cases, failed=0
+- [OK] product-manual QA answer quality: 6 cases passed
+- [OK] release readiness regenerated from latest default report paths; status remains `warning`
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Remaining release warnings are general-web retrieval MRR and tight-budget multi-format context completeness.
+- For general-web, diagnose multi-evidence cases before adding any broader reranking boost.
+- For tight-budget multi-format, prefer an evidence compressor or chunk-boundary fix over more context ordering heuristics.

@@ -124,6 +124,8 @@ def execute_search(
         tag_boost=settings.search.tag_boost,
         lexical_scores=lexical_scores,
         lexical_source_k=int(settings.search.lexical_source_k) if settings.search.lexical_enabled else 0,
+        query_text=query_text,
+        lexical_min_token_chars=int(settings.search.lexical_min_token_chars),
         disable_legacy_tag_boost=legacy_tag_boost_disabled,
         rerank_pool_size=rerank_pool_size,
     )

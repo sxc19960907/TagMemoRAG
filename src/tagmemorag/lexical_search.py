@@ -93,6 +93,72 @@ def lexical_score_map(matches: Sequence[LexicalMatch]) -> dict[int, float]:
     return {match.node_id: match.score for match in matches}
 
 
+def lexical_evidence_score(
+    query: str,
+    node: Mapping[str, Any],
+    *,
+    min_token_chars: int = 2,
+) -> float:
+    """Small deterministic query-evidence prior for final local ranking."""
+    tokens = extract_lexical_tokens(query, min_token_chars=min_token_chars)
+    if not any(tokens.values()):
+        return 0.0
+    ordered_terms = _ordered_ordinary_terms(query, min_token_chars=min_token_chars)
+    heading = str(node.get("header", ""))
+    body = str(node.get("text", ""))
+    heading_text = heading.lower()
+    body_text = body.lower()
+    combined_text = f"{heading_text}\n{body_text}".strip()
+    if not combined_text:
+        return 0.0
+
+    ordinary_terms = {_normalize_english_term(term) for term in tokens["ordinary"]}
+    body_words = _normalized_word_set(body_text)
+    heading_words = _normalized_word_set(heading_text)
+    ordinary_count = max(1, len(ordinary_terms))
+    body_hits = sum(1 for term in ordinary_terms if term in body_words or term in body_text)
+    heading_hits = sum(1 for term in ordinary_terms if term in heading_words or term in heading_text)
+    cjk_terms = tokens["cjk"]
+    cjk_count = max(1, len(cjk_terms))
+    cjk_body_hits = sum(1 for term in cjk_terms if term in body_text)
+    cjk_heading_hits = sum(1 for term in cjk_terms if term in heading_text)
+
+    score = 0.0
+    score += 0.45 * min(1.0, body_hits / ordinary_count)
+    score += 0.16 * min(1.0, heading_hits / ordinary_count)
+    score += 0.42 * min(1.0, cjk_body_hits / cjk_count)
+    score += 0.18 * min(1.0, cjk_heading_hits / cjk_count)
+
+    if ordered_terms:
+        proximity_hits = _proximity_hits(body_text, ordered_terms)
+        compact_hits = _compact_window_hits(body_text, set(ordered_terms))
+        score += 0.08 * min(2, proximity_hits)
+        score += 0.08 * min(2, compact_hits)
+
+    identity_text = " ".join(
+        [
+            str(node.get("source_file", "")),
+            str(metadata_from_node(dict(node)).get("manual_id", "")),
+            heading,
+        ]
+    ).lower()
+    identity_compact = _compact_token(identity_text)
+    for token in tokens["exact_code"] | tokens["model"]:
+        if _contains_token_variant(identity_text, identity_compact, token):
+            score += 0.16
+            break
+
+    score += _focused_heading_bonus(query, heading, tokens)
+
+    body_word_count = len(_ALNUM_RE.findall(body_text)) + len(_CJK_RE.findall(body_text))
+    has_cjk = bool(tokens["cjk"])
+    if body_word_count < 8 and not has_cjk:
+        score *= 0.35
+    elif body_word_count < 18 and not has_cjk:
+        score *= 0.65
+    return min(0.85, max(0.0, score))
+
+
 def extract_lexical_tokens(query: str, *, min_token_chars: int = 2) -> dict[str, set[str]]:
     normalized = query.strip().lower()
     tokens = {"exact_code": set(), "model": set(), "ordinary": set(), "cjk": set()}
@@ -319,6 +385,21 @@ def _contains_token_variant(normalized: str, compact: str, token: str) -> bool:
 
 def _compact_token(value: str) -> str:
     return re.sub(r"[^a-z0-9\u3400-\u9fff]+", "", value.lower())
+
+
+def _focused_heading_bonus(query: str, heading: str, tokens: Mapping[str, set[str]]) -> float:
+    normalized_heading = _compact_token(heading)
+    if not normalized_heading:
+        return 0.0
+    query_compact = _compact_token(query)
+    bonus = 0.0
+    for token in tokens["cjk"] | tokens["ordinary"]:
+        compact = _compact_token(token)
+        if len(compact) >= 2 and normalized_heading == compact:
+            bonus = max(bonus, 0.18)
+        elif len(compact) >= 3 and compact in normalized_heading and normalized_heading in query_compact:
+            bonus = max(bonus, 0.08)
+    return bonus
 
 
 def _max_mode(current: str, candidate: str) -> str:

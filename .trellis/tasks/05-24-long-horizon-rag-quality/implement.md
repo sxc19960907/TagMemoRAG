@@ -67,3 +67,10 @@
 32. [x] Generate JSON and Markdown reports under `.tmp/eval/`.
 33. [x] Add unit coverage for pass, warning, missing-report failure, and Markdown writer paths.
 34. [x] Commit coherent changes.
+
+## Phase 10: Evidence-Prior Ranking Batch
+
+35. [x] Diagnose release-readiness MRR warnings across general-web, multi-format, and real-manual reports.
+36. [x] Implement exact-score tie ordering with bounded lexical evidence usefulness.
+37. [x] Rerun retrieval, mixed-domain, answer-quality, and release-readiness reports on real corpora.
+38. [x] Update release-readiness defaults to the latest retained reports.

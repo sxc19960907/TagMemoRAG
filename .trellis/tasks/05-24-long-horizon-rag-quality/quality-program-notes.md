@@ -329,3 +329,63 @@ Local test command:
 Next recommended phase:
 
 - Work down the warning list directly: ranking/MRR improvements first, then the remaining tight-budget multi-format context gap. The system is now in a state where release discussions can be based on an explicit readiness report instead of scattered eval outputs.
+
+## Phase 10 Evidence-Prior Ranking Batch
+
+Target: work down release-readiness MRR warnings without introducing an external reranker or changing parser chunk boundaries.
+
+Diagnosis:
+
+- Warning cases were usually not pure misses. Relevant chunks were retrieved, but same-document candidates with equal or nearly equal scores occupied earlier ranks.
+- Public-web examples had repeated page titles and overview/navigation chunks ahead of definition-style evidence.
+- Real PDF manuals had directory/short-heading chunks tied with answer-bearing chunks, especially Steam Clean and detergent-compartment pages.
+
+Rejected tuning:
+
+- A small additive evidence prior improved general-web MRR but pushed one IRS supporting evidence chunk out of top-8, dropping general-web recall from `0.928571` to `0.857143`.
+- A rounded-score bucket had the same recall problem. It was not kept.
+
+Kept improvement:
+
+- Added `lexical_evidence_score`, a local deterministic evidence-usefulness signal that reuses the existing lexical token normalization.
+- Final `wave_search` ordering now uses this score only after the original boosted score, so it affects exact-score ties but does not override the core vector/graph/lexical score.
+- Short English heading fragments are penalized for evidence usefulness; focused CJK headings are still allowed to win exact ties.
+
+Regression matrix:
+
+| Slice | Cases | hit@k | recall@k | MRR | Status |
+|-------|-------|-------|----------|-----|--------|
+| General web retrieval | 7 | 1.000000 | 0.928571 | 0.651361 | warning |
+| Multi-format retrieval | 3 | 1.000000 | 1.000000 | 0.777778 | passed |
+| Mixed-domain retrieval | 4 | 1.000000 | 1.000000 | 1.000000 | passed |
+| Real manuals retrieval | 10 | 1.000000 | 0.966667 | 0.775000 | passed |
+
+Answer diagnostics:
+
+- General web answer: 7 cases, failed=0.
+- Multi-format answer: 3 cases, failed=0.
+- Product-manual QA answer quality: 6 cases passed.
+
+Release readiness:
+
+- Overall status remains `warning`.
+- Retrieval warnings reduced from three slices to one: only general-web MRR remains below `0.75`.
+- Tight-budget multi-format context remains `2/3`; this is now the other active warning.
+
+Generated reports:
+
+- `.tmp/eval/general-web-after-evidence-prior.json`
+- `.tmp/eval/multiformat-after-evidence-prior.json`
+- `.tmp/eval/mixed-domain-after-evidence-prior.json`
+- `.tmp/eval/realmanuals-after-evidence-prior.json`
+- `.tmp/eval/release-readiness-after-evidence-prior-defaults.json`
+- `.tmp/eval/release-readiness-after-evidence-prior-defaults.md`
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_lexical_search.py tests/unit/test_graph_wave.py -q` -> 22 passed.
+
+Next recommended phase:
+
+- Attack the remaining general-web MRR cases with a stricter diagnostic of multi-evidence public-web queries before adding any broader reranking boost.
+- Then handle the remaining tight-budget multi-format context case with an evidence compressor or chunk-boundary strategy rather than more ordering heuristics.

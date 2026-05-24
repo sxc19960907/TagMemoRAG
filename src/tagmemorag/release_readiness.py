@@ -9,17 +9,17 @@ from typing import Any, Mapping
 RELEASE_READINESS_SCHEMA_VERSION = "release_readiness.v1"
 
 DEFAULT_REPORT_PATHS = {
-    "general_web_retrieval": ".tmp/eval/general-web-after-adjacent-merge.json",
-    "multiformat_retrieval": ".tmp/eval/multiformat-after-adjacent-merge.json",
-    "mixed_domain_retrieval": ".tmp/eval/mixed-domain-after-adjacent-merge.json",
-    "realmanuals_retrieval": ".tmp/eval/realmanuals-after-adjacent-merge.json",
+    "general_web_retrieval": ".tmp/eval/general-web-after-evidence-prior.json",
+    "multiformat_retrieval": ".tmp/eval/multiformat-after-evidence-prior.json",
+    "mixed_domain_retrieval": ".tmp/eval/mixed-domain-after-evidence-prior.json",
+    "realmanuals_retrieval": ".tmp/eval/realmanuals-after-evidence-prior.json",
     "general_web_context": ".tmp/eval/context-quality-general-web-after-adjacent-merge.json",
     "general_web_context_tight": ".tmp/eval/context-quality-general-web-budget260-after-adjacent-merge.json",
     "multiformat_context": ".tmp/eval/context-quality-multiformat-after-adjacent-merge.json",
     "multiformat_context_tight": ".tmp/eval/context-quality-multiformat-budget260-after-adjacent-merge.json",
-    "general_web_answer": ".tmp/eval/general-web-answer-after-adjacent-merge.json",
-    "multiformat_answer": ".tmp/eval/multiformat-answer-after-adjacent-merge.json",
-    "product_qa_answer_quality": ".tmp/eval/product-qa-answer-quality-after-adjacent-merge.json",
+    "general_web_answer": ".tmp/eval/general-web-answer-after-evidence-prior.json",
+    "multiformat_answer": ".tmp/eval/multiformat-answer-after-evidence-prior.json",
+    "product_qa_answer_quality": ".tmp/eval/product-qa-answer-quality-after-evidence-prior.json",
 }
 
 RETRIEVAL_GATES = {

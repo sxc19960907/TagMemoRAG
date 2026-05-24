@@ -4,7 +4,7 @@ import numpy as np
 
 from tagmemorag.config import GraphConfig, SearchConfig, Settings
 from tagmemorag.graph_builder import build_graph
-from tagmemorag.lexical_search import extract_lexical_tokens, lexical_search
+from tagmemorag.lexical_search import extract_lexical_tokens, lexical_evidence_score, lexical_search
 from tagmemorag.search_runtime import execute_search
 from tagmemorag.types import Chunk
 from tagmemorag.wave_searcher import wave_search
@@ -261,6 +261,54 @@ def test_wave_search_lexical_seed_recovers_short_exact_term():
 
     assert without_lexical[0].node_id == 0
     assert with_lexical[0].node_id == 1
+
+
+def test_wave_search_prefers_dense_query_evidence_for_exact_score_ties():
+    chunks = [
+        Chunk(
+            "Generic GitHub workflow overview with repository and pull requests.",
+            "Hello World - GitHub Docs",
+            ("Hello World - GitHub Docs",),
+            2,
+            1,
+            "public_web/github.md",
+            metadata={"domain": "software_docs"},
+        ),
+        Chunk(
+            "A repository is a folder that contains related items. "
+            "README files are written in Markdown for project notes.",
+            "Hello World - GitHub Docs",
+            ("Hello World - GitHub Docs",),
+            2,
+            2,
+            "public_web/github.md",
+            metadata={"domain": "software_docs"},
+        ),
+    ]
+    vectors = np.array([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32)
+    graph = build_graph(chunks, vectors, GraphConfig(sim_threshold=0.0))
+
+    results = wave_search(
+        np.array([1.0, 0.0], dtype=np.float32),
+        graph,
+        vectors,
+        top_k=2,
+        source_k=2,
+        steps=0,
+        query_text="GitHub repository README Markdown project folder",
+    )
+
+    assert [result.node_id for result in results] == [1, 0]
+
+
+def test_lexical_evidence_score_penalizes_short_english_heading_fragments():
+    dense = {"header": "STEAM CLEAN", "text": "Use this function to remove stains and food residues from the oven."}
+    fragment = {"header": "STEAM CLEAN", "text": "USING THE STEAM CLEAN FUNCTION TO"}
+
+    assert lexical_evidence_score("oven steam clean function remove stains", dense) > lexical_evidence_score(
+        "oven steam clean function remove stains",
+        fragment,
+    )
 
 
 def test_execute_search_lexical_respects_filters():
