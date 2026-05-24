@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 96
+- **Total Sessions**: 97
 - **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~137 | Active |
+| `journal-3.md` | ~170 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 97 | 2026-05-24 | Reranking evaluation gate plan | `422c42e` | `codex/agent-loop-driver` |
 | 96 | 2026-05-24 | GitHub ranking pressure root cause | `08acf40` | `codex/agent-loop-driver` |
 | 95 | 2026-05-24 | Release readiness ranking pressure hint | `1c3015a` | `codex/agent-loop-driver` |
 | 94 | 2026-05-24 | General-web ranking pressure diagnostic | `9b62b40` | `codex/agent-loop-driver` |

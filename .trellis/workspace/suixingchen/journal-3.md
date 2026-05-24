@@ -135,3 +135,36 @@ Diagnosed the two GitHub Hello World general-web ranking-pressure cases, confirm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 97: Reranking evaluation gate plan
+
+**Date**: 2026-05-24
+**Task**: Reranking evaluation gate plan
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Planned the broader reranking/evidence-usefulness evaluation gate for future ranking changes, including required release slices, GitHub pressure baselines, privacy constraints, and ship gates that preserve passed release readiness.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `422c42e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
