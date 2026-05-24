@@ -199,7 +199,8 @@ def html_to_text_blocks(html: str) -> tuple[str, tuple[str, ...]]:
     parser = _ReadableHTMLParser()
     parser.feed(html)
     parser.close()
-    return parser.title.strip(), tuple(block for block in parser.blocks if block)
+    blocks = parser.main_blocks or parser.blocks
+    return parser.title.strip(), tuple(block for block in blocks if block)
 
 
 def _fetch_url(url: str, timeout_seconds: float) -> bytes:
@@ -228,14 +229,26 @@ def _bounded_reason(reason: str) -> str:
 
 class _ReadableHTMLParser(HTMLParser):
     _block_tags = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd", "td", "th", "figcaption"}
-    _skip_tags = {"script", "style", "noscript", "svg", "canvas"}
+    _skip_tags = {
+        "aside",
+        "canvas",
+        "footer",
+        "header",
+        "nav",
+        "noscript",
+        "script",
+        "style",
+        "svg",
+    }
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.title = ""
         self.blocks: list[str] = []
+        self.main_blocks: list[str] = []
         self._current: list[str] = []
         self._in_title = False
+        self._main_depth = 0
         self._skip_depth = 0
 
     def handle_starttag(self, tag: str, attrs) -> None:
@@ -249,6 +262,9 @@ class _ReadableHTMLParser(HTMLParser):
             self._in_title = True
         if tag == "br":
             self._current.append(" ")
+        if tag == "main":
+            self._flush_current()
+            self._main_depth += 1
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
@@ -259,6 +275,10 @@ class _ReadableHTMLParser(HTMLParser):
             return
         if tag == "title":
             self._in_title = False
+            return
+        if tag == "main" and self._main_depth:
+            self._flush_current()
+            self._main_depth -= 1
             return
         if tag in self._block_tags:
             self._flush_current()
@@ -283,6 +303,8 @@ class _ReadableHTMLParser(HTMLParser):
         self._current.clear()
         if block and (not self.blocks or self.blocks[-1] != block):
             self.blocks.append(block)
+        if self._main_depth and block and (not self.main_blocks or self.main_blocks[-1] != block):
+            self.main_blocks.append(block)
 
 
 def _normalize_space(value: str) -> str:

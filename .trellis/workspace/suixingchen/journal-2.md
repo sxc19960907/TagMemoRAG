@@ -196,6 +196,48 @@ Improved answer context packing so tight budgets do not get consumed by near-dup
 - Add a live answer-quality case that forces a tight context budget and verifies the generated answer cites complementary evidence points.
 
 
+## Session 93: Real benchmark retrieval gaps
+
+**Date**: 2026-05-24
+**Task**: Find real benchmark retrieval gaps
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Ran the real public-web, multi-format, mixed-domain, and product-manual retrieval slices to identify the next genuine quality issue. The only top-k miss was the MDN HTTP caching case, caused by public-web HTML import carrying page chrome/navigation noise into indexed Markdown. Tightened HTML extraction to skip structural chrome and prefer `<main>` content when available.
+
+### Main Changes
+
+- Updated `public_web_import` to skip `nav`, `header`, `footer`, and `aside` alongside existing script/style/media-only exclusions.
+- Added `<main>`-first extraction with fallback to all visible blocks for pages without semantic main content.
+- Added unit coverage for chrome exclusion and fallback behavior.
+- Recorded the diagnostic summary and the public-web import rule in Trellis docs.
+
+### Git Commits
+
+(Pending)
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_public_web_import.py tests/unit/test_cli_source_import.py tests/unit/test_cli.py -q`
+- [OK] `scripts/seed_general_web_eval.sh`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/general_web.jsonl --docs .tmp/general-web-eval/general_web --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/gap-general-web-after-main.json`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --top-k 8 --output .tmp/eval/gap-general-web-answer-after-main.json`
+- [OK] `.venv/bin/python scripts/seed_multiformat_real_knowledge.py --output-dir .tmp/multiformat-real-knowledge --kb multiformat_real`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --docs .tmp/multiformat-real-knowledge/multiformat_real --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/gap-multiformat-after-html-clean.json`
+- [OK] `.venv/bin/python scripts/diag_multiformat_answer_eval.py --docs .tmp/multiformat-real-knowledge/multiformat_real --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --output .tmp/eval/gap-multiformat-answer-after-html-clean.json`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/gap-mixed-domain-after-html-clean.json`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/realmanuals.jsonl --docs product_manuals --config examples/config/local-hashing-npz.yaml --kb realmanuals --top-k 5 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/gap-realmanuals-after-html-clean.json`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Treat remaining general-web low-MRR cases as a ranking/reranking problem for complementary multi-evidence answers, not an HTML-import problem.
+
+
 ## Session 92: Complementary answer quality
 
 **Date**: 2026-05-24

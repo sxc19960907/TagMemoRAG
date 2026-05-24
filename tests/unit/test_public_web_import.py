@@ -11,6 +11,7 @@ HTML = b"""
   <head><title>Python Tutorial</title><style>.x{}</style></head>
   <body>
     <nav>Skip navigation</nav>
+    <p>Outside teaser should not be indexed when main is present.</p>
     <main>
       <h1>Python Tutorial</h1>
       <p>Python is an easy to learn programming language.</p>
@@ -27,7 +28,23 @@ def test_html_to_text_blocks_extracts_title_and_visible_blocks():
 
     assert title == "Python Tutorial"
     assert "Python is an easy to learn programming language." in blocks
+    assert "Skip navigation" not in " ".join(blocks)
+    assert "Outside teaser" not in " ".join(blocks)
     assert "ignored" not in " ".join(blocks)
+
+
+def test_html_to_text_blocks_falls_back_when_main_is_absent():
+    html = """
+    <html>
+      <head><title>Fallback</title></head>
+      <body><article><p>Readable article body.</p></article></body>
+    </html>
+    """
+
+    title, blocks = html_to_text_blocks(html)
+
+    assert title == "Fallback"
+    assert "Readable article body." in blocks
 
 
 def test_fetch_public_web_document_builds_safe_markdown_record():

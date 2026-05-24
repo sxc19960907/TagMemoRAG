@@ -576,6 +576,8 @@ scripts/seed_general_web_eval.sh
 
 This slice should be run explicitly when parser behavior, public-web import, ranking, context packing, or answer generation changes. Keep sources stable and official; avoid news/current-event pages because wording churn turns the benchmark into a maintenance burden instead of a quality signal.
 
+Public-web HTML import should prefer the semantic article body over page chrome. When a page exposes a `<main>` element, extract readable blocks from that region; otherwise fall back to all visible blocks. Always ignore structural chrome such as `nav`, `header`, `footer`, and `aside`, plus script/style/media-only tags. A 2026-05-24 general-web diagnostic showed this removes navigation/sidebar noise from real docs and moved the MDN HTTP caching case from a top-k miss to `hit@k=1.0`; remaining low MRR cases are multi-evidence/ranking issues and should not be tuned by adding site-specific HTML filters.
+
 **Multi-format real knowledge slice.** As of 2026-05-24, `scripts/seed_multiformat_real_knowledge.py` materializes an opt-in real-source corpus that covers HTML-derived Markdown, a text-based public PDF, and DOCX-derived Markdown. DOCX is handled as source materialization, not as a new native parser suffix: the script safely reads OpenXML text from the zipped `word/document.xml`, writes Markdown plus metadata, and then the normal `.md/.pdf` build path indexes the corpus. Metadata sidecars preserve `source_format` (`html`, `pdf`, `docx`) along with `domain`, `doc_type`, `remote_id`, and `url`, so eval cases can verify both content and format lineage. Run it with:
 
 ```text
