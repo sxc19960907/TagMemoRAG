@@ -285,8 +285,21 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int, query_te
     selected = _select_context_evidence(evidence, token_budget=token_budget, query_text=query_text)
     if not selected and evidence:
         warning = "context_budget_exhausted"
+    selected_ids = {str(item.get("evidence_id") or "") for item in selected}
+    merged_ids: set[str] = set()
     for index, item in enumerate(selected, 1):
-        content = str(item["text"])
+        if str(item.get("evidence_id") or "") in merged_ids:
+            continue
+        bundle = _context_item_bundle(
+            item,
+            evidence=evidence,
+            selected_ids=selected_ids,
+            merged_ids=merged_ids,
+            query_text=query_text,
+            token_budget=max(0, int(token_budget)),
+            remaining_tokens=max(0, int(token_budget) - used_tokens),
+        )
+        content = bundle["content"]
         estimated = _estimate_tokens(content)
         context_item = {
             "context_item_id": f"ctx_{index:03d}",
@@ -299,7 +312,8 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int, query_te
                 "section_path": item["section_path"],
             },
             "citation_id": item["citation_id"],
-            "evidence_refs": [item["evidence_id"]],
+            "citation_ids": bundle["citation_ids"],
+            "evidence_refs": bundle["evidence_refs"],
             "asset_refs": [str(asset.get("asset_id") or "") for asset in item.get("assets", []) if str(asset.get("asset_id") or "")],
             "score": item["score"],
             "why_selected": item["reason"],
@@ -318,7 +332,10 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int, query_te
 
 
 def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: int, query_text: str = "") -> list[dict[str, Any]]:
-    remaining = [(index, item, _estimate_tokens(str(item["text"]))) for index, item in enumerate(evidence)]
+    remaining = [
+        (index, item, _context_item_estimated_tokens(item, query_text=query_text, token_budget=token_budget))
+        for index, item in enumerate(evidence)
+    ]
     selected: list[tuple[int, dict[str, Any], int]] = []
     used_tokens = 0
     query_terms = _context_terms(query_text)
@@ -351,6 +368,172 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
         used_tokens += chosen[2]
         remaining = [(index, item, estimated) for index, item, estimated in remaining if index != chosen[0]]
     return [item for _index, item, _estimated in selected]
+
+
+def _context_item_bundle(
+    item: dict[str, Any],
+    *,
+    evidence: list[dict[str, Any]],
+    selected_ids: set[str],
+    merged_ids: set[str],
+    query_text: str,
+    token_budget: int,
+    remaining_tokens: int,
+) -> dict[str, Any]:
+    content = _context_item_content(item, query_text=query_text, token_budget=token_budget)
+    evidence_refs = [str(item.get("evidence_id") or "")]
+    citation_ids = [str(item.get("citation_id") or "")]
+    used_tokens = _estimate_tokens(content)
+    query_terms = _context_terms(query_text)
+    for candidate in _merge_candidates(item, evidence=evidence, selected_ids=selected_ids, merged_ids=merged_ids, query_terms=query_terms):
+        candidate_content = _context_item_content(candidate, query_text=query_text, token_budget=token_budget)
+        merged_content = (content.rstrip() + "\n\n" + candidate_content.strip()).strip()
+        merged_tokens = _estimate_tokens(merged_content)
+        if merged_tokens > remaining_tokens:
+            continue
+        content = merged_content
+        used_tokens = merged_tokens
+        evidence_id = str(candidate.get("evidence_id") or "")
+        citation_id = str(candidate.get("citation_id") or "")
+        evidence_refs.append(evidence_id)
+        citation_ids.append(citation_id)
+        merged_ids.add(evidence_id)
+    return {
+        "content": content,
+        "evidence_refs": [item for item in evidence_refs if item],
+        "citation_ids": [item for item in citation_ids if item],
+        "estimated_tokens": used_tokens,
+    }
+
+
+def _merge_candidates(
+    item: dict[str, Any],
+    *,
+    evidence: list[dict[str, Any]],
+    selected_ids: set[str],
+    merged_ids: set[str],
+    query_terms: set[str],
+) -> list[dict[str, Any]]:
+    candidates = [
+        candidate
+        for candidate in evidence
+        if _can_merge_context_evidence(item, candidate, selected_ids=selected_ids, merged_ids=merged_ids, query_terms=query_terms)
+    ]
+    return sorted(
+        candidates,
+        key=lambda candidate: (
+            _context_usefulness_score(str(candidate.get("text") or ""), query_terms),
+            float(candidate.get("score") or 0.0),
+            -abs(int(candidate.get("node_id") or 0) - int(item.get("node_id") or 0)),
+        ),
+        reverse=True,
+    )[:2]
+
+
+def _can_merge_context_evidence(
+    item: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    selected_ids: set[str],
+    merged_ids: set[str],
+    query_terms: set[str],
+) -> bool:
+    evidence_id = str(candidate.get("evidence_id") or "")
+    if not evidence_id or evidence_id == str(item.get("evidence_id") or ""):
+        return False
+    if evidence_id in merged_ids:
+        return False
+    if item.get("content_type", "text") != "text" or candidate.get("content_type", "text") != "text":
+        return False
+    if str(candidate.get("source_file") or "") != str(item.get("source_file") or ""):
+        return False
+    if str(candidate.get("doc_id") or "") != str(item.get("doc_id") or ""):
+        return False
+    if abs(int(candidate.get("node_id") or 0) - int(item.get("node_id") or 0)) > 5:
+        return False
+    page_range = candidate.get("page_range") or []
+    item_page_range = item.get("page_range") or []
+    if page_range and item_page_range and not _ranges_overlap(page_range, item_page_range):
+        return False
+    if not page_range and not item_page_range and candidate.get("section_path") != item.get("section_path"):
+        return False
+    text = str(candidate.get("text") or "")
+    terms = _context_terms(text)
+    coverage = len(terms.intersection(query_terms)) / max(1, len(query_terms)) if query_terms else 0.0
+    return coverage >= 0.3 or _context_usefulness_score(text, query_terms) >= 0.45
+
+
+def _context_item_content(item: dict[str, Any], *, query_text: str, token_budget: int) -> str:
+    content = str(item.get("text") or "")
+    if item.get("content_type") == "visual_asset":
+        return content
+    if not query_text:
+        return content
+    estimated = _estimate_tokens(content)
+    if estimated <= _context_compaction_target(token_budget):
+        return content
+    return _compact_context_content(content, query_text=query_text, max_tokens=_context_compaction_target(token_budget))
+
+
+def _context_item_estimated_tokens(item: dict[str, Any], *, query_text: str, token_budget: int) -> int:
+    return _estimate_tokens(_context_item_content(item, query_text=query_text, token_budget=token_budget))
+
+
+def _context_compaction_target(token_budget: int) -> int:
+    if token_budget <= 0:
+        return 1
+    return max(48, min(180, int(token_budget * 0.45)))
+
+
+def _compact_context_content(text: str, *, query_text: str, max_tokens: int) -> str:
+    sentences = _context_sentences(text)
+    if len(sentences) <= 1:
+        return text
+    query_terms = _context_terms(query_text)
+    ranked = sorted(
+        enumerate(sentences),
+        key=lambda item: (
+            _context_sentence_score(item[1], query_terms),
+            -item[0],
+        ),
+        reverse=True,
+    )
+    best_score = _context_sentence_score(ranked[0][1], query_terms) if ranked else 0.0
+    selected_indexes: list[int] = []
+    for index, sentence in ranked:
+        sentence_score = _context_sentence_score(sentence, query_terms)
+        if selected_indexes and sentence_score < max(0.2, best_score * 0.45):
+            continue
+        candidate_indexes = sorted([*selected_indexes, index])
+        candidate = " ".join(sentences[item] for item in candidate_indexes).strip()
+        if _estimate_tokens(candidate) <= max_tokens:
+            selected_indexes.append(index)
+        if len(selected_indexes) >= 3:
+            break
+    if not selected_indexes:
+        return text
+    compacted = " ".join(sentences[index] for index in sorted(selected_indexes)).strip()
+    return compacted or text
+
+
+def _context_sentences(text: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", str(text)).strip()
+    if not normalized:
+        return []
+    pieces = re.split(r"(?<=[。.!?！？；;])\s+", normalized)
+    sentences = [piece.strip() for piece in pieces if piece.strip()]
+    if len(sentences) > 1:
+        return sentences
+    return [piece.strip() for piece in re.split(r"\s{2,}", normalized) if piece.strip()] or [normalized]
+
+
+def _context_sentence_score(sentence: str, query_terms: set[str]) -> float:
+    terms = _context_terms(sentence)
+    coverage = len(terms.intersection(query_terms)) / max(1, len(query_terms)) if query_terms else 0.0
+    score = coverage
+    score += min(0.24, 0.08 * sum(1 for term in query_terms if term in terms))
+    score += _context_usefulness_score(sentence, query_terms) * 0.5
+    return score
 
 
 def _context_terms(text: str) -> set[str]:
@@ -417,6 +600,12 @@ def _max_context_overlap(candidate_terms: set[str], selected_terms: list[set[str
         len(candidate_terms.intersection(terms)) / max(1, len(candidate_terms.union(terms)))
         for terms in selected_terms
     )
+
+
+def _ranges_overlap(left: list[int], right: list[int]) -> bool:
+    left_start, left_end = min(left), max(left)
+    right_start, right_end = min(right), max(right)
+    return left_start <= right_end and right_start <= left_end
 
 
 def _answerability(evidence: list[dict[str, Any]], context_pack: dict[str, Any], context_warning: str) -> dict[str, Any]:

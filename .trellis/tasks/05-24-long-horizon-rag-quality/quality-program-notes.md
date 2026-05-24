@@ -245,3 +245,46 @@ Local test command:
 Next recommended phase:
 
 - Do not keep increasing context heuristics blindly. The next substantial gain likely needs either budget-aware chunk joining/compression for adjacent same-source evidence or a first-class reranker/evidence compressor that can merge nearby supporting chunks before the answer prompt.
+
+## Phase 8 Budget-Aware Context Compression
+
+Target: improve prompt evidence density for release readiness without changing retrieval ranking or widening lexical boosts.
+
+Kept improvement:
+
+- Context items can now be compacted to query-relevant sentences when an evidence chunk is too large for the current budget target.
+- Context selection estimates token cost after compaction, so budget decisions use the text that will actually be sent to the answer prompt.
+- Selected context items can merge adjacent same-document/same-page supporting evidence into one context item when the merged content fits the remaining budget.
+- Merged context items preserve lineage through `evidence_refs` and add `citation_ids` while keeping the existing primary `citation_id` for compatibility.
+
+Observed context-quality result:
+
+- Normal 4000-token budget stayed green:
+  - General web: 7/7 selected expected.
+  - Multi-format: 3/3 selected expected.
+- Tight 260-token budget:
+  - General web improved from 6/7 to 7/7 selected expected.
+  - Multi-format stayed at 2/3 selected expected. The remaining miss is not a simple adjacent merge; it likely needs a stronger evidence compressor or chunk-boundary strategy for multi-format MDN/DOCX cases.
+
+Regression matrix:
+
+| Slice | Cases | hit@k | recall@k | MRR | Status |
+|-------|-------|-------|----------|-----|--------|
+| General web retrieval | 7 | 1.000000 | 0.928571 | 0.579932 | unchanged |
+| Multi-format retrieval | 3 | 1.000000 | 1.000000 | 0.611111 | unchanged |
+| Mixed-domain retrieval | 4 | 1.000000 | 1.000000 | 1.000000 | passed |
+| Real manuals retrieval | 10 | 1.000000 | 0.966667 | 0.708333 | unchanged |
+
+Answer diagnostics:
+
+- General web answer: 7 cases, failed=0.
+- Multi-format answer: 3 cases, failed=0.
+- Product-manual QA answer quality: 6 cases passed.
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_retrieval.py tests/unit/test_answer_generator.py tests/unit/test_lexical_search.py tests/unit/test_search_runtime_phase1.py -q` -> 61 passed.
+
+Next recommended phase:
+
+- Move toward a release gate: add a compact pre-release pilot report that summarizes readiness from config validation, local retrieval evals, context-quality diagnostics, answer-quality diagnostics, and known residual risks. This should produce a bounded operator-facing report rather than another isolated heuristic.

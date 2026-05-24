@@ -51,3 +51,11 @@
 22. [x] Implement a safe context-selection rank prior for high-coverage evidence under tight budgets.
 23. [x] Rerun retrieval, answer, mixed-domain, real-manual, and product-manual answer-quality diagnostics.
 24. [x] Commit coherent changes.
+
+## Phase 8: Budget-Aware Context Compression
+
+25. [x] Add query-aware sentence compaction for long context items.
+26. [x] Add adjacent same-source evidence merge for supporting context under tight budgets.
+27. [x] Preserve citation/evidence lineage for merged context items.
+28. [x] Rerun context-quality diagnostics, retrieval matrix, answer diagnostics, and focused unit tests.
+29. [x] Commit coherent changes.

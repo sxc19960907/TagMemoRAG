@@ -1688,3 +1688,41 @@ Added a real-data context-quality diagnostic so we can inspect whether top-k evi
 ### Next Steps
 
 - Consider budget-aware adjacent evidence joining/compression before further context heuristic tuning.
+
+
+## Session 92: Budget-aware context compression
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added budget-aware context compaction and adjacent same-source evidence merging. The goal was to make release-facing answers see denser evidence without changing retrieval ranking, parser chunking, or API route behavior.
+
+### Main Changes
+
+- Added query-aware sentence compaction for long context items.
+- Made context selection estimate tokens after compaction.
+- Added same-document/same-page adjacent evidence merging when it fits the remaining context budget.
+- Preserved merged evidence lineage via `evidence_refs` and `citation_ids`.
+- Added focused unit coverage for sentence compaction and adjacent support merging.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_retrieval.py tests/unit/test_answer_generator.py tests/unit/test_lexical_search.py tests/unit/test_search_runtime_phase1.py -q`
+- [OK] context quality, normal budget: general-web 7/7 selected expected; multi-format 3/3 selected expected
+- [OK] context quality, tight budget: general-web improved from 6/7 to 7/7; multi-format stayed 2/3
+- [OK] general-web answer: 7 cases, failed=0
+- [OK] multi-format answer: 3 cases, failed=0
+- [OK] mixed-domain retrieval: 4 cases, hit@k=1.0, MRR=1.0
+- [OK] realmanuals retrieval: 10 cases, hit@k=1.0, recall@k=0.966667, MRR=0.708333
+- [OK] product-manual QA answer quality: 6 cases passed
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Build a bounded release-readiness report that combines retrieval, context-quality, answer-quality, config, and residual-risk signals.

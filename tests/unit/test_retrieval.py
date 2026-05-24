@@ -54,6 +54,13 @@ def _text_result(node_id: int, score: float, text: str, chunk_id: str, section: 
     )
 
 
+def _page_result(node_id: int, score: float, text: str, chunk_id: str, *, page: int, section: str = ""):
+    result = _text_result(node_id, score, text, chunk_id, section)
+    result.metadata["page_start"] = page
+    result.metadata["page_end"] = page
+    return result
+
+
 def _asset(
     asset_id="asset:sha256:p12",
     *,
@@ -283,6 +290,58 @@ def test_context_pack_keeps_high_rank_relevant_evidence_under_tight_budget():
     )
 
     assert [item["evidence_refs"][0] for item in payload["context_pack"]["items"]] == ["ev_002", "ev_001"]
+
+
+def test_context_pack_compacts_long_context_to_query_relevant_sentences():
+    long_evidence = (
+        "HTTP caching overview explains browser and proxy caches. "
+        "Force revalidation uses the no-cache directive to validate cached responses before reuse. "
+        "Images and stylesheets may be cached for a long time. "
+        "Private responses should not be shared with other users."
+    )
+    payload = build_retrieve_response(
+        results=[_text_result(1, 0.99, long_evidence, "chunk-cache", "Caching")],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=120,
+        query_text="no-cache directive validate cached responses reuse",
+    )
+
+    content = payload["context_pack"]["items"][0]["content"]
+
+    assert "Force revalidation uses the no-cache directive" in content
+    assert "Images and stylesheets" not in content
+    assert payload["context_pack"]["token_count_estimate"] < (len(long_evidence) + 3) // 4
+
+
+def test_context_pack_merges_adjacent_supporting_evidence_under_budget():
+    primary = "No-cache requires revalidation before reuse."
+    adjacent = "No-cache permits storing responses."
+    unrelated = "Images and stylesheets may be cached for a long time."
+    payload = build_retrieve_response(
+        results=[
+            _page_result(10, 0.99, primary, "chunk-primary", page=4, section="HTTP caching"),
+            _page_result(11, 0.70, adjacent, "chunk-adjacent", page=4, section="HTTP caching"),
+            _page_result(20, 0.69, unrelated, "chunk-unrelated", page=9, section="HTTP caching"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=21,
+        query_text="no-cache directive storing responses revalidation reuse",
+    )
+
+    item = payload["context_pack"]["items"][0]
+
+    assert item["evidence_refs"] == ["ev_001", "ev_002"]
+    assert item["citation_ids"] == ["cit_001", "cit_002"]
+    assert "permits storing responses" in item["content"]
+    assert "Images and stylesheets" not in item["content"]
 
 
 def test_retrieve_inspect_payload_is_safe_and_bounded():
