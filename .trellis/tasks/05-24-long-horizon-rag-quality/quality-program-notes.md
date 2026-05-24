@@ -145,3 +145,48 @@ Local test command:
 Remaining gap:
 
 - `github-hello-world-repository` still has relevant evidence at ranks 6 and 8. Improving this further likely needs a first-class usefulness/reranking signal for definition-style chunks, not a stronger lexical boost.
+
+## Phase 6 Context Usefulness Batch
+
+Target: context-pack ordering, especially when top-k contains useful evidence but early slots are broad overview or navigation-like chunks.
+
+Diagnosis:
+
+- Retrieval ranking had already improved, but answer generation consumes the token-budgeted `context_pack`, not raw top-k alone.
+- With constrained budgets, `github-hello-world-repository` could spend the first context slot on a broad overview or title/source chunk instead of the direct README/repository definitions.
+- A naive usefulness heuristic that rewarded action words over-selected GitHub pull-request steps for a repository/README query, so the kept version separates definition/contains/is-a signals from weaker action signals.
+
+Kept improvement:
+
+- `build_retrieve_response` now passes `query_text` into context packing.
+- `_select_context_evidence` uses a bounded query-aware usefulness score for the first slot, then balances usefulness against overlap for follow-up slots.
+- The usefulness score rewards definition/contains/is-a style evidence and lightly rewards action/condition terms only when query coverage is sufficient.
+- API response schema is unchanged; this only affects context item ordering.
+
+Observed behavior:
+
+- For `GitHub Hello World repository README Markdown project folder`, the first context items now prioritize the README definition and repository-as-folder explanation over broad overview/navigation chunks.
+- For IRS and MDN public-web cases, context order moves answer-bearing AGI/private/no-cache style chunks forward while retrieval metrics remain unchanged.
+
+Regression matrix:
+
+| Slice | Cases | hit@k | recall@k | MRR | Status |
+|-------|-------|-------|----------|-----|--------|
+| General web retrieval | 7 | 1.000000 | 0.928571 | 0.579932 | passed |
+| Multi-format retrieval | 3 | 1.000000 | 1.000000 | 0.611111 | passed |
+| Mixed-domain retrieval | 4 | 1.000000 | 1.000000 | 1.000000 | passed |
+| Real manuals retrieval | 10 | 1.000000 | 0.966667 | 0.708333 | passed |
+
+Answer diagnostics:
+
+- General web answer: 7 cases, failed=0.
+- Multi-format answer: 3 cases, failed=0.
+- Product-manual QA answer quality: 6 cases passed.
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_retrieval.py -q` -> 15 passed.
+
+Next recommended phase:
+
+- Add a small diagnostic that records context-pack item ordering and answer-bearing heuristic scores for the weakest public-web cases, so future tuning can compare context quality directly rather than inferring it from retrieval metrics.

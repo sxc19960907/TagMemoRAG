@@ -235,6 +235,27 @@ def test_context_pack_prefers_complementary_evidence_under_budget():
     assert refs == ["ev_001", "ev_003"]
 
 
+def test_context_pack_prefers_answer_bearing_evidence_for_first_slot():
+    overview = "This tutorial teaches GitHub essentials like repositories, branches, commits, and pull requests."
+    answer = "You can think of a repository as a folder that contains related items."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, overview, "chunk-overview", "Overview"),
+            _text_result(2, 0.80, answer, "chunk-answer", "Repository"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="GitHub repository folder",
+    )
+
+    assert [item["evidence_refs"][0] for item in payload["context_pack"]["items"]] == ["ev_002"]
+    assert payload["context_pack"]["items"][0]["content"] == answer
+
+
 def test_retrieve_inspect_payload_is_safe_and_bounded():
     payload = build_retrieve_response(
         results=[_result()],

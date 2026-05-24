@@ -35,4 +35,11 @@
 12. [x] Diagnose public-web tie cases from the post-context-expansion matrix.
 13. [x] Implement a bounded lexical evidence tie-break and plural normalization.
 14. [x] Rerun retrieval and answer diagnostics across general web, multi-format, mixed-domain, real manuals, and product-manual answer quality.
-15. [ ] Commit coherent changes.
+15. [x] Commit coherent changes.
+
+## Phase 6: Context Usefulness Follow-Up
+
+16. [x] Diagnose context-pack ordering for answer-bearing chunks under constrained budgets.
+17. [x] Implement query-aware context usefulness scoring for first and follow-up context slots.
+18. [x] Rerun retrieval and answer diagnostics across general web, multi-format, mixed-domain, real manuals, and product-manual answer quality.
+19. [ ] Commit coherent changes.

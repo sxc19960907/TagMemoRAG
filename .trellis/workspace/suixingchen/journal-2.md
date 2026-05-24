@@ -1615,3 +1615,39 @@ Continued the long-horizon RAG quality task after the sparse-heading context bat
 ### Next Steps
 
 - Avoid pushing lexical boosts much further; the next quality step should be a first-class evidence usefulness/reranking signal for definition-style and answer-bearing chunks.
+
+
+## Session 90: Context usefulness ordering
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added query-aware usefulness scoring to context-pack selection. This keeps retrieval ranking stable while improving which evidence reaches answer generation first, especially for public-web cases where useful chunks are present but broad overview/navigation chunks can consume early context slots.
+
+### Main Changes
+
+- Passed `query_text` into context packing.
+- Added bounded context usefulness scoring for definition/contains/is-a style evidence.
+- Balanced follow-up context selection between answer usefulness and low overlap.
+- Added unit coverage for first-slot answer-bearing selection under tight token budget.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_retrieval.py -q`
+- [OK] general-web retrieval: 7 cases, hit@k=1.0, recall@k=0.928571, MRR=0.579932
+- [OK] realmanuals retrieval: 10 cases, hit@k=1.0, recall@k=0.966667, MRR=0.708333
+- [OK] multi-format retrieval: 3 cases, hit@k=1.0, recall@k=1.0, MRR=0.611111
+- [OK] mixed-domain retrieval: 4 cases, hit@k=1.0, MRR=1.0
+- [OK] general-web and multi-format answer diagnostics
+- [OK] product-manual QA answer quality
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Add a context-quality diagnostic report for weak public-web cases before further heuristic tuning.

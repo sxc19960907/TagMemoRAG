@@ -80,7 +80,7 @@ def build_retrieve_response(
             for index, candidate in enumerate(visual_candidates, 1)
         )
     citations = [_citation_from_evidence(item) for item in evidence]
-    context_pack, context_warning = _context_pack(evidence, token_budget=max(0, int(token_budget)))
+    context_pack, context_warning = _context_pack(evidence, token_budget=max(0, int(token_budget)), query_text=query_text)
     answerability = _answerability(evidence, context_pack, context_warning)
     visual_evidence = _visual_summary(evidence, visual_intent=visual_intent, manifest_present=visual_resolver is not None and visual_resolver.manifest is not None)
     if visual_summary:
@@ -243,11 +243,11 @@ def _citation_from_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int) -> tuple[dict[str, Any], str]:
+def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int, query_text: str = "") -> tuple[dict[str, Any], str]:
     items: list[dict[str, Any]] = []
     used_tokens = 0
     warning = ""
-    selected = _select_context_evidence(evidence, token_budget=token_budget)
+    selected = _select_context_evidence(evidence, token_budget=token_budget, query_text=query_text)
     if not selected and evidence:
         warning = "context_budget_exhausted"
     for index, item in enumerate(selected, 1):
@@ -282,23 +282,33 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int) -> tuple
     )
 
 
-def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: int) -> list[dict[str, Any]]:
+def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: int, query_text: str = "") -> list[dict[str, Any]]:
     remaining = [(index, item, _estimate_tokens(str(item["text"]))) for index, item in enumerate(evidence)]
     selected: list[tuple[int, dict[str, Any], int]] = []
     used_tokens = 0
+    query_terms = _context_terms(query_text)
     while remaining:
         fit = [(index, item, estimated) for index, item, estimated in remaining if used_tokens + estimated <= token_budget]
         if not fit:
             break
         if not selected:
-            chosen = fit[0]
-        else:
-            selected_tokens = [_context_terms(str(item["text"])) for _index, item, _estimated in selected]
-            chosen = min(
+            chosen = max(
                 fit,
                 key=lambda candidate: (
-                    _max_context_overlap(_context_terms(str(candidate[1]["text"])), selected_tokens),
-                    candidate[0],
+                    _context_usefulness_score(str(candidate[1]["text"]), query_terms),
+                    float(candidate[1].get("score") or 0.0),
+                    -candidate[0],
+                ),
+            )
+        else:
+            selected_tokens = [_context_terms(str(item["text"])) for _index, item, _estimated in selected]
+            chosen = max(
+                fit,
+                key=lambda candidate: (
+                    _context_usefulness_score(str(candidate[1]["text"]), query_terms)
+                    - _max_context_overlap(_context_terms(str(candidate[1]["text"])), selected_tokens) * 0.35,
+                    float(candidate[1].get("score") or 0.0),
+                    -candidate[0],
                 ),
             )
         selected.append(chosen)
@@ -309,6 +319,47 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
 
 def _context_terms(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9\u3400-\u9fff]+", text.lower()) if len(token) >= 2}
+
+
+def _context_usefulness_score(text: str, query_terms: set[str]) -> float:
+    normalized = re.sub(r"\s+", " ", str(text).lower()).strip()
+    if not normalized:
+        return 0.0
+    terms = _context_terms(normalized)
+    coverage = len(terms.intersection(query_terms)) / max(1, len(query_terms)) if query_terms else 0.0
+    score = min(0.4, coverage)
+    definition_patterns = (
+        r"\bis (?:a|an|the)\b",
+        r"\bare (?:a|an|the|written|used|available)\b",
+        r"\bmeans\b",
+        r"\brefers to\b",
+        r"\bas (?:a|an|the)\b",
+        r"\bcontains?\b",
+        r"\binclude?s?\b",
+    )
+    action_patterns = (
+        r"\bmust\b",
+        r"\bshould\b",
+        r"\bcan\b",
+        r"\bif\b",
+        r"\bwhen\b",
+        r"\bchoose\b",
+        r"\bselect\b",
+        r"\buse\b",
+        r"\bopen\b",
+        r"\bclick\b",
+        r"請",
+        r"如果",
+        r"使用",
+        r"選擇",
+        r"清潔",
+    )
+    score += min(0.36, 0.12 * sum(1 for pattern in definition_patterns if re.search(pattern, normalized)))
+    if coverage >= 0.35:
+        score += min(0.12, 0.04 * sum(1 for pattern in action_patterns if re.search(pattern, normalized)))
+    if "source: http" in normalized[:180] or "navigation" in normalized[:180]:
+        score -= 0.2
+    return max(0.0, score)
 
 
 def _max_context_overlap(candidate_terms: set[str], selected_terms: list[set[str]]) -> float:
