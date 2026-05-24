@@ -102,3 +102,36 @@ Surfaced optional general-web ranking pressure counts in release readiness as a 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 96: GitHub ranking pressure root cause
+
+**Date**: 2026-05-24
+**Task**: GitHub ranking pressure root cause
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Diagnosed the two GitHub Hello World general-web ranking-pressure cases, confirmed they are top-k hits with low MRR from overview/workflow chunks outranking answer-specific evidence, and kept runtime ranking unchanged pending a broader reranking batch.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `08acf40` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
