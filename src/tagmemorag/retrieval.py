@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from urllib.parse import quote
 from typing import Any, Sequence
 
@@ -183,13 +184,12 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int) -> tuple
     items: list[dict[str, Any]] = []
     used_tokens = 0
     warning = ""
-    for index, item in enumerate(evidence, 1):
+    selected = _select_context_evidence(evidence, token_budget=token_budget)
+    if not selected and evidence:
+        warning = "context_budget_exhausted"
+    for index, item in enumerate(selected, 1):
         content = str(item["text"])
         estimated = _estimate_tokens(content)
-        if used_tokens + estimated > token_budget:
-            if not items:
-                warning = "context_budget_exhausted"
-            break
         context_item = {
             "context_item_id": f"ctx_{index:03d}",
             "content_type": item.get("content_type", "text"),
@@ -216,6 +216,44 @@ def _context_pack(evidence: list[dict[str, Any]], *, token_budget: int) -> tuple
             "items": items,
         },
         warning,
+    )
+
+
+def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: int) -> list[dict[str, Any]]:
+    remaining = [(index, item, _estimate_tokens(str(item["text"]))) for index, item in enumerate(evidence)]
+    selected: list[tuple[int, dict[str, Any], int]] = []
+    used_tokens = 0
+    while remaining:
+        fit = [(index, item, estimated) for index, item, estimated in remaining if used_tokens + estimated <= token_budget]
+        if not fit:
+            break
+        if not selected:
+            chosen = fit[0]
+        else:
+            selected_tokens = [_context_terms(str(item["text"])) for _index, item, _estimated in selected]
+            chosen = min(
+                fit,
+                key=lambda candidate: (
+                    _max_context_overlap(_context_terms(str(candidate[1]["text"])), selected_tokens),
+                    candidate[0],
+                ),
+            )
+        selected.append(chosen)
+        used_tokens += chosen[2]
+        remaining = [(index, item, estimated) for index, item, estimated in remaining if index != chosen[0]]
+    return [item for _index, item, _estimated in selected]
+
+
+def _context_terms(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9\u3400-\u9fff]+", text.lower()) if len(token) >= 2}
+
+
+def _max_context_overlap(candidate_terms: set[str], selected_terms: list[set[str]]) -> float:
+    if not candidate_terms or not selected_terms:
+        return 0.0
+    return max(
+        len(candidate_terms.intersection(terms)) / max(1, len(candidate_terms.union(terms)))
+        for terms in selected_terms
     )
 
 

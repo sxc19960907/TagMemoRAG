@@ -28,6 +28,25 @@ def _result(**metadata):
     )
 
 
+def _text_result(node_id: int, score: float, text: str, chunk_id: str, section: str = ""):
+    return Result(
+        node_id=node_id,
+        score=score,
+        text=text,
+        header=section or "Evidence",
+        path=[section] if section else [],
+        source_file="docs.md",
+        start_line=node_id,
+        anchor_key=f"chunk-{node_id}",
+        metadata={
+            "doc_id": "doc-1",
+            "chunk_id": chunk_id,
+            "section_path": [section] if section else [],
+        },
+        manual_id="doc-1",
+    )
+
+
 def _asset(
     asset_id="asset:sha256:p12",
     *,
@@ -133,6 +152,29 @@ def test_build_retrieve_response_context_budget_exhausted():
         "warnings": ["context_budget_exhausted"],
         "fallback_reason": "context_budget_exhausted",
     }
+
+
+def test_context_pack_prefers_complementary_evidence_under_budget():
+    duplicate = "A repository is a folder with related project files."
+    near_duplicate = "A repository folder stores related project files."
+    complementary = "README files are written in Markdown."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, duplicate, "chunk-repo-1", "Repository"),
+            _text_result(2, 0.98, near_duplicate, "chunk-repo-2", "Repository"),
+            _text_result(3, 0.80, complementary, "chunk-readme", "README"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=25,
+    )
+
+    refs = [item["evidence_refs"][0] for item in payload["context_pack"]["items"]]
+
+    assert refs == ["ev_001", "ev_003"]
 
 
 def test_retrieve_inspect_payload_is_safe_and_bounded():
