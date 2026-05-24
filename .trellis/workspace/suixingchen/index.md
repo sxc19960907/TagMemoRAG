@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 91
+- **Total Sessions**: 92
 - **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1942 | Active |
+| `journal-2.md` | ~1975 | Active |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 92 | 2026-05-24 | Release readiness baseline | `5be08ee` | `codex/agent-loop-driver` |
 | 91 | 2026-05-24 | General-web evidence labels | `4d6a6d2` | `codex/agent-loop-driver` |
 | 90 | 2026-05-24 | General-web MRR diagnostic | `e6a5bf0` | `codex/agent-loop-driver` |
 | 89 | 2026-05-24 | General RAG release warning hardening | `19f9f69`, `2a29fa2` | `codex/agent-loop-driver` |

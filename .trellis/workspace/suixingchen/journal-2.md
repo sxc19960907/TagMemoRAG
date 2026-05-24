@@ -1940,3 +1940,36 @@ Refined the general-web MDN HTTP caching retrieval fixture to count independentl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 92: Release readiness baseline
+
+**Date**: 2026-05-24
+**Task**: Release readiness baseline
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Recorded the current passed general-purpose RAG release-readiness baseline in the backend architecture spec. The spec now distinguishes the MDN evidence-label correction from runtime ranking changes, records general_web_retrieval metrics hit@k=1.0, recall@k=0.971429, MRR=0.773810, and preserves GitHub Hello World cases as future ranking pressure. Validated scripts/release_readiness.py and release-readiness unit tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5be08ee` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
