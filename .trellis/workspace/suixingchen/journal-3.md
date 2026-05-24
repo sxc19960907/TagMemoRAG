@@ -36,3 +36,36 @@ Opened the next Trellis journal because journal-2.md was near the 2000-line thre
 ### Next Steps
 
 - None - task complete
+
+
+## Session 94: General-web ranking pressure diagnostic
+
+**Date**: 2026-05-24
+**Task**: General-web ranking pressure diagnostic
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline bounded diagnostic for general-web eval reports that identifies cases where expected evidence is reachable but under-ranked. The retained general-web report now produces two ranking-pressure items, both GitHub Hello World cases, while MDN stays resolved after evidence-label refinement. Added JSON/Markdown output and unit tests for classification, privacy defaults, and CLI output.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9b62b40` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

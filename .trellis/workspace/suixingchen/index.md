@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 93
+- **Total Sessions**: 94
 - **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~38 | Active |
+| `journal-3.md` | ~71 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 94 | 2026-05-24 | General-web ranking pressure diagnostic | `9b62b40` | `codex/agent-loop-driver` |
 | 93 | 2026-05-24 | Journal rollover | - | `codex/agent-loop-driver` |
 | 92 | 2026-05-24 | Release readiness baseline | `5be08ee` | `codex/agent-loop-driver` |
 | 91 | 2026-05-24 | General-web evidence labels | `4d6a6d2` | `codex/agent-loop-driver` |
