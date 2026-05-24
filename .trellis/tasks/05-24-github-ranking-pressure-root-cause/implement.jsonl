@@ -1,0 +1,3 @@
+{"path":"src/tagmemorag/wave_searcher.py","reason":"Ranking boundary and current lexical evidence tie-break behavior for general-web retrieval."}
+{"path":"scripts/diag_general_web_ranking_pressure.py","reason":"Existing bounded diagnostic used to identify GitHub ranking pressure."}
+{"path":"tests/fixtures/eval/general_web.jsonl","reason":"Eval expectations for the two GitHub Hello World cases."}
