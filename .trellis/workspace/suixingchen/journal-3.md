@@ -201,3 +201,36 @@ Added an offline reranking evaluation gate that compares baseline and candidate 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 99: Document reranking evaluation gate
+
+**Date**: 2026-05-24
+**Task**: Document reranking evaluation gate
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Documented when and how to run the reranking evaluation gate in the README and eval baseline workflow, including example commands, exit codes, and bounded-output privacy rules.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7efc9f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
