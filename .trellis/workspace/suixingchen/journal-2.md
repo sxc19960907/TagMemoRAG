@@ -1907,3 +1907,36 @@ Planned and archived the general-web retrieval MRR diagnostic task. Confirmed th
 ### Next Steps
 
 - None - task complete
+
+
+## Session 91: General-web evidence labels
+
+**Date**: 2026-05-24
+**Task**: General-web evidence labels
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Refined the general-web MDN HTTP caching retrieval fixture to count independently useful private/no-cache evidence already returned in top-k, without changing runtime retrieval. General-web retrieval improved to hit@k=1.0, recall@k=0.971429, MRR=0.773810, and release readiness now reports passed. GitHub cases remain unchanged as future ranking pressure.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4d6a6d2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
