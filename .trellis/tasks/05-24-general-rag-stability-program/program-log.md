@@ -37,3 +37,28 @@ Decision:
 - Baseline is stable enough to continue.
 - Next child should automate the self-check into a batch runner, so future
   candidate tasks use one repeatable command instead of manual command stitching.
+
+## 2026-05-24 Child 2: Gate Batch Runner
+
+Child task: `05-24-gate-batch-runner`
+
+Result:
+
+- Added `src/tagmemorag/reranking_gate_batch.py`
+- Added `scripts/reranking_gate_batch.py`
+- Added focused unit coverage for passing/failing batch outcomes and CLI exit
+  behavior.
+- Focused tests: `21 passed`
+- CLI self-check: `passed`
+- Release readiness status from batch: `passed`
+- Reranking gate status from batch: `passed`
+- Failed checks: `[]`
+
+Classification: `ship`
+
+Decision:
+
+- The program now has one repeatable offline command for the current stability
+  baseline.
+- Next child should be an observational evidence-usefulness dry run that emits a
+  bounded report without changing retrieval order.
