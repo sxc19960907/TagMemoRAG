@@ -196,6 +196,45 @@ Improved answer context packing so tight budgets do not get consumed by near-dup
 - Add a live answer-quality case that forces a tight context budget and verifies the generated answer cites complementary evidence points.
 
 
+## Session 92: Complementary answer quality
+
+**Date**: 2026-05-24
+**Task**: Validate complementary evidence answers
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Extended the complementary evidence work from context selection into final answer quality. The local noop answer path now prefers selected context items before falling back to full evidence, normalizes simple English plurals for relevance matching, and has a tight-budget regression proving the generated answer cites both repository/folder and README/Markdown evidence.
+
+### Main Changes
+
+- Tightened `NoopAnswerGenerator` so answer citations come from `context_pack.items` when selected context exists, keeping generated answers aligned with prompt context and answer-quality diagnostics.
+- Added simple plural normalization to English relevance terms so public documentation wording like `file`/`files` does not drop relevant evidence.
+- Added an answer-quality regression that exercises `build_retrieve_response`, prompt citation validation, noop answer generation, and `evaluate_answer_quality_case` together under a tight token budget.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12145b5` | chore(task): archive 05-24-complementary-evidence-answer-quality |
+| `3d63242` | test(rag): validate complementary evidence answers |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_answer_generator.py tests/unit/test_retrieval.py tests/unit/test_answer_quality_eval.py tests/unit/test_diag_general_web_answer_eval.py -q`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --output .tmp/eval/complementary-answer-quality-general-web.json`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/complementary-answer-quality-mixed.json`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Move back to the main RAG quality track with answer synthesis/reranking improvements that can help arbitrary knowledge bases, not just product manuals.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
