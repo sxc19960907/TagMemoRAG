@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-2.md`
-- **Total Sessions**: 92
+- **Active File**: `journal-3.md`
+- **Total Sessions**: 93
 - **Last Active**: 2026-05-24
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1975 | Active |
+| `journal-3.md` | ~38 | Active |
+| `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 93 | 2026-05-24 | Journal rollover | - | `codex/agent-loop-driver` |
 | 92 | 2026-05-24 | Release readiness baseline | `5be08ee` | `codex/agent-loop-driver` |
 | 91 | 2026-05-24 | General-web evidence labels | `4d6a6d2` | `codex/agent-loop-driver` |
 | 90 | 2026-05-24 | General-web MRR diagnostic | `e6a5bf0` | `codex/agent-loop-driver` |
