@@ -156,6 +156,46 @@ Aligned the mixed-domain GitHub fixture with the existing general-web multi-evid
 - Continue answer-quality work by checking whether retrieval context packing prefers complementary evidence over duplicate chunks for multi-evidence questions.
 
 
+## Session 91: Complementary context evidence
+
+**Date**: 2026-05-24
+**Task**: Prefer complementary context evidence
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved answer context packing so tight budgets do not get consumed by near-duplicate adjacent chunks before shorter complementary evidence can be included. Retrieval results, evidence ids, and citation ids remain in original retrieval order; only `context_pack.items` selection now prefers lower-overlap fitting evidence after the first selected item.
+
+### Main Changes
+
+- Added deterministic complementary evidence selection in `src/tagmemorag/retrieval.py`.
+- Added a regression test where the context pack chooses repository evidence plus README evidence instead of two near-duplicate repository chunks.
+- Documented context pack diversity in `.trellis/spec/backend/architecture.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc8adf1` | fix(rag): prefer complementary context evidence |
+| `8406bf6` | chore(task): archive 05-24-complementary-context-evidence |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_retrieval.py tests/unit/test_answer_generator.py tests/unit/test_answer_prompt.py tests/unit/test_answer_api.py tests/unit/test_diag_mixed_domain_eval.py tests/unit/test_diag_general_web_answer_eval.py -q`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --output .tmp/eval/context-pack-general-web-answer.json`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/context-pack-mixed.json`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/realmanuals.jsonl --docs product_manuals --config examples/config/local-hashing-npz.yaml --kb realmanuals --top-k 5 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/context-pack-realmanuals.json`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Add a live answer-quality case that forces a tight context budget and verifies the generated answer cites complementary evidence points.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
