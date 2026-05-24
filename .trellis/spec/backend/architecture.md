@@ -578,6 +578,19 @@ This slice should be run explicitly when parser behavior, public-web import, ran
 
 Public-web HTML import should prefer the semantic article body over page chrome. When a page exposes a `<main>` element, extract readable blocks from that region; otherwise fall back to all visible blocks. Always ignore structural chrome such as `nav`, `header`, `footer`, and `aside`, plus script/style/media-only tags. A 2026-05-24 general-web diagnostic showed this removes navigation/sidebar noise from real docs and moved the MDN HTTP caching case from a top-k miss to `hit@k=1.0`; remaining low MRR cases are multi-evidence/ranking issues and should not be tuned by adding site-specific HTML filters.
 
+Release-readiness baseline as of 2026-05-24: after refining the MDN HTTP
+caching eval labels to count independently useful top-k evidence, the retained
+report `.tmp/eval/release-readiness-after-evidence-refinement.json` is
+`passed`. `general_web_retrieval` reports `hit@k=1.0`,
+`recall_at_k=0.971429`, and `MRR=0.773810`, clearing the release warning target
+without changing runtime retrieval scoring. The prior warning baseline was
+`hit@k=1.0`, `recall_at_k=0.928571`, and `MRR=0.651361`. Treat this as an
+eval-label correction, not a ranking improvement. The GitHub Hello World
+repository and pull-request cases still expose real ranking pressure where
+broad tutorial overview/action chunks can outrank definition-style evidence;
+future ranking work should address those cases directly instead of broadening
+their expected labels.
+
 **Multi-format real knowledge slice.** As of 2026-05-24, `scripts/seed_multiformat_real_knowledge.py` materializes an opt-in real-source corpus that covers HTML-derived Markdown, a text-based public PDF, and DOCX-derived Markdown. DOCX is handled as source materialization, not as a new native parser suffix: the script safely reads OpenXML text from the zipped `word/document.xml`, writes Markdown plus metadata, and then the normal `.md/.pdf` build path indexes the corpus. Metadata sidecars preserve `source_format` (`html`, `pdf`, `docx`) along with `domain`, `doc_type`, `remote_id`, and `url`, so eval cases can verify both content and format lineage. Run it with:
 
 ```text
