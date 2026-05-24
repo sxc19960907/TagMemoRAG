@@ -136,3 +136,44 @@ Decision:
   same-page representative ordering. The candidate must remain default-off or
   diagnostic-only until it passes baseline, candidate, and release-readiness
   gates without degrading non-GitHub slices.
+
+## 2026-05-24 Child 5: Same-Page Ordering Candidate Dry Run
+
+Child task: `05-24-same-page-ordering-candidate-dry-run`
+
+Result:
+
+- Added `src/tagmemorag/same_page_ordering_candidate.py`.
+- Added `scripts/diag_same_page_candidate.py`.
+- Added focused unit coverage for improvement, no-op behavior, pressure-case
+  regression detection, rank-1 safety, privacy omissions, Markdown rendering,
+  candidate ranking-pressure output, and CLI invalid input handling.
+- Focused tests: `36 passed`.
+- Local dry run on `.tmp/eval/general-web-after-evidence-refinement.json`:
+  - candidate status: `passed`
+  - changed cases: `2`
+  - improved cases: `2`
+  - regressed cases: `0`
+  - baseline MRR: `0.773810`
+  - candidate MRR: `1.000000`
+  - baseline ranking pressure count: `2`
+  - candidate ranking pressure count: `0`
+  - baseline highest pressure rank count: `5`
+  - candidate highest pressure rank count: `0`
+  - `github-hello-world-repository`: first matched rank `6` -> `1`
+  - `github-hello-world-pull-request`: first matched rank `4` -> `1`
+- Privacy keyword scan over generated JSON/Markdown found no forbidden raw
+  payload markers checked by this task.
+- Batch gate with candidate ranking-pressure report: `passed`, release
+  readiness `passed`, reranking gate `passed`, failed checks `[]`.
+
+Classification: `ship`
+
+Decision:
+
+- A pressure-gated same-page candidate is promising: it only reorders cases
+  whose baseline first match is below rank 1, preserving existing rank-1 hits
+  in the retained report.
+- Next child may design a guarded runtime implementation behind a default-off
+  setting or diagnostic flag. It must reuse the dry-run gate as the acceptance
+  baseline and run broader non-GitHub slices before any default-on proposal.
