@@ -77,6 +77,46 @@ Returned to the RAG quality mainline after API slimming. Added a shared-KB mixed
 - Improve intra-document ranking for long public web pages: mixed-domain validation passed with no cross-domain pollution, but GitHub/Python exact evidence ranked at positions 2-3 rather than always top-1.
 
 
+## Session 89: Long-document chunk ranking
+
+**Date**: 2026-05-24
+**Task**: Improve long-document chunk ranking
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved same-document ranking for long public web docs by adding a small bounded body-only proximity bonus for adjacent/near-adjacent ordinary query terms. This lifts evidence-bearing prose such as `standard library` and `source or binary` above repeated page-title/navigation chunks without giving metadata/title fields the same evidence weight.
+
+### Main Changes
+
+- Added body-only ordinary-term proximity scoring in `src/tagmemorag/lexical_search.py`.
+- Added focused lexical regression tests for long web documentation chunks.
+- Recorded the body-only proximity rule in `.trellis/spec/backend/architecture.md`.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e6ef726` | fix(rag): boost long-document body phrase matches |
+| `926cd46` | chore(task): archive 05-24-long-document-chunk-ranking |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_lexical_search.py tests/unit/test_diag_mixed_domain_eval.py tests/unit/test_diag_general_web_answer_eval.py tests/unit/test_realmanuals_fixture.py -q`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/long-doc-final.json`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --output .tmp/eval/general-web-answer-long-doc.json`
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/realmanuals.jsonl --docs product_manuals --config examples/config/local-hashing-npz.yaml --kb realmanuals --top-k 5 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/realmanuals-long-doc.json`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Revisit multi-evidence query evaluation: the GitHub README case still ranks README evidence above repository/folder evidence, which may be acceptable for answer quality but is stricter than the current single expected chunk.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
