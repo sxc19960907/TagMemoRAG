@@ -29,7 +29,7 @@
 
 11. [x] Update task notes with final metrics and remaining risks.
 12. [x] Run focused unit tests and any lint/type checks used by touched modules.
-13. [ ] Commit the coherent hardening batch.
+13. [x] Commit the coherent hardening batch.
 
 ## Validation Commands
 
