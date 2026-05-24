@@ -1874,3 +1874,36 @@ Improved tight-budget multi-format context readiness with fit-aware context merg
 ### Next Steps
 
 - None - task complete
+
+
+## Session 90: General-web MRR diagnostic
+
+**Date**: 2026-05-24
+**Task**: General-web MRR diagnostic
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Planned and archived the general-web retrieval MRR diagnostic task. Confirmed the remaining release warning is not safe to fix with a broad ranking tweak: weak cases mix real ranking issues with fixture expectation gaps, and current lexical evidence signals prefer broad related chunks in several cases. Left retrieval behavior unchanged and recorded the next safe path as fixture/evidence-label refinement before scoring changes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e6a5bf0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
