@@ -23,7 +23,8 @@
     "05-24-gate-batch-runner",
     "05-24-evidence-usefulness-dry-run",
     "05-24-github-same-page-ordering-diagnostic",
-    "05-24-same-page-ordering-candidate-dry-run"
+    "05-24-same-page-ordering-candidate-dry-run",
+    "05-24-same-page-ordering-runtime-flag"
   ],
   "parent": null,
   "relatedFiles": [],

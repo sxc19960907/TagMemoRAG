@@ -177,3 +177,34 @@ Decision:
 - Next child may design a guarded runtime implementation behind a default-off
   setting or diagnostic flag. It must reuse the dry-run gate as the acceptance
   baseline and run broader non-GitHub slices before any default-on proposal.
+
+## 2026-05-24 Child 6: Same-Page Ordering Runtime Flag
+
+Child task: `05-24-same-page-ordering-runtime-flag`
+
+Result:
+
+- Added `src/tagmemorag/same_page_ordering.py` with a pure deterministic
+  pressure-gated same-page ordering helper.
+- Added `search.same_page_ordering_enabled`, default `false`.
+- Added `search.same_page_ordering_min_group_size`, default `2`.
+- Wired `build_retrieve_response` and `/retrieve` to pass the option from
+  settings while preserving default-off behavior.
+- Added config tests for defaults, env overrides, and YAML overrides.
+- Added retrieval tests proving:
+  - disabled flag preserves result/evidence order
+  - enabled flag promotes the same-page pressure result
+  - enabled flag preserves rank-1 useful results
+- Focused adjacent tests: `106 passed`.
+- Batch gate after runtime wiring: `passed`, release readiness `passed`,
+  reranking gate `passed`, failed checks `[]`.
+
+Classification: `ship`
+
+Decision:
+
+- The runtime code path is present but default-off, so baseline release behavior
+  remains unchanged.
+- Next child should run explicit eval with `same_page_ordering_enabled=true`
+  against the retained/general-web slice and at least one broader non-GitHub
+  slice before considering any default-on proposal.

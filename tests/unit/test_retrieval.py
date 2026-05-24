@@ -9,6 +9,7 @@ from tagmemorag.retrieval import (
     detect_visual_intent,
     retrieve_inspect_payload,
 )
+from tagmemorag.same_page_ordering import SamePageOrderingOptions
 from tagmemorag.visual_retrieval.provider import DeterministicVisualCandidateProvider, NoopVisualReranker
 from tagmemorag.types import Result
 
@@ -51,6 +52,25 @@ def _text_result(node_id: int, score: float, text: str, chunk_id: str, section: 
             "section_path": [section] if section else [],
         },
         manual_id="doc-1",
+    )
+
+
+def _same_page_result(node_id: int, score: float, text: str, chunk_id: str):
+    return Result(
+        node_id=node_id,
+        score=score,
+        text=text,
+        header="Hello World - GitHub Docs",
+        path=["Hello World - GitHub Docs"],
+        source_file="public_web/docs.github.com-en-get-started-start-your-journey-hello-world.md",
+        start_line=node_id,
+        anchor_key=f"chunk-{node_id}",
+        metadata={
+            "doc_id": "github",
+            "chunk_id": chunk_id,
+            "section_path": ["Hello World - GitHub Docs"],
+        },
+        manual_id="github",
     )
 
 
@@ -224,6 +244,63 @@ def test_build_retrieve_response_context_budget_exhausted():
         "warnings": ["context_budget_exhausted"],
         "fallback_reason": "context_budget_exhausted",
     }
+
+
+def test_same_page_ordering_disabled_preserves_result_order():
+    first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
+    matched = _same_page_result(2, 2.8, "A repository is a folder that contains README files.", "matched")
+
+    payload = build_retrieve_response(
+        results=[first, matched],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=False),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["top", "matched"]
+    assert [item["chunk_id"] for item in payload["evidence"]] == ["top", "matched"]
+
+
+def test_same_page_ordering_enabled_promotes_pressure_result():
+    first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
+    matched = _same_page_result(2, 2.8, "A repository is a folder that contains README files.", "matched")
+
+    payload = build_retrieve_response(
+        results=[first, matched],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["matched", "top"]
+    assert [item["chunk_id"] for item in payload["evidence"]] == ["matched", "top"]
+    assert payload["citations"][0]["evidence_id"] == "ev_001"
+
+
+def test_same_page_ordering_enabled_preserves_rank_one_useful_result():
+    matched = _same_page_result(1, 3.2, "A repository is a folder that contains README files.", "matched")
+    later = _same_page_result(2, 2.8, "Create a branch and open a pull request.", "later")
+
+    payload = build_retrieve_response(
+        results=[matched, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["matched", "later"]
 
 
 def test_context_pack_prefers_complementary_evidence_under_budget():

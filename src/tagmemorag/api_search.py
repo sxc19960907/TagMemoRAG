@@ -20,6 +20,7 @@ from .observability.tracing import set_span_attributes, start_span
 from .qa_context import context_meta, contextual_question, normalize_question, trim_context_text
 from .retrieval import VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
 from .retrieval import VisualRetrievalResolver
+from .same_page_ordering import SamePageOrderingOptions
 from .search_runtime import (
     execute_search,
     search_ann_enabled,
@@ -702,6 +703,10 @@ def retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphS
             max_candidates=settings.visual_retrieval.max_candidates,
             min_score=settings.visual_retrieval.min_score,
             trigger=settings.visual_retrieval.trigger,
+        ),
+        same_page_ordering=SamePageOrderingOptions(
+            enabled=settings.search.same_page_ordering_enabled,
+            min_group_size=settings.search.same_page_ordering_min_group_size,
         ),
         query_text=request.question,
     )

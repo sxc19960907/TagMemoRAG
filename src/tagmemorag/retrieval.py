@@ -6,6 +6,7 @@ from urllib.parse import quote
 from typing import Any, Sequence
 
 from .document_assets import AssetManifest, DocumentAsset
+from .same_page_ordering import SamePageOrderingOptions, order_same_page_results
 from .types import Result
 from .visual_retrieval.base import VisualCandidate, VisualCandidateProvider, VisualQueryContext, VisualReranker
 
@@ -49,10 +50,11 @@ def build_retrieve_response(
     search_time_ms: float = 0.0,
     visual_resolver: VisualEvidenceResolver | None = None,
     visual_retrieval_resolver: VisualRetrievalResolver | None = None,
+    same_page_ordering: SamePageOrderingOptions | None = None,
     query_text: str = "",
 ) -> dict[str, Any]:
     visual_intent = detect_visual_intent(query_text)
-    result_list = list(results)
+    result_list = order_same_page_results(results, query_text=query_text, options=same_page_ordering)
     evidence = [
         _evidence_from_result(
             result,
@@ -92,7 +94,7 @@ def build_retrieve_response(
         "trace_id": trace_id,
         "search_id": search_id,
         "retrieve_id": retrieve_id,
-        "results": [result.to_dict() for result in results],
+        "results": [result.to_dict() for result in result_list],
         "evidence": evidence,
         "citations": citations,
         "context_pack": context_pack,
