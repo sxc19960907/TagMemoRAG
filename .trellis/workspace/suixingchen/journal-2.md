@@ -319,6 +319,44 @@ Added an opt-in benchmark lane for real online knowledge documents across HTML, 
 - Use the multi-format benchmark to drive the next optimization pass. The first obvious pressure point is improving recall/ranking on long real PDF/DOCX-derived documents without overfitting one fixture.
 
 
+## Session 95: Multi-format eval chunk alignment
+
+**Date**: 2026-05-24
+**Task**: Improve multiformat long document ranking
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Investigated the weak first-pass multi-format retrieval metrics. The DOCX case was returning the right EPA waiver chunks near the top, but the eval expectation combined phrases from adjacent chunks into one relevant item, producing a false negative. The suite now models the DOCX question as three chunk-aligned complementary evidence points.
+
+### Main Changes
+
+- Split the EPA DOCX waiver-certification expectation into chunk-level relevant entries for waiver certification, Section 508/plain-language certification, and HTTPS/OMB certification evidence.
+- Documented the rule that long-document eval expectations must not combine adjacent chunks into one expected result.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `abf49c7` | chore(task): archive 05-24-improve-multiformat-long-doc-ranking |
+| `dac4b5b` | test(rag): align multiformat eval with chunk evidence |
+
+### Testing
+
+- [OK] `.venv/bin/python -m tagmemorag eval run --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --docs .tmp/multiformat-real-knowledge/multiformat_real --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0 --output .tmp/eval/multiformat-real-knowledge-corrected.json` (`hit@k=1.0`, `recall@k=1.0`, `mrr=0.611111`)
+- [OK] `.venv/bin/python scripts/diag_multiformat_answer_eval.py --docs .tmp/multiformat-real-knowledge/multiformat_real --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb multiformat_real --top-k 8 --output .tmp/eval/multiformat-real-answer-corrected.json`
+- [OK] `.venv/bin/python -m pytest tests/unit/test_multiformat_real_knowledge.py tests/unit/test_run_eval_ci.py -q`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue with genuine ranking improvements only after corrected real-document evals expose actual retrieval misses, not fixture-boundary artifacts.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
