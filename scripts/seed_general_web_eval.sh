@@ -17,6 +17,28 @@ rm -rf "$ROOT_DIR"
   --tag software-docs \
   --timeout-seconds 20
 
+"$PYTHON_BIN" -m tagmemorag knowledge sample-web \
+  --url https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching \
+  --output-dir "$ROOT_DIR" \
+  --kb "$KB_NAME" \
+  --domain web_platform_docs \
+  --doc-type documentation \
+  --tag web-platform \
+  --tag http \
+  --tag caching \
+  --timeout-seconds 20
+
+"$PYTHON_BIN" -m tagmemorag knowledge sample-web \
+  --url https://www.usa.gov/passport \
+  --url https://www.irs.gov/filing/free-file-do-your-federal-taxes-for-free \
+  --output-dir "$ROOT_DIR" \
+  --kb "$KB_NAME" \
+  --domain public_service \
+  --doc-type help_article \
+  --tag public-service \
+  --tag government \
+  --timeout-seconds 20
+
 cat <<EOF
 
 General web eval corpus materialized at:

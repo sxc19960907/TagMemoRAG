@@ -556,6 +556,26 @@ The slice is deterministic and offline. It exercises PDF-derived product metadat
 
 As of 2026-05-24, lexical scoring gives a small bounded bonus for adjacent/near-adjacent ordinary query terms only in chunk body text. This is intended for long web documentation where repeated page titles and navigation text can tie with the actual evidence chunk (for example `standard library` and `source or binary`). Do not apply this proximity bonus to identity metadata or page-title-only fields; those fields are useful for narrowing but should not look like evidence-bearing prose.
 
+**General-web real knowledge slice.** As of 2026-05-24, `scripts/seed_general_web_eval.sh` materializes a broader opt-in public-web corpus from live URLs into `.tmp/general-web-eval/general_web`. It covers Python and GitHub software docs (`domain=software_docs`), MDN HTTP caching docs (`domain=web_platform_docs`), and USAGov/IRS public service help articles (`domain=public_service`). The committed fixture stores only URLs and expected evidence strings; fetched third-party content remains out of git. Run retrieval and answer checks with:
+
+```text
+scripts/seed_general_web_eval.sh
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --docs .tmp/general-web-eval/general_web \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 8
+.venv/bin/python scripts/diag_general_web_answer_eval.py \
+  --docs .tmp/general-web-eval/general_web \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 8
+```
+
+This slice should be run explicitly when parser behavior, public-web import, ranking, context packing, or answer generation changes. Keep sources stable and official; avoid news/current-event pages because wording churn turns the benchmark into a maintenance burden instead of a quality signal.
+
 **Mixed-domain shared-KB slice.** As of 2026-05-23, `tests/fixtures/eval/mixed_knowledge.jsonl` validates that real product manuals and public web documentation can coexist in one shared KB without obvious top-ranked cross-domain pollution. Run it after seeding public web docs:
 
 ```text

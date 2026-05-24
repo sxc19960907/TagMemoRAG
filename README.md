@@ -1062,7 +1062,7 @@ scripts/seed_general_web_eval.sh
   --docs .tmp/general-web-eval/general_web \
   --config examples/config/local-hashing-npz.yaml \
   --kb general_web \
-  --top-k 5 \
+  --top-k 8 \
   --min-recall-at-k 0.75 \
   --min-mrr 0.4 \
   --min-hit-at-k 0.75
@@ -1086,10 +1086,14 @@ generator and answer-quality checks:
   --kb general_web
 ```
 
-The first general web baseline covers Python and GitHub documentation with
-`domain=software_docs` and `doc_type=documentation`. The GitHub repository case
+The general web baseline covers real public pages across multiple domains:
+Python and GitHub software documentation (`domain=software_docs`), MDN HTTP
+caching documentation (`domain=web_platform_docs`), and USAGov/IRS public
+service help articles (`domain=public_service`). The GitHub repository case
 models multi-evidence retrieval explicitly: the repository/folder definition and
-the README/Markdown explanation may be returned as separate chunks.
+the README/Markdown explanation may be returned as separate chunks. The MDN and
+IRS cases likewise include complementary evidence so answer-quality checks see
+more than a single easy snippet.
 
 Use the mixed-domain diagnostic to validate that real manuals and public docs
 can coexist in one shared KB without obvious top-ranked cross-domain pollution:
