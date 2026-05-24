@@ -1840,3 +1840,37 @@ Completed and archived the long-horizon RAG quality program after verifying the 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 89: General RAG release warning hardening
+
+**Date**: 2026-05-24
+**Task**: General RAG release warning hardening
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Improved tight-budget multi-format context readiness with fit-aware context merge compaction, regenerated release-readiness reports so only general-web retrieval MRR remains as a warning, and documented why broad ranking priors should wait for a stricter diagnostic.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `19f9f69` | (see git log) |
+| `2a29fa2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
