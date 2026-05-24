@@ -7,9 +7,17 @@ from tagmemorag.answer.base import AnswerRequestContext
 from tagmemorag.answer.generator import NoopAnswerGenerator, create_answer_generator
 from tagmemorag.answer.intent import AnswerIntent, classify_answer_intent, contains_any
 from tagmemorag.answer.openai_compatible import OpenAICompatibleAnswerGenerator
-from tagmemorag.answer.prompt import build_answer_prompt
+from tagmemorag.answer.prompt import build_answer_prompt, validate_generation_citations
 from tagmemorag.config import AnswerConfig, Settings
 from tagmemorag.errors import InvalidConfigError
+from tagmemorag.eval.answer_quality import (
+    AnswerQualityCase,
+    AnswerQualityContext,
+    AnswerQualityExpected,
+    evaluate_answer_quality_case,
+)
+from tagmemorag.retrieval import build_retrieve_response
+from tagmemorag.types import Result
 
 
 def _context() -> AnswerRequestContext:
@@ -38,6 +46,25 @@ def _context() -> AnswerRequestContext:
         prompt_version="answer_prompt.v1",
     )
     return AnswerRequestContext(question="weak steam nozzle", retrieve_payload=retrieve_payload, prompt=prompt, max_output_tokens=64)
+
+
+def _text_result(node_id: int, score: float, text: str, chunk_id: str, section: str) -> Result:
+    return Result(
+        node_id=node_id,
+        score=score,
+        text=text,
+        header=section,
+        path=[section],
+        source_file="docs.md",
+        start_line=node_id,
+        anchor_key=f"chunk-{node_id}",
+        metadata={
+            "doc_id": "doc-1",
+            "chunk_id": chunk_id,
+            "section_path": [section],
+        },
+        manual_id="doc-1",
+    )
 
 
 def test_noop_answer_generator_is_deterministic():
@@ -125,6 +152,76 @@ def test_noop_answer_generator_formats_generic_multi_evidence_answer():
     )
     assert "建议先这样处理" not in generation.text
     assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
+
+
+def test_noop_answer_quality_uses_complementary_context_under_tight_budget():
+    question = "What is a GitHub repository and README Markdown file?"
+    retrieve_payload = build_retrieve_response(
+        results=[
+            _text_result(
+                1,
+                0.99,
+                "A repository is a folder with related project files.",
+                "chunk-repo-1",
+                "Repository",
+            ),
+            _text_result(
+                2,
+                0.98,
+                "A repository folder stores related project files.",
+                "chunk-repo-2",
+                "Repository",
+            ),
+            _text_result(3, 0.80, "README files are written in Markdown.", "chunk-readme", "README"),
+        ],
+        build_id="b1",
+        kb_name="general_web",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=25,
+        query_text=question,
+    )
+    prompt = build_answer_prompt(
+        question=question,
+        retrieve_payload=retrieve_payload,
+        prompt_version="answer_prompt.v1",
+    )
+    context = AnswerRequestContext(
+        question=question,
+        retrieve_payload=retrieve_payload,
+        prompt=prompt,
+        max_output_tokens=64,
+    )
+
+    generation = validate_generation_citations(
+        NoopAnswerGenerator().generate(context),
+        prompt.allowed_citation_ids,
+    )
+    quality = evaluate_answer_quality_case(
+        AnswerQualityCase(
+            id="repo-readme-tight-budget",
+            question=question,
+            answer=generation.text,
+            contexts=tuple(
+                AnswerQualityContext(
+                    citation_id=str(item["citation_id"]),
+                    text=str(item["content"]),
+                    source=str((item.get("source") or {}).get("source_file") or ""),
+                )
+                for item in retrieve_payload["context_pack"]["items"]
+            ),
+            expected=AnswerQualityExpected(grounded=True, relevant=True, citation_supported=True),
+        )
+    )
+
+    assert [item["evidence_refs"][0] for item in retrieve_payload["context_pack"]["items"]] == ["ev_001", "ev_003"]
+    assert "repository is a folder" in generation.text
+    assert "README files are written in Markdown" in generation.text
+    assert [citation.citation_id for citation in generation.citations] == ["cit_001", "cit_003"]
+    assert quality.passed is True
+    assert quality.observed["grounded"] is True
+    assert quality.observed["citation_supported"] is True
 
 
 def test_noop_answer_generator_keeps_github_workflow_docs_generic():

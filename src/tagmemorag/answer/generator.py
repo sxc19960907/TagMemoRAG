@@ -47,21 +47,35 @@ class NoopAnswerGenerator:
 
 def _supported_excerpts(context: AnswerRequestContext) -> tuple[tuple[str, str], ...]:
     allowed = set(context.prompt.allowed_citation_ids)
+    context_candidates = _relevant_context_excerpts(context, allowed)
+    deduped_context = _dedupe_excerpts(context_candidates)
+    if deduped_context:
+        return tuple(deduped_context[:MAX_EXTRACTIVE_EXCERPTS])
+    evidence_candidates = _relevant_evidence_excerpts(context, allowed)
+    deduped_evidence = _dedupe_excerpts(evidence_candidates)
+    if deduped_evidence:
+        return tuple(deduped_evidence[:MAX_EXTRACTIVE_EXCERPTS])
+    return tuple(_dedupe_excerpts(_all_supported_excerpts(context, allowed))[:MAX_EXTRACTIVE_EXCERPTS])
+
+
+def _relevant_context_excerpts(context: AnswerRequestContext, allowed: set[str]) -> list[tuple[str, str]]:
     candidates: list[tuple[str, str]] = []
     for item in (context.retrieve_payload.get("context_pack") or {}).get("items") or []:
         citation_id = str(item.get("citation_id") or "")
         content = _clean_excerpt(str(item.get("content") or ""))
         if citation_id in allowed and content and _is_relevant_excerpt(context.question, content):
             candidates.append((citation_id, content))
+    return candidates
+
+
+def _relevant_evidence_excerpts(context: AnswerRequestContext, allowed: set[str]) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
     for item in context.retrieve_payload.get("evidence") or []:
         citation_id = str(item.get("citation_id") or "")
         text = _clean_excerpt(str(item.get("text") or ""))
         if citation_id in allowed and text and _is_relevant_excerpt(context.question, text):
             candidates.append((citation_id, text))
-    deduped = _dedupe_excerpts(candidates)
-    if deduped:
-        return tuple(deduped[:MAX_EXTRACTIVE_EXCERPTS])
-    return tuple(_dedupe_excerpts(_all_supported_excerpts(context, allowed))[:MAX_EXTRACTIVE_EXCERPTS])
+    return candidates
 
 
 def _all_supported_excerpts(context: AnswerRequestContext, allowed: set[str]) -> list[tuple[str, str]]:
@@ -157,7 +171,13 @@ def _is_relevant_excerpt(question: str, excerpt: str) -> bool:
 
 def _relevance_terms(text: str) -> set[str]:
     lowered = text.casefold()
-    terms = {token for token in re.findall(r"[a-z0-9]+", lowered) if len(token) >= 3}
+    terms = set()
+    for token in re.findall(r"[a-z0-9]+", lowered):
+        if len(token) < 3:
+            continue
+        terms.add(token)
+        if len(token) > 3 and token.endswith("s"):
+            terms.add(token[:-1])
     terms.update(char for char in lowered if _is_cjk(char) and char not in {"的", "了", "和", "是", "在", "个", "吗"})
     return terms
 
