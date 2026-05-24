@@ -1546,3 +1546,37 @@ Finished API slimming by reducing api.py to FastAPI wiring plus compatibility wr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 88: Long-horizon RAG quality batch
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Ran a longer real-data quality batch across public web, multi-format, mixed-domain, real product manuals, and answer-quality diagnostics. Rejected parser-level PDF heading merging after it regressed real-manual retrieval, then kept a safer retrieval-context enhancement that expands sparse PDF heading-only evidence with adjacent same-page body text for answer generation.
+
+### Main Changes
+
+- Added context-pack expansion for sparse PDF heading-only retrieval results.
+- Added unit coverage for adjacent body expansion on a real Hisense Steam Clean style scenario.
+- Recorded baseline/regression/final matrix in `.trellis/tasks/05-24-long-horizon-rag-quality/quality-program-notes.md`.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_retrieval.py tests/unit/test_parser.py tests/unit/test_answer_generator.py -q`
+- [OK] realmanuals retrieval: 10 cases, hit@k=1.0, recall@k=0.966667, MRR=0.708333
+- [OK] mixed-domain retrieval: 4 cases, hit@k=1.0, MRR=1.0
+- [OK] general-web retrieval and answer diagnostics
+- [OK] multi-format retrieval and answer diagnostics
+- [OK] product-manual QA answer quality
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Consider a ranking-layer evidence usefulness score to demote table-of-contents and other low-answerability chunks while preserving useful adjacent context.

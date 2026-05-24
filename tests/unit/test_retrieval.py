@@ -113,6 +113,64 @@ def test_build_retrieve_response_shapes_text_evidence_and_context():
     assert item["asset_refs"] == []
 
 
+def test_build_retrieve_response_expands_sparse_pdf_heading_with_adjacent_body():
+    heading = Result(
+        node_id=10,
+        score=0.95,
+        text="USING THE STEAM CLEAN FUNCTION TO",
+        header="USING THE STEAM CLEAN FUNCTION TO",
+        path=["USING THE STEAM CLEAN FUNCTION TO"],
+        source_file="oven.pdf",
+        start_line=45,
+        anchor_key="heading",
+        metadata={
+            "doc_id": "oven",
+            "chunk_id": "heading",
+            "page_start": 45,
+            "page_end": 45,
+            "section_path": ["USING THE STEAM CLEAN FUNCTION TO"],
+            "pdf_parser_profile": "product_manual",
+            "pdf_header_source": "detected",
+        },
+        manual_id="oven",
+    )
+    body = Result(
+        node_id=11,
+        score=0.80,
+        text="Turn the COOKING SYSTEM SELECTOR and TEMPERATURE KNOB to 70 C. Pour 0.6 l of water into a glass dish.",
+        header="Turn the COOKING SYSTEM SELECTOR",
+        path=["Turn the COOKING SYSTEM SELECTOR"],
+        source_file="oven.pdf",
+        start_line=45,
+        anchor_key="body",
+        metadata={
+            "doc_id": "oven",
+            "chunk_id": "body",
+            "page_start": 45,
+            "page_end": 45,
+            "section_path": ["Turn the COOKING SYSTEM SELECTOR"],
+            "pdf_parser_profile": "product_manual",
+            "pdf_header_source": "detected",
+        },
+        manual_id="oven",
+    )
+
+    payload = build_retrieve_response(
+        results=[heading, body],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=200,
+    )
+
+    first_evidence = payload["evidence"][0]["text"]
+    assert "USING THE STEAM CLEAN FUNCTION TO" in first_evidence
+    assert "Pour 0.6 l of water into a glass dish" in first_evidence
+    assert payload["context_pack"]["items"][0]["content"] == first_evidence
+
+
 def test_build_retrieve_response_no_results_is_insufficient_evidence():
     payload = build_retrieve_response(
         results=[],

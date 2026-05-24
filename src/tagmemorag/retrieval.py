@@ -52,7 +52,16 @@ def build_retrieve_response(
     query_text: str = "",
 ) -> dict[str, Any]:
     visual_intent = detect_visual_intent(query_text)
-    evidence = [_evidence_from_result(result, index, visual_resolver=visual_resolver) for index, result in enumerate(results, 1)]
+    result_list = list(results)
+    evidence = [
+        _evidence_from_result(
+            result,
+            index,
+            visual_resolver=visual_resolver,
+            adjacent_results=result_list,
+        )
+        for index, result in enumerate(result_list, 1)
+    ]
     visual_summary: dict[str, Any] = {}
     visual_candidates: tuple[VisualCandidate, ...] = ()
     if visual_retrieval_resolver is not None:
@@ -140,7 +149,13 @@ def retrieve_inspect_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return inspect
 
 
-def _evidence_from_result(result: Result, index: int, *, visual_resolver: VisualEvidenceResolver | None = None) -> dict[str, Any]:
+def _evidence_from_result(
+    result: Result,
+    index: int,
+    *,
+    visual_resolver: VisualEvidenceResolver | None = None,
+    adjacent_results: Sequence[Result] = (),
+) -> dict[str, Any]:
     metadata = dict(result.metadata or {})
     citation_id = f"cit_{index:03d}"
     evidence_id = f"ev_{index:03d}"
@@ -158,7 +173,7 @@ def _evidence_from_result(result: Result, index: int, *, visual_resolver: Visual
         "source_file": result.source_file,
         "page_range": page_range,
         "section_path": section_path,
-        "text": _snippet(result.text),
+        "text": _snippet(_evidence_text(result, adjacent_results)),
         "score": float(result.score),
         "confidence": _confidence(result.score),
         "reason": _reason(result, section_path, page_range),
@@ -166,6 +181,54 @@ def _evidence_from_result(result: Result, index: int, *, visual_resolver: Visual
         "assets": assets,
         "asset_warnings": asset_warnings,
     }
+
+
+def _evidence_text(result: Result, adjacent_results: Sequence[Result]) -> str:
+    text = str(result.text or "").strip()
+    if not _is_sparse_pdf_heading_result(result):
+        return text
+    neighbor = _best_adjacent_body_result(result, adjacent_results)
+    if neighbor is None:
+        return text
+    return (text.rstrip() + "\n" + str(neighbor.text or "").strip()).strip()
+
+
+def _is_sparse_pdf_heading_result(result: Result) -> bool:
+    metadata = result.metadata or {}
+    if "pdf_parser_profile" not in metadata:
+        return False
+    if str(metadata.get("pdf_header_source") or "") != "detected":
+        return False
+    text = str(result.text or "").strip()
+    if not text or "\n" in text:
+        return False
+    return text == str(result.header or "").strip() and len(text) < 100
+
+
+def _best_adjacent_body_result(result: Result, adjacent_results: Sequence[Result]) -> Result | None:
+    candidates = [
+        candidate
+        for candidate in adjacent_results
+        if _can_supply_adjacent_context(result, candidate)
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda candidate: abs(int(candidate.node_id) - int(result.node_id)))
+
+
+def _can_supply_adjacent_context(result: Result, candidate: Result) -> bool:
+    if int(candidate.node_id) == int(result.node_id):
+        return False
+    if abs(int(candidate.node_id) - int(result.node_id)) > 2:
+        return False
+    if candidate.source_file != result.source_file:
+        return False
+    if candidate.metadata.get("page_start") != result.metadata.get("page_start"):
+        return False
+    text = str(candidate.text or "").strip()
+    if len(text) < 40:
+        return False
+    return not _is_sparse_pdf_heading_result(candidate)
 
 
 def _citation_from_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
