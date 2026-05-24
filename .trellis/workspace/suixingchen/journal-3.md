@@ -168,3 +168,36 @@ Planned the broader reranking/evidence-usefulness evaluation gate for future ran
 ### Next Steps
 
 - None - task complete
+
+
+## Session 98: Reranking evaluation gate runner
+
+**Date**: 2026-05-24
+**Task**: Reranking evaluation gate runner
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline reranking evaluation gate that compares baseline and candidate readiness/ranking-pressure reports, emits bounded JSON or Markdown, and fails unsafe candidates before future ranking changes can ship.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f6168a5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
