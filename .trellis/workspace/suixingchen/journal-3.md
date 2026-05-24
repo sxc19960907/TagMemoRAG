@@ -69,3 +69,36 @@ Added an offline bounded diagnostic for general-web eval reports that identifies
 ### Next Steps
 
 - None - task complete
+
+
+## Session 95: Release readiness ranking pressure hint
+
+**Date**: 2026-05-24
+**Task**: Release readiness ranking pressure hint
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Surfaced optional general-web ranking pressure counts in release readiness as a non-blocking passed-status hint, with focused tests and validation preserving privacy boundaries.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c3015a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
