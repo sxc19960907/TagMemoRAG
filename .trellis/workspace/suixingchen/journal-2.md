@@ -1651,3 +1651,40 @@ Added query-aware usefulness scoring to context-pack selection. This keeps retri
 ### Next Steps
 
 - Add a context-quality diagnostic report for weak public-web cases before further heuristic tuning.
+
+
+## Session 91: Context quality diagnostics
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a real-data context-quality diagnostic so we can inspect whether top-k evidence actually reaches the answer prompt. Used it on general-web and multi-format slices with normal and tight budgets, then added a bounded rank/score prior for high-coverage context evidence to reduce tight-budget misses without changing retrieval ranking.
+
+### Main Changes
+
+- Added `scripts/diag_context_quality.py` and `tagmemorag.eval.context_quality`.
+- Added bounded `context_evidence_diagnostics()` output without raw snippets.
+- Added a context-selection score prior for high-query-coverage evidence.
+- Added unit coverage for diagnostic sanitization and tight-budget high-rank evidence retention.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_retrieval.py -q`
+- [OK] context quality, normal budget: general-web 7/7 selected expected; multi-format 3/3 selected expected
+- [OK] context quality, tight budget: general-web 6/7 selected expected; multi-format improved from 1/3 to 2/3
+- [OK] general-web answer: 7 cases, failed=0
+- [OK] multi-format answer: 3 cases, failed=0
+- [OK] mixed-domain retrieval: 4 cases, hit@k=1.0, MRR=1.0
+- [OK] realmanuals retrieval: 10 cases, hit@k=1.0, recall@k=0.966667, MRR=0.708333
+- [OK] product-manual QA answer quality: 6 cases passed
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Consider budget-aware adjacent evidence joining/compression before further context heuristic tuning.

@@ -149,6 +149,41 @@ def retrieve_inspect_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return inspect
 
 
+def context_evidence_diagnostics(payload: dict[str, Any], *, query_text: str = "") -> list[dict[str, Any]]:
+    """Return bounded context-selection diagnostics for a retrieve payload."""
+    evidence = list(payload.get("evidence") or [])
+    context_items = list((payload.get("context_pack") or {}).get("items") or [])
+    context_rank_by_evidence = {
+        str(ref): index
+        for index, item in enumerate(context_items, 1)
+        for ref in item.get("evidence_refs", [])
+    }
+    query_terms = _context_terms(query_text)
+    diagnostics: list[dict[str, Any]] = []
+    for rank, item in enumerate(evidence, 1):
+        evidence_id = str(item.get("evidence_id") or "")
+        text = str(item.get("text") or "")
+        terms = _context_terms(text)
+        coverage = len(terms.intersection(query_terms)) / max(1, len(query_terms)) if query_terms else 0.0
+        diagnostics.append(
+            {
+                "rank": rank,
+                "evidence_id": evidence_id,
+                "citation_id": str(item.get("citation_id") or ""),
+                "context_rank": context_rank_by_evidence.get(evidence_id),
+                "selected": evidence_id in context_rank_by_evidence,
+                "score": round(float(item.get("score") or 0.0), 6),
+                "estimated_tokens": _estimate_tokens(text),
+                "query_term_coverage": round(float(coverage), 6),
+                "context_usefulness": round(float(_context_usefulness_score(text, query_terms)), 6),
+                "source_file": str(item.get("source_file") or ""),
+                "chunk_id": str(item.get("chunk_id") or ""),
+                "section_path": [str(part) for part in item.get("section_path", [])],
+            }
+        )
+    return diagnostics
+
+
 def _evidence_from_result(
     result: Result,
     index: int,
@@ -287,6 +322,7 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
     selected: list[tuple[int, dict[str, Any], int]] = []
     used_tokens = 0
     query_terms = _context_terms(query_text)
+    max_score = max((float(item.get("score") or 0.0) for item in evidence), default=0.0)
     while remaining:
         fit = [(index, item, estimated) for index, item, estimated in remaining if used_tokens + estimated <= token_budget]
         if not fit:
@@ -295,7 +331,7 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
             chosen = max(
                 fit,
                 key=lambda candidate: (
-                    _context_usefulness_score(str(candidate[1]["text"]), query_terms),
+                    _context_selection_score(candidate[1], candidate[0], query_terms=query_terms, max_score=max_score),
                     float(candidate[1].get("score") or 0.0),
                     -candidate[0],
                 ),
@@ -305,7 +341,7 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
             chosen = max(
                 fit,
                 key=lambda candidate: (
-                    _context_usefulness_score(str(candidate[1]["text"]), query_terms)
+                    _context_selection_score(candidate[1], candidate[0], query_terms=query_terms, max_score=max_score)
                     - _max_context_overlap(_context_terms(str(candidate[1]["text"])), selected_tokens) * 0.35,
                     float(candidate[1].get("score") or 0.0),
                     -candidate[0],
@@ -319,6 +355,18 @@ def _select_context_evidence(evidence: list[dict[str, Any]], *, token_budget: in
 
 def _context_terms(text: str) -> set[str]:
     return {token for token in re.findall(r"[a-z0-9\u3400-\u9fff]+", text.lower()) if len(token) >= 2}
+
+
+def _context_selection_score(item: dict[str, Any], rank_index: int, *, query_terms: set[str], max_score: float) -> float:
+    text = str(item.get("text") or "")
+    score = _context_usefulness_score(text, query_terms)
+    terms = _context_terms(text)
+    coverage = len(terms.intersection(query_terms)) / max(1, len(query_terms)) if query_terms else 0.0
+    if coverage >= 0.3 and max_score > 0.0:
+        score += min(0.28, 0.28 * max(0.0, float(item.get("score") or 0.0)) / max_score)
+    if coverage >= 0.3:
+        score += min(0.04, 0.04 / max(1, rank_index))
+    return score
 
 
 def _context_usefulness_score(text: str, query_terms: set[str]) -> float:

@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from tagmemorag.document_assets import AssetManifest, DocumentAsset
-from tagmemorag.retrieval import VisualEvidenceResolver, VisualRetrievalResolver, build_retrieve_response, detect_visual_intent, retrieve_inspect_payload
+from tagmemorag.retrieval import (
+    VisualEvidenceResolver,
+    VisualRetrievalResolver,
+    build_retrieve_response,
+    context_evidence_diagnostics,
+    detect_visual_intent,
+    retrieve_inspect_payload,
+)
 from tagmemorag.visual_retrieval.provider import DeterministicVisualCandidateProvider, NoopVisualReranker
 from tagmemorag.types import Result
 
@@ -256,6 +263,28 @@ def test_context_pack_prefers_answer_bearing_evidence_for_first_slot():
     assert payload["context_pack"]["items"][0]["content"] == answer
 
 
+def test_context_pack_keeps_high_rank_relevant_evidence_under_tight_budget():
+    top_relevant = "Force revalidation uses the no-cache directive to validate cached responses."
+    lower_definition = "No-cache means reuse requires revalidation."
+    lower_related = "No-store blocks storing responses."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, top_relevant, "chunk-top", "Force Revalidation"),
+            _text_result(2, 0.80, lower_definition, "chunk-definition", "No-cache"),
+            _text_result(3, 0.78, lower_related, "chunk-related", "No-store"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="no-cache directive validation revalidation",
+    )
+
+    assert [item["evidence_refs"][0] for item in payload["context_pack"]["items"]] == ["ev_002", "ev_001"]
+
+
 def test_retrieve_inspect_payload_is_safe_and_bounded():
     payload = build_retrieve_response(
         results=[_result()],
@@ -300,6 +329,30 @@ def test_retrieve_inspect_payload_is_safe_and_bounded():
     }
     assert "content" not in str(inspect)
     assert "Open the service panel" not in str(inspect)
+
+
+def test_context_evidence_diagnostics_explains_selected_context_without_snippets():
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, "Repository overview covers branches and commits.", "chunk-overview"),
+            _text_result(2, 0.80, "A repository is a folder that contains related project items.", "chunk-answer"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="repository folder",
+    )
+
+    diagnostics = context_evidence_diagnostics(payload, query_text="repository folder")
+
+    assert diagnostics[1]["selected"] is True
+    assert diagnostics[1]["context_rank"] == 1
+    assert diagnostics[1]["context_usefulness"] > diagnostics[0]["context_usefulness"]
+    assert "text" not in diagnostics[0]
+    assert "folder that contains" not in str(diagnostics)
 
 
 def test_build_retrieve_response_attaches_page_snapshot_by_lineage():

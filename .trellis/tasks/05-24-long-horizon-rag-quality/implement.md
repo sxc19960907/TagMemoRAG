@@ -42,4 +42,12 @@
 16. [x] Diagnose context-pack ordering for answer-bearing chunks under constrained budgets.
 17. [x] Implement query-aware context usefulness scoring for first and follow-up context slots.
 18. [x] Rerun retrieval and answer diagnostics across general web, multi-format, mixed-domain, real manuals, and product-manual answer quality.
-19. [ ] Commit coherent changes.
+19. [x] Commit coherent changes.
+
+## Phase 7: Context Quality Diagnostic Follow-Up
+
+20. [x] Add a bounded context-quality diagnostic report for real eval suites.
+21. [x] Run the diagnostic on general-web and multi-format real knowledge, including constrained token budgets.
+22. [x] Implement a safe context-selection rank prior for high-coverage evidence under tight budgets.
+23. [x] Rerun retrieval, answer, mixed-domain, real-manual, and product-manual answer-quality diagnostics.
+24. [x] Commit coherent changes.

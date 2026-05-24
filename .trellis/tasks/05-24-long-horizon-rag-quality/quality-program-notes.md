@@ -190,3 +190,58 @@ Local test command:
 Next recommended phase:
 
 - Add a small diagnostic that records context-pack item ordering and answer-bearing heuristic scores for the weakest public-web cases, so future tuning can compare context quality directly rather than inferring it from retrieval metrics.
+
+## Phase 7 Context Quality Diagnostic Batch
+
+Target: make context-pack quality directly observable, then tune only if real-data diagnostics expose a concrete weakness.
+
+Kept diagnostic:
+
+- Added `scripts/diag_context_quality.py`, backed by `tagmemorag.eval.context_quality`.
+- The report records evidence rank, selected context rank, retrieval score, estimated tokens, query-term coverage, usefulness score, and expected-evidence selection matches.
+- Reports intentionally omit full snippets and provider text; they are meant for safe regression triage, not document export.
+
+Diagnosis:
+
+- Normal 4000-token budget:
+  - General web: 7/7 cases had expected evidence selected into context.
+  - Multi-format: 3/3 cases had expected evidence selected into context.
+- Tight 260-token budget exposed a real context-pack weakness:
+  - General web: 6/7 cases selected expected evidence.
+  - Multi-format: 1/3 cases selected expected evidence.
+  - Misses were not retrieval misses; expected evidence was in top-k but skipped during context packing.
+
+Kept improvement:
+
+- Context selection now adds a bounded rank/score prior only when evidence already has enough query-term coverage.
+- This keeps the previous answer-bearing usefulness signal, but avoids skipping high-ranked relevant evidence under tight budgets.
+- The change is local to `context_pack.items`; retrieval result order, citations, and evidence lists are unchanged.
+
+Observed tight-budget result:
+
+- General web stayed at 6/7 selected expected cases. The remaining MDN multi-evidence case needs more than two short context items to cover both no-cache and private-cache evidence.
+- Multi-format improved from 1/3 to 2/3 selected expected cases.
+- The remaining multi-format MDN miss is a chunking/budget trade-off: two earlier no-cache/revalidation chunks fit and are relevant, but the exact expected no-cache sentence is the third chunk.
+
+Regression matrix:
+
+| Slice | Cases | hit@k | recall@k | MRR | Status |
+|-------|-------|-------|----------|-----|--------|
+| General web retrieval | 7 | 1.000000 | 0.928571 | 0.579932 | unchanged |
+| Multi-format retrieval | 3 | 1.000000 | 1.000000 | 0.611111 | unchanged |
+| Mixed-domain retrieval | 4 | 1.000000 | 1.000000 | 1.000000 | passed |
+| Real manuals retrieval | 10 | 1.000000 | 0.966667 | 0.708333 | unchanged |
+
+Answer diagnostics:
+
+- General web answer: 7 cases, failed=0.
+- Multi-format answer: 3 cases, failed=0.
+- Product-manual QA answer quality: 6 cases passed.
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_retrieval.py -q` -> 17 passed.
+
+Next recommended phase:
+
+- Do not keep increasing context heuristics blindly. The next substantial gain likely needs either budget-aware chunk joining/compression for adjacent same-source evidence or a first-class reranker/evidence compressor that can merge nearby supporting chunks before the answer prompt.
