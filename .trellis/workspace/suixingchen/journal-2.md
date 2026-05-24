@@ -117,6 +117,45 @@ Improved same-document ranking for long public web docs by adding a small bounde
 - Revisit multi-evidence query evaluation: the GitHub README case still ranks README evidence above repository/folder evidence, which may be acceptable for answer quality but is stricter than the current single expected chunk.
 
 
+## Session 90: Multi-evidence mixed-domain fixture
+
+**Date**: 2026-05-24
+**Task**: Represent multi-evidence eval cases
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Aligned the mixed-domain GitHub fixture with the existing general-web multi-evidence semantics. The query asks about repository, README, Markdown, project, and folder concepts, so both the repository/folder definition and README/Markdown explanation are now marked relevant. No retrieval algorithm changes were made.
+
+### Main Changes
+
+- Added README/Markdown as a second relevant evidence entry for `mixed-docs-github-readme`.
+- Added a fixture regression test so the mixed GitHub case keeps multi-evidence support.
+- Documented multi-evidence eval authoring in the backend architecture spec.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b19cc81` | test(rag): model mixed-domain multi-evidence case |
+| `a545520` | chore(task): archive 05-24-multi-evidence-eval-cases |
+
+### Testing
+
+- [OK] `.venv/bin/python -m pytest tests/unit/test_mixed_knowledge_fixture.py tests/unit/test_diag_mixed_domain_eval.py tests/unit/test_eval_dataset.py tests/unit/test_diag_general_web_answer_eval.py -q`
+- [OK] `.venv/bin/python scripts/diag_mixed_domain_eval.py --stage-from-defaults --suite tests/fixtures/eval/mixed_knowledge.jsonl --config examples/config/local-hashing-npz.yaml --kb mixed_knowledge --top-k 5 --output .tmp/eval/multi-evidence-final.json`
+- [OK] `.venv/bin/python scripts/diag_general_web_answer_eval.py --docs .tmp/general-web-eval/general_web --suite tests/fixtures/eval/general_web.jsonl --config examples/config/local-hashing-npz.yaml --kb general_web --output .tmp/eval/multi-evidence-general-web-answer.json`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue answer-quality work by checking whether retrieval context packing prefers complementary evidence over duplicate chunks for multi-evidence questions.
+
+
 ## Session 54: QA demo seed smoke
 
 **Date**: 2026-05-22
