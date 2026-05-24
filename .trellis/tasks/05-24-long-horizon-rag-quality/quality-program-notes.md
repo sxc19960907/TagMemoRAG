@@ -288,3 +288,44 @@ Local test command:
 Next recommended phase:
 
 - Move toward a release gate: add a compact pre-release pilot report that summarizes readiness from config validation, local retrieval evals, context-quality diagnostics, answer-quality diagnostics, and known residual risks. This should produce a bounded operator-facing report rather than another isolated heuristic.
+
+## Phase 9 Release Readiness Gate
+
+Target: produce a bounded, operator-facing release readiness summary from the retained real-data reports.
+
+Kept improvement:
+
+- Added `tagmemorag.release_readiness` and `scripts/release_readiness.py`.
+- The report consumes retained JSON reports from `.tmp/eval/` and does not rerun expensive evals.
+- It summarizes retrieval, context-quality, and answer-quality stages without raw queries, snippets, `actual_top_k`, provider bodies, vectors, or secrets.
+- Stages are classified as `passed`, `warning`, or `failed`; missing or malformed input reports fail the gate.
+- JSON and Markdown output are supported for release records.
+
+Current release-readiness result:
+
+- Overall status: `warning`.
+- Passed:
+  - mixed-domain retrieval
+  - normal-budget general-web and multi-format context quality
+  - tight-budget general-web context quality
+  - general-web answer
+  - multi-format answer
+  - product-manual QA answer quality
+- Warnings:
+  - general-web retrieval MRR is `0.579932`, below release target `0.75`.
+  - multi-format retrieval MRR is `0.611111`, below release target `0.75`.
+  - realmanuals retrieval MRR is `0.708333`, below release target `0.75`.
+  - tight-budget multi-format context quality is `2/3`, below full-completeness target.
+
+Generated reports:
+
+- `.tmp/eval/release-readiness-after-adjacent-merge.json`
+- `.tmp/eval/release-readiness-after-adjacent-merge.md`
+
+Local test command:
+
+- `.venv/bin/pytest tests/unit/test_release_readiness.py tests/unit/test_production_pilot.py tests/unit/test_production_verify.py -q` -> 19 passed.
+
+Next recommended phase:
+
+- Work down the warning list directly: ranking/MRR improvements first, then the remaining tight-budget multi-format context gap. The system is now in a state where release discussions can be based on an explicit readiness report instead of scattered eval outputs.

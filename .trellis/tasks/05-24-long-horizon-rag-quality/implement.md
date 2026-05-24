@@ -59,3 +59,11 @@
 27. [x] Preserve citation/evidence lineage for merged context items.
 28. [x] Rerun context-quality diagnostics, retrieval matrix, answer diagnostics, and focused unit tests.
 29. [x] Commit coherent changes.
+
+## Phase 9: Release Readiness Gate
+
+30. [x] Add a bounded release-readiness report that consumes retained real-data reports.
+31. [x] Classify retrieval, context-quality, and answer-quality stages as passed/warning/failed.
+32. [x] Generate JSON and Markdown reports under `.tmp/eval/`.
+33. [x] Add unit coverage for pass, warning, missing-report failure, and Markdown writer paths.
+34. [x] Commit coherent changes.

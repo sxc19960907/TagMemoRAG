@@ -1726,3 +1726,36 @@ Added budget-aware context compaction and adjacent same-source evidence merging.
 ### Next Steps
 
 - Build a bounded release-readiness report that combines retrieval, context-quality, answer-quality, config, and residual-risk signals.
+
+
+## Session 93: Release readiness gate
+
+**Date**: 2026-05-24
+**Task**: Long-horizon RAG quality program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a bounded release-readiness report that consumes the retained real-data eval outputs. The report gives a single `passed` / `warning` / `failed` status plus per-stage details for retrieval, context quality, and answer quality.
+
+### Main Changes
+
+- Added `tagmemorag.release_readiness`.
+- Added `scripts/release_readiness.py` with JSON and Markdown output.
+- Added unit coverage for clean pass, known warning gaps, missing report failure, and Markdown writing.
+- Adjusted one production-pilot unit fixture from an artificial `Q` question to a real relevance-bearing question.
+
+### Testing
+
+- [OK] `.venv/bin/pytest tests/unit/test_release_readiness.py -q`
+- [OK] `.venv/bin/pytest tests/unit/test_release_readiness.py tests/unit/test_production_pilot.py tests/unit/test_production_verify.py -q`
+- [OK] generated `.tmp/eval/release-readiness-after-adjacent-merge.json`
+- [OK] generated `.tmp/eval/release-readiness-after-adjacent-merge.md`
+
+### Status
+
+[OK] **Implementation and verification complete**
+
+### Next Steps
+
+- Use the release-readiness warnings as the next quality backlog: improve MRR/ranking first, then address the remaining tight-budget multi-format context gap.

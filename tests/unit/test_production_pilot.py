@@ -91,7 +91,8 @@ def test_production_pilot_can_skip_answer_quality_stage(tmp_path):
 def test_production_pilot_answer_quality_suite_can_be_overridden(tmp_path):
     suite = tmp_path / "answer-quality.jsonl"
     suite.write_text(
-        '{"id":"local-pass","question":"Q","contexts":[{"citation_id":"cit_001","text":"The reset button is red."}],'
+        '{"id":"local-pass","question":"What color is the reset button?",'
+        '"contexts":[{"citation_id":"cit_001","text":"The reset button is red."}],'
         '"answer":"The reset button is red [cit_001]. {{support:reset button is red}}",'
         '"expected":{"grounded":true,"relevant":true,"citation_supported":true}}'
         "\n",
