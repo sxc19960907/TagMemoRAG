@@ -1,0 +1,3 @@
+{"path":"scripts/release_readiness.py","reason":"Release-readiness self-check command."}
+{"path":"scripts/reranking_eval_gate.py","reason":"Reranking gate self-check command."}
+{"path":".trellis/tasks/05-24-general-rag-stability-program/program-log.md","reason":"Parent program log to update with child result."}
