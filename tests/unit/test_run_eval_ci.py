@@ -19,3 +19,15 @@ def test_iter_gated_suites_excludes_informational_external_doc_suites(tmp_path: 
     suites = rec._iter_gated_suites(tmp_path)
 
     assert [path.name for path in suites] == ["coffee.jsonl"]
+
+
+def test_iter_gated_suites_uses_baseline_suite_names(tmp_path: Path):
+    for name in ("coffee.jsonl", "new_research_suite.jsonl", "product_manuals.jsonl"):
+        (tmp_path / name).write_text("", encoding="utf-8")
+
+    suites = rec._iter_gated_suites(
+        tmp_path,
+        baseline_payload={"suites": {"coffee.jsonl": {}, "product_manuals.jsonl": {}}},
+    )
+
+    assert [path.name for path in suites] == ["coffee.jsonl", "product_manuals.jsonl"]

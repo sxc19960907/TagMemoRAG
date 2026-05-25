@@ -9,6 +9,7 @@ for readiness / pre-release validation against the production embedder.
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -81,7 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    suites = _iter_gated_suites(args.suite_dir)
+    baseline_payload = _load_baseline(args.baseline)
+    suites = _iter_gated_suites(args.suite_dir, baseline_payload=baseline_payload)
     if not suites:
         print(f"no suites under {args.suite_dir}", file=sys.stderr)
         return 1
@@ -211,7 +213,17 @@ def _config_yaml(data_dir: Path, *, embedder: str = EMBEDDER_HASHING, geodesic: 
     return base
 
 
-def _iter_gated_suites(suite_dir: Path) -> list[Path]:
+def _load_baseline(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"baseline is not valid JSON: {path}: {exc.msg}") from exc
+    if not isinstance(data, dict):
+        raise SystemExit(f"baseline root must be a JSON object: {path}")
+    return data
+
+
+def _iter_gated_suites(suite_dir: Path, *, baseline_payload: dict | None = None) -> list[Path]:
     """Return suites covered by the baseline gate.
 
     `realmanuals.jsonl` is an informational production-PDF diagnostic fixture
@@ -219,13 +231,25 @@ def _iter_gated_suites(suite_dir: Path) -> list[Path]:
     `mixed_knowledge.jsonl` depend on a reproducible but network-seeded `.tmp`
     corpus from `scripts/seed_general_web_eval.sh`, so they are run as explicit
     benchmarks, not by the strict fixture-only hashing baseline CI.
+
+    New eval suites must be added to the baseline before they enter this strict
+    PR gate. Suites with their own baseline format, such as agentic loop
+    diagnostics, can live under the same fixture directory without blocking this
+    baseline-derived gate.
     """
+    baseline_suites = None
+    if baseline_payload is not None:
+        raw_suites = baseline_payload.get("suites")
+        if not isinstance(raw_suites, dict):
+            raise SystemExit("baseline must contain a 'suites' object")
+        baseline_suites = set(raw_suites)
     return sorted(
         p
         for p in suite_dir.iterdir()
         if p.is_file()
         and p.suffix == ".jsonl"
         and p.name not in DEFAULT_EXCLUDED_SUITES
+        and (baseline_suites is None or p.name in baseline_suites)
     )
 
 
