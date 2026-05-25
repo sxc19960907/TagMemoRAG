@@ -152,6 +152,8 @@ def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="people-key-rows"' in body
     assert 'id="people-detail-list"' in body
     assert 'id="people-public-paths"' in body
+    assert 'id="people-generate-form"' in body
+    assert 'id="people-generation-result"' in body
     assert 'id="people-generate-command"' in body
     assert 'href="/admin/rag-workbench?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
@@ -165,8 +167,10 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
 
     assert js.status_code == 200
     assert "/admin/people/access-summary" in js.text
+    assert "/admin/people/access-keys/generate" in js.text
     assert "people-key-rows" in js.text
     assert "generate-key" in js.text
+    assert "Copy plaintext key" in js.text or "copyPlaintext" in js.text
 
 
 def test_people_access_summary_returns_safe_payload(tmp_path, fake_embedder):
@@ -248,6 +252,74 @@ def test_people_access_summary_requires_admin_scope_when_auth_enabled(tmp_path, 
     assert client.get("/admin/people/access-summary").status_code == 401
     denied = client.get("/admin/people/access-summary", headers={"Authorization": f"Bearer {search_secret}"})
     allowed = client.get("/admin/people/access-summary", headers={"Authorization": f"Bearer {admin_secret}"})
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+
+
+def test_people_access_key_generation_returns_one_time_material(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.post(
+        "/admin/people/access-keys/generate",
+        json={
+            "id": "support-a",
+            "label": "Support A",
+            "scopes": ["search"],
+            "kb_allowlist": ["ops"],
+            "rate_limit_per_minute": 90,
+            "prefix": "tmr_test_",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "people_access_key_generation.v1"
+    assert body["plaintext_key"].startswith("tmr_test_")
+    assert body["config_entry"]["id"] == "support-a"
+    assert body["config_entry"]["label"] == "Support A"
+    assert body["config_entry"]["scopes"] == ["search"]
+    assert body["config_entry"]["kb_allowlist"] == ["ops"]
+    assert body["config_entry"]["rate_limit_per_minute"] == 90
+    assert body["config_entry"]["hash"].startswith("sha256:")
+    assert body["plaintext_key"] not in body["config_json"]
+    store = ConfigAuthStore.from_config(AuthConfig(keys=[ApiKeyConfig(**body["config_entry"])]))
+    assert store.verify(body["plaintext_key"]).id == "support-a"
+
+
+def test_people_access_key_generation_requires_admin_scope_when_auth_enabled(tmp_path, fake_embedder):
+    admin_secret = "tmr_live_admin"
+    search_secret = "tmr_live_search"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(id="admin", hash=ConfigAuthStore.hash_plaintext(admin_secret), scopes=["admin"]),
+                ApiKeyConfig(id="search", hash=ConfigAuthStore.hash_plaintext(search_secret), scopes=["search"]),
+            ],
+        ),
+        model={"dim": 64},
+    )
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    client = TestClient(api.app)
+    payload = {"id": "support-a", "scopes": ["search"], "kb_allowlist": ["ops"]}
+
+    assert client.post("/admin/people/access-keys/generate", json=payload).status_code == 401
+    denied = client.post(
+        "/admin/people/access-keys/generate",
+        json=payload,
+        headers={"Authorization": f"Bearer {search_secret}"},
+    )
+    allowed = client.post(
+        "/admin/people/access-keys/generate",
+        json=payload,
+        headers={"Authorization": f"Bearer {admin_secret}"},
+    )
 
     assert denied.status_code == 403
     assert allowed.status_code == 200

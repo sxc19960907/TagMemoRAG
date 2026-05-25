@@ -19,9 +19,11 @@ from .anchor import AnchorSystem
 from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
+from .auth.keygen import generate_api_key_material
 from .cache.lru_ttl import LRUTTLCache
 from . import api_admin, api_feedback, api_manual_routes, api_search
 from .api_models import (
+    AccessKeyGenerateRequest,
     AgenticRequestOverrides,
     AnchorRequest,
     AnswerRequest,
@@ -275,6 +277,22 @@ def get_people_access_summary(
     __: None = Depends(rate_limit_dep),
 ):
     return _people_access_summary()
+
+
+@app.post("/admin/people/access-keys/generate")
+def generate_people_access_key(
+    request: AccessKeyGenerateRequest,
+    _: ApiKey = Depends(require_scope("admin")),
+    __: None = Depends(rate_limit_dep),
+):
+    return generate_api_key_material(
+        key_id=request.id,
+        label=request.label,
+        scopes=request.scopes,
+        kb_allowlist=request.kb_allowlist,
+        rate_limit_per_minute=request.rate_limit_per_minute,
+        prefix=request.prefix,
+    )
 
 
 def _status_for(code: ErrorCode) -> int:

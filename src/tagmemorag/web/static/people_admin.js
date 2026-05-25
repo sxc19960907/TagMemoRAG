@@ -25,6 +25,19 @@ const el = {
   detailList: document.getElementById("people-detail-list"),
   publicPaths: document.getElementById("people-public-paths"),
   generateCommand: document.getElementById("people-generate-command"),
+  generateForm: document.getElementById("people-generate-form"),
+  newId: document.getElementById("people-new-id"),
+  newLabel: document.getElementById("people-new-label"),
+  newScopes: document.getElementById("people-new-scopes"),
+  newKbs: document.getElementById("people-new-kbs"),
+  newRate: document.getElementById("people-new-rate"),
+  newPrefix: document.getElementById("people-new-prefix"),
+  generateSubmit: document.getElementById("people-generate-submit"),
+  generationResult: document.getElementById("people-generation-result"),
+  plaintextKey: document.getElementById("people-plaintext-key"),
+  configJson: document.getElementById("people-config-json"),
+  copyPlaintext: document.getElementById("people-copy-plaintext"),
+  copyConfig: document.getElementById("people-copy-config"),
   workbench: document.getElementById("people-workbench"),
   manualLibrary: document.getElementById("people-manual-library"),
 };
@@ -53,6 +66,7 @@ function updateLinks() {
   el.workbench.href = `/admin/rag-workbench?kb_name=${kb}`;
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.generateCommand.textContent = `python -m tagmemorag auth generate-key --id support-a --scopes search --kb ${state.kbName || "default"} --rate 100`;
+  if (!el.newKbs.value.trim()) el.newKbs.value = state.kbName || "default";
 }
 
 async function loadAccessSummary() {
@@ -71,6 +85,42 @@ async function loadAccessSummary() {
     setStatus(error.message || "Access summary failed.", "error");
   } finally {
     el.refresh.disabled = false;
+  }
+}
+
+async function generateAccessKey(event) {
+  event.preventDefault();
+  const keyId = el.newId.value.trim();
+  if (!keyId) {
+    setStatus("Enter an ID for the new access key.", "error");
+    return;
+  }
+  const payload = {
+    id: keyId,
+    label: el.newLabel.value.trim(),
+    scopes: splitList(el.newScopes.value, ["search"]),
+    kb_allowlist: splitList(el.newKbs.value, [state.kbName || "default"]),
+    rate_limit_per_minute: el.newRate.value ? Number(el.newRate.value) : null,
+    prefix: el.newPrefix.value || "tmr_live_",
+  };
+  el.generateSubmit.disabled = true;
+  setStatus("Generating one-time key...");
+  try {
+    const response = await fetch("/admin/people/access-keys/generate", {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || `HTTP ${response.status}`);
+    }
+    renderGeneratedKey(body);
+    setStatus("One-time key generated. Copy it before leaving this page.", "success");
+  } catch (error) {
+    setStatus(error.message || "Key generation failed.", "error");
+  } finally {
+    el.generateSubmit.disabled = false;
   }
 }
 
@@ -173,6 +223,33 @@ function renderError(error) {
   renderDetail(null);
 }
 
+function renderGeneratedKey(body) {
+  el.generationResult.hidden = false;
+  el.plaintextKey.value = body.plaintext_key || "";
+  el.configJson.value = body.config_json || JSON.stringify(body.config_entry || {}, null, 2);
+}
+
+function splitList(value, fallback) {
+  const items = String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length ? items : fallback;
+}
+
+async function copyValue(textarea, label) {
+  const value = textarea.value;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus(`${label} copied.`, "success");
+  } catch (_error) {
+    textarea.focus();
+    textarea.select();
+    setStatus(`${label} selected for copying.`, "warn");
+  }
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -188,5 +265,8 @@ el.kbForm.addEventListener("submit", (event) => {
 });
 
 el.refresh.addEventListener("click", loadAccessSummary);
+el.generateForm.addEventListener("submit", generateAccessKey);
+el.copyPlaintext.addEventListener("click", () => copyValue(el.plaintextKey, "Plaintext key"));
+el.copyConfig.addEventListener("click", () => copyValue(el.configJson, "Config JSON"));
 updateLinks();
 loadAccessSummary();

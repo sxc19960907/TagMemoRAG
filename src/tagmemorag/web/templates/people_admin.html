@@ -110,7 +110,52 @@
             </section>
             <section class="quality-detail-block">
               <h3>Add access</h3>
-              <p class="muted">Generate a key, add the printed hash under `auth.keys`, then restart or reload the service config.</p>
+              <p class="muted">Generate a key, add the config entry under `auth.keys`, then give the plaintext key to the client once.</p>
+              <form id="people-generate-form" class="people-generate-form">
+                <label>
+                  <span>ID</span>
+                  <input id="people-new-id" autocomplete="off" placeholder="support-a" required>
+                </label>
+                <label>
+                  <span>Label</span>
+                  <input id="people-new-label" autocomplete="off" placeholder="Support A">
+                </label>
+                <label>
+                  <span>Scopes</span>
+                  <input id="people-new-scopes" autocomplete="off" value="search">
+                </label>
+                <label>
+                  <span>KB access</span>
+                  <input id="people-new-kbs" autocomplete="off" value="{{ default_kb_name }}">
+                </label>
+                <div class="people-generate-row">
+                  <label>
+                    <span>Rate / min</span>
+                    <input id="people-new-rate" type="number" min="1" value="60">
+                  </label>
+                  <label>
+                    <span>Prefix</span>
+                    <input id="people-new-prefix" autocomplete="off" value="tmr_live_">
+                  </label>
+                </div>
+                <button id="people-generate-submit" class="primary" type="submit">Generate key</button>
+              </form>
+              <div id="people-generation-result" class="people-generation-result" hidden>
+                <div class="people-result-head">
+                  <strong>One-time result</strong>
+                  <span class="badge warn">Copy now</span>
+                </div>
+                <label>
+                  <span>Plaintext key</span>
+                  <textarea id="people-plaintext-key" readonly rows="2"></textarea>
+                </label>
+                <button id="people-copy-plaintext" type="button">Copy plaintext key</button>
+                <label>
+                  <span>Config entry</span>
+                  <textarea id="people-config-json" readonly rows="8"></textarea>
+                </label>
+                <button id="people-copy-config" type="button">Copy config JSON</button>
+              </div>
               <pre id="people-generate-command">python -m tagmemorag auth generate-key --id support-a --scopes search --kb {{ default_kb_name }} --rate 100</pre>
             </section>
           </aside>

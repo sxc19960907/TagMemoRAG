@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import secrets
 import sys
 
 import uvicorn
 
 from .demo import DemoLibraryQaOptions, DemoQaOptions, run_demo_library_qa, run_demo_qa
-from .auth.config_store import ConfigAuthStore
+from .auth.keygen import generate_api_key_material
 from .cli_helpers import create_embedder_from_config
 from .config import load_config
 from .config_validation import validate_config
@@ -59,21 +58,20 @@ def run_basic_command(args) -> int:
     if args.command == "retrain-residuals":
         return _run_retrain_residuals(args)
     if args.command == "auth" and args.auth_command == "generate-key":
-        plaintext = args.prefix + secrets.token_urlsafe(24)
         scopes = [item.strip() for item in args.scopes.split(",") if item.strip()]
         kb_allowlist = [item.strip() for item in args.kb.split(",") if item.strip()]
-        payload = {
-            "id": args.id,
-            "hash": ConfigAuthStore.hash_plaintext(plaintext),
-            "label": args.label,
-            "kb_allowlist": kb_allowlist,
-            "scopes": scopes,
-            "rate_limit_per_minute": args.rate,
-        }
+        material = generate_api_key_material(
+            key_id=args.id,
+            label=args.label,
+            scopes=scopes,
+            kb_allowlist=kb_allowlist,
+            rate_limit_per_minute=args.rate,
+            prefix=args.prefix,
+        )
         print("# Add this under auth.keys:")
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(material["config_json"])
         print("# Give this plaintext key to the client once:")
-        print(plaintext)
+        print(material["plaintext_key"])
         return 0
     return 1
 

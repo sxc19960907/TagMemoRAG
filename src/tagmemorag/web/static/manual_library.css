@@ -236,6 +236,42 @@ textarea {
   margin: 0;
 }
 
+.people-generate-form {
+  display: grid;
+  gap: 10px;
+}
+
+.people-generate-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(130px, 1fr);
+  gap: 8px;
+}
+
+.people-generation-result {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #efcf8f;
+  border-radius: 6px;
+  background: #fffaf0;
+  padding: 10px;
+}
+
+.people-generation-result[hidden] {
+  display: none;
+}
+
+.people-result-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.people-generation-result textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
 .qa-shell {
   min-height: 100vh;
   background: #eef2f6;
@@ -974,6 +1010,7 @@ main {
 .table-pane,
 .detail-pane,
 dialog {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -1415,6 +1452,7 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .field-grid,
   .kb-form,
+  .people-generate-row,
   .people-summary,
   .qa-composer {
     grid-template-columns: 1fr;
