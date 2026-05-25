@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG People & Access</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="people-admin-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell people-shell">
+      <header class="topbar people-topbar">
+        <div class="brand">
+          <span class="eyebrow">TagMemoRAG</span>
+          <h1>People & Access</h1>
+        </div>
+        <form class="kb-form" id="people-kb-form">
+          <label>
+            <span>KB</span>
+            <input id="people-kb-name" name="kb_name" value="{{ default_kb_name }}" autocomplete="off">
+          </label>
+          <button type="submit">Use</button>
+        </form>
+        <label class="token-field">
+          <span>API token</span>
+          <input id="people-api-token" type="password" autocomplete="off" placeholder="Admin bearer token">
+        </label>
+        <nav class="top-actions people-links" aria-label="People navigation">
+          <a id="people-workbench" class="button-link" href="/admin/rag-workbench?kb_name={{ default_kb_name }}">RAG Workbench</a>
+          <a id="people-manual-library" class="button-link" href="/admin/manual-library?kb_name={{ default_kb_name }}">Manual Library</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="status-strip" id="people-status" role="status" aria-live="polite"></section>
+
+        <section class="people-summary" aria-label="Access summary">
+          <article class="people-stat">
+            <span>Auth</span>
+            <strong id="people-auth-mode">-</strong>
+            <small id="people-auth-backend">-</small>
+          </article>
+          <article class="people-stat">
+            <span>Active keys</span>
+            <strong id="people-active-count">0</strong>
+            <small id="people-total-count">0 total</small>
+          </article>
+          <article class="people-stat">
+            <span>Admin keys</span>
+            <strong id="people-admin-count">0</strong>
+            <small id="people-revoked-count">0 revoked</small>
+          </article>
+          <article class="people-stat">
+            <span>Global rate limit</span>
+            <strong id="people-global-rate">-</strong>
+            <small>requests / minute</small>
+          </article>
+        </section>
+
+        <div class="workspace people-workspace">
+          <section class="table-pane people-table-pane" aria-label="Access identities">
+            <div class="pane-header">
+              <div>
+                <h2>Access identities</h2>
+                <p>Config-backed API key identities, scopes, KB access, and usage state</p>
+              </div>
+              <button id="people-refresh" type="button">Refresh</button>
+            </div>
+            <div class="table-wrap people-table-wrap">
+              <table class="people-table">
+                <thead>
+                  <tr>
+                    <th>Person / key</th>
+                    <th>Status</th>
+                    <th>Scopes</th>
+                    <th>KB access</th>
+                    <th>Rate</th>
+                    <th>Last used</th>
+                  </tr>
+                </thead>
+                <tbody id="people-key-rows">
+                  <tr>
+                    <td colspan="6" class="empty-state">Loading access identities...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <aside class="detail-pane people-detail" aria-label="Selected access detail">
+            <div class="pane-header">
+              <div>
+                <h2>Selected access</h2>
+                <p id="people-detail-subtitle">Choose a row to inspect scope and limits</p>
+              </div>
+            </div>
+            <section class="quality-detail-block">
+              <h3>Identity</h3>
+              <dl id="people-detail-list">
+                <dt>Status</dt>
+                <dd class="muted">No key selected</dd>
+              </dl>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Public paths</h3>
+              <div id="people-public-paths" class="people-chip-list empty-state">Not loaded.</div>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Add access</h3>
+              <p class="muted">Generate a key, add the printed hash under `auth.keys`, then restart or reload the service config.</p>
+              <pre id="people-generate-command">python -m tagmemorag auth generate-key --id support-a --scopes search --kb {{ default_kb_name }} --rate 100</pre>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="{{ url_for('manual-library-static', path='people_admin.js') }}"></script>
+  </body>
+</html>

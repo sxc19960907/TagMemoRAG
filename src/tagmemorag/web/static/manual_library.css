@@ -176,6 +176,66 @@ textarea {
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
 }
 
+.people-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 430px);
+}
+
+.people-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.people-stat {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 12px;
+}
+
+.people-stat span,
+.people-stat small,
+.people-table small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.people-stat strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.people-table {
+  min-width: 980px;
+}
+
+.people-table td:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.people-table tr[data-key-id] {
+  cursor: pointer;
+}
+
+.people-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.people-detail pre {
+  margin: 0;
+}
+
 .qa-shell {
   min-height: 100vh;
   background: #eef2f6;
@@ -1338,6 +1398,10 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
+  .people-summary {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
   .top-actions {
     justify-content: flex-start;
   }
@@ -1351,6 +1415,7 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .field-grid,
   .kb-form,
+  .people-summary,
   .qa-composer {
     grid-template-columns: 1fr;
   }

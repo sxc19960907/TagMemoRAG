@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
-from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
+from tagmemorag.auth.config_store import ConfigAuthStore
+from tagmemorag.config import ApiKeyConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.state import AppState
 
 
@@ -111,6 +112,8 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="workbench-results"' in body
     assert 'id="workbench-manual-library"' in body
     assert 'id="workbench-retrieval-quality"' in body
+    assert 'id="workbench-people"' in body
+    assert 'href="/admin/people?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/rag_workbench.js" in body
 
@@ -134,6 +137,120 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "include_retrieve" in js.text
     assert "workbench-answer" in js.text
     assert "workbench-evidence" in js.text
+    assert "/admin/people" in js.text
+
+
+def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/admin/people?kb_name=ops")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "People & Access" in body
+    assert 'id="people-key-rows"' in body
+    assert 'id="people-detail-list"' in body
+    assert 'id="people-public-paths"' in body
+    assert 'id="people-generate-command"' in body
+    assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert '"defaultKbName": "ops"' in body
+    assert "/static/manual-library/people_admin.js" in body
+
+
+def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/people_admin.js")
+
+    assert js.status_code == 200
+    assert "/admin/people/access-summary" in js.text
+    assert "people-key-rows" in js.text
+    assert "generate-key" in js.text
+
+
+def test_people_access_summary_returns_safe_payload(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        auth=AuthConfig(
+            enabled=False,
+            keys=[
+                ApiKeyConfig(
+                    id="ops-admin",
+                    label="Ops Admin",
+                    hash="sha256:hidden-admin",
+                    scopes=["admin"],
+                    kb_allowlist=["*"],
+                    rate_limit_per_minute=300,
+                    created_at="2026-05-25T00:00:00+00:00",
+                ),
+                ApiKeyConfig(
+                    id="support",
+                    label="Support",
+                    hash="sha256:hidden-support",
+                    scopes=["search"],
+                    kb_allowlist=["default"],
+                    revoked=True,
+                ),
+            ],
+        ),
+        model={"dim": 64},
+    )
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    client = TestClient(api.app)
+
+    response = client.get("/admin/people/access-summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "people_access.v1"
+    assert body["summary"] == {"total_keys": 2, "active_keys": 1, "revoked_keys": 1, "admin_keys": 1}
+    assert body["keys"][0]["id"] == "ops-admin"
+    assert body["keys"][0]["is_admin"] is True
+    assert body["keys"][1]["status"] == "revoked"
+    assert "hash" not in body["keys"][0]
+    assert "hidden-admin" not in response.text
+
+
+def test_people_access_summary_requires_admin_scope_when_auth_enabled(tmp_path, fake_embedder):
+    admin_secret = "tmr_live_admin"
+    search_secret = "tmr_live_search"
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        auth=AuthConfig(
+            enabled=True,
+            keys=[
+                ApiKeyConfig(
+                    id="admin",
+                    hash=ConfigAuthStore.hash_plaintext(admin_secret),
+                    scopes=["admin"],
+                ),
+                ApiKeyConfig(
+                    id="search",
+                    hash=ConfigAuthStore.hash_plaintext(search_secret),
+                    scopes=["search"],
+                ),
+            ],
+        ),
+        model={"dim": 64},
+    )
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.auth_store = ConfigAuthStore.from_config(cfg.auth)
+    client = TestClient(api.app)
+
+    assert client.get("/admin/people/access-summary").status_code == 401
+    denied = client.get("/admin/people/access-summary", headers={"Authorization": f"Bearer {search_secret}"})
+    allowed = client.get("/admin/people/access-summary", headers={"Authorization": f"Bearer {admin_secret}"})
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
 
 
 def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
