@@ -338,3 +338,36 @@ Validated the browser QA RAG flow with the local demo KB and tightened the QA ro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 103: Manual library to QA smoke
+
+**Date**: 2026-05-25
+**Task**: Manual library to QA smoke
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added and validated a deterministic local smoke for managed manual upload, rebuild, and QA answer against the newly added manual content.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8b75b08` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
