@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and required pre-development checklist."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Manual Library, rebuild, retrieval, and QA architecture context."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Maintain test and entry-point boundaries while extending browser coverage."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, privacy, and deterministic local-provider guidance."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Known API/UI failures should preserve structured service-error behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Avoid leaking raw manual content or secrets through diagnostics while exercising rebuild/search."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared Trellis thinking-guide routing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Upload to rebuild to QA spans UI/API/storage/retrieval boundaries."}
