@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Deterministic testing, privacy, and no-fabrication quality guidance."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Refusal states should remain structured internally and user-readable in the browser."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared Trellis thinking-guide routing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "QA refusal path spans retrieval, API response, JS rendering, and browser UI."}

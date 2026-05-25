@@ -204,6 +204,7 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-source-summary" in js.text
     assert "qa-source-toggle" in js.text
     assert "qa-citation-chip" in js.text
+    assert 'normalized === "no results"' in js.text
     assert "data-citation-target" in js.text
     assert "data-citation-id" in js.text
     assert "scrollIntoView" in js.text

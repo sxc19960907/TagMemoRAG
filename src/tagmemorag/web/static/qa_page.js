@@ -698,6 +698,7 @@ function userFacingReason(reason) {
   if (normalized === "generation disabled") return "Answer generation is not enabled for this server.";
   if (normalized === "generation failed") return "The answer service could not generate a response.";
   if (normalized === "insufficient evidence") return "I could not find enough manual evidence to answer that.";
+  if (normalized === "no results") return "I could not find enough manual evidence to answer that.";
   if (normalized === "needs clarification") return "I need one more detail before I can choose the right manual.";
   return normalized;
 }
