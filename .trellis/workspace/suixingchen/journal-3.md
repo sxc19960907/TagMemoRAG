@@ -404,3 +404,36 @@ Documented the local managed-manual RAG user path and added an opt-in browser sm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 105: Browser upload QA smoke
+
+**Date**: 2026-05-25
+**Task**: Browser upload QA smoke
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an opt-in browser smoke that uploads a manual through the Manual Library UI, triggers rebuild, verifies searchable/clear state, then asks the QA page and checks cited uploaded-manual evidence.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `928ee6d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
