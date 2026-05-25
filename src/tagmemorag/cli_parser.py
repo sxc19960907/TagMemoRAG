@@ -35,6 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--tag", action="append", default=[])
     search.add_argument("--debug-search", action="store_true")
 
+    demo = sub.add_parser("demo")
+    demo_sub = demo.add_subparsers(dest="demo_command", required=True)
+    demo_qa = demo_sub.add_parser("qa")
+    demo_qa.add_argument("question", nargs="?", default="蒸汽很小怎么办？")
+    demo_qa.add_argument("--kb", default="default")
+    demo_qa.add_argument("--config", default="examples/config/qa-demo.yaml")
+    demo_qa.add_argument("--top-k", type=int, default=2)
+    demo_qa.add_argument("--source-k", type=int, default=None)
+    demo_qa.add_argument("--token-budget", type=int, default=None)
+    demo_qa.add_argument("--output", default=None)
+
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)

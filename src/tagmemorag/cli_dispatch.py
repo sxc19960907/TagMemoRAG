@@ -7,7 +7,7 @@ from .cli_manual import run_manual_command
 from .cli_provider import run_production_provider_command, run_provider_command
 from .cli_source_import import run_knowledge_command, run_manualslib_command
 
-_BASIC_COMMANDS = {"auth", "build", "config", "langchain", "retrain-residuals", "search", "serve"}
+_BASIC_COMMANDS = {"auth", "build", "config", "demo", "langchain", "retrain-residuals", "search", "serve"}
 _EVAL_COMMANDS = {"epa", "eval", "pilot", "readiness"}
 _MANUAL_COMMANDS = {"manual-bulk", "manual-library", "qdrant", "tag"}
 

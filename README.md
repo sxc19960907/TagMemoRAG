@@ -72,6 +72,20 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
 When a query contains a known exact model, category alias, or brand, search can infer metadata narrowing before ranking. For example, `NRK6192 温度怎么调` hard-filters to chunks from the matching model when that model exists in the loaded KB. Explicit CLI/API filters always win over inferred filters, and empty inferred candidate sets fall back safely.
 
+### 2.5. Try a local RAG answer demo
+
+The offline demo uses the coffee-machine fixture, hashing embeddings, NPZ vector storage, and the noop answer provider. It does not require API keys, Qdrant, S3, or a running server.
+
+```bash
+bash scripts/seed_qa_demo.sh
+
+python -m tagmemorag demo qa "蒸汽很小怎么办？" \
+  --config examples/config/qa-demo.yaml \
+  --output .tmp/tagmemorag-qa-demo/qa-response.json
+```
+
+The JSON response includes the answer text, citation count, evidence count, bounded source metadata, `build_id`, `plan_id`, and warnings. The demo defaults to the top 2 evidence items for a cleaner first answer; pass `--top-k` to inspect more sources. The same payload is written to `--output` when provided.
+
 Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
 ```bash

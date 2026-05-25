@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and required guide routing."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Authoritative retrieval/answer architecture and CLI/service boundary expectations."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "CLI module boundaries and dependency direction."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, privacy, answer-formatting, and forbidden debug-output patterns."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking-guide index for cross-layer and reuse checks."}

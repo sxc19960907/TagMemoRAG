@@ -9,6 +9,7 @@ from tagmemorag import cli_basic
 from tagmemorag import cli_eval
 from tagmemorag import cli_provider
 from tagmemorag import cli_source_import
+from tagmemorag.demo import summarize_demo_qa_response
 from tagmemorag import readiness
 from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
 from tagmemorag.public_web_import import PublicWebDocument, PublicWebImportReport
@@ -103,6 +104,105 @@ manual_library:
     body = json.loads(capsys.readouterr().out)
     assert body["status"] == "failed"
     assert "TMR_ABSENT_FOR_CLI_TEST" in json.dumps(body)
+
+
+def test_cli_demo_qa_wires_arguments_and_outputs_summary(tmp_path, monkeypatch, capsys):
+    captured = {}
+
+    def fake_run_demo_qa(options):
+        captured["options"] = options
+        return {
+            "schema_version": "demo_qa.v1",
+            "status": "passed",
+            "question": options.question,
+            "kb_name": options.kb_name,
+            "answer": {"kind": "answer"},
+            "retrieve": {"evidence_count": 1},
+        }
+
+    monkeypatch.setattr(cli_basic, "run_demo_qa", fake_run_demo_qa)
+
+    exit_code = cli.main(
+        [
+            "demo",
+            "qa",
+            "蒸汽很小怎么办？",
+            "--config",
+            "examples/config/qa-demo.yaml",
+            "--kb",
+            "default",
+            "--top-k",
+            "3",
+            "--source-k",
+            "5",
+            "--token-budget",
+            "1024",
+            "--output",
+            str(tmp_path / "qa.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert options.question == "蒸汽很小怎么办？"
+    assert options.config_path == "examples/config/qa-demo.yaml"
+    assert options.kb_name == "default"
+    assert options.top_k == 3
+    assert options.source_k == 5
+    assert options.token_budget == 1024
+    assert options.output_path == str(tmp_path / "qa.json")
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "demo_qa.v1"
+    assert body["status"] == "passed"
+
+
+def test_demo_qa_summary_is_bounded_and_user_visible():
+    payload = summarize_demo_qa_response(
+        "蒸汽很小怎么办？",
+        {
+            "kb_name": "default",
+            "build_id": "build-1",
+            "plan_id": "plan-1",
+            "answer": {
+                "kind": "answer",
+                "text": "建议清洗喷嘴 [cit_001]",
+                "citations": [{"citation_id": "cit_001"}],
+                "confidence": 0.9,
+                "model_id": "noop",
+                "prompt_version": "answer_prompt.v1",
+            },
+            "retrieve": {
+                "answerability": {"answerable": True},
+                "evidence": [
+                    {
+                        "evidence_id": "ev_001",
+                        "citation_id": "cit_001",
+                        "source_file": "coffee_machine.md",
+                        "section_path": ["维护与清洁", "喷嘴清洗"],
+                        "score": 0.7,
+                        "text": "喷嘴堵塞会造成蒸汽变小",
+                    }
+                ],
+                "citations": [{"citation_id": "cit_001"}],
+            },
+            "warnings": ["answer_noop_provider"],
+        },
+    )
+
+    assert payload["status"] == "passed"
+    assert payload["answer"]["kind"] == "answer"
+    assert payload["answer"]["text"] == "建议清洗喷嘴 [cit_001]"
+    assert payload["retrieve"]["evidence_count"] == 1
+    assert payload["retrieve"]["sources"] == [
+        {
+            "evidence_id": "ev_001",
+            "citation_id": "cit_001",
+            "source_file": "coffee_machine.md",
+            "section_path": ["维护与清洁", "喷嘴清洗"],
+            "score": 0.7,
+        }
+    ]
+    assert "喷嘴堵塞会造成蒸汽变小" not in json.dumps(payload, ensure_ascii=False)
 
 
 def test_cli_provider_probe_all_skipped_for_local_profile(capsys):

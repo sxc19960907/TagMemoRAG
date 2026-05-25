@@ -7,6 +7,7 @@ import sys
 
 import uvicorn
 
+from .demo import DemoQaOptions, run_demo_qa
 from .auth.config_store import ConfigAuthStore
 from .cli_helpers import create_embedder_from_config
 from .config import load_config
@@ -37,6 +38,8 @@ def run_basic_command(args) -> int:
         return 0
     if args.command == "search":
         return _run_search(args)
+    if args.command == "demo" and args.demo_command == "qa":
+        return _run_demo_qa(args)
     if args.command == "serve":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)
@@ -128,6 +131,22 @@ def _run_search(args) -> int:
         payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(enabled=cfg.search.metadata_narrowing_enabled)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
+
+
+def _run_demo_qa(args) -> int:
+    payload = run_demo_qa(
+        DemoQaOptions(
+            question=args.question,
+            config_path=args.config,
+            kb_name=args.kb,
+            top_k=args.top_k,
+            source_k=args.source_k,
+            token_budget=args.token_budget,
+            output_path=args.output,
+        )
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload["status"] == "passed" else 1
 
 
 def _run_langchain_compare(args) -> int:
