@@ -635,3 +635,36 @@ Made the browser root route redirect to the RAG Workbench so users can open the 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 112: People access admin UI
+
+**Date**: 2026-05-25
+**Task**: People access admin UI
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a browser People & Access admin page backed by safe API-key summaries, linked it from RAG Workbench, verified browser layout, and covered shell/static/auth payload behavior with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `50b03bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
