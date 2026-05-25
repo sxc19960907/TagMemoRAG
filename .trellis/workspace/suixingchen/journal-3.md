@@ -536,3 +536,36 @@ Added opt-in browser smoke coverage for QA multi-turn follow-up context: upload/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 109: Manual Library QA navigation
+
+**Date**: 2026-05-25
+**Task**: Manual Library QA navigation
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a visible Ask Q&A link from Manual Library to the user-facing QA page and updated browser upload/rebuild smoke to enter QA through that UI navigation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8979f8a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
