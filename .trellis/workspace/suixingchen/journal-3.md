@@ -470,3 +470,36 @@ Added opt-in browser smoke coverage for empty QA not-ready state, invalid manual
 ### Next Steps
 
 - None - task complete
+
+
+## Session 107: Browser QA evidence limits
+
+**Date**: 2026-05-25
+**Task**: Browser QA evidence limits
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Mapped QA no-results refusal to friendly browser copy and added opt-in browser smoke proving a missing part-number question does not fabricate details while citing available manual evidence.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f132104` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
