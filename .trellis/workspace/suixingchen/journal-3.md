@@ -305,3 +305,36 @@ Added an offline demo qa CLI path for the seeded coffee-machine RAG fixture, doc
 ### Next Steps
 
 - None - task complete
+
+
+## Session 102: Web QA RAG validation
+
+**Date**: 2026-05-25
+**Task**: Web QA RAG validation
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Validated the browser QA RAG flow with the local demo KB and tightened the QA route evidence window so first-screen answers avoid weak related sources.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a2511c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
