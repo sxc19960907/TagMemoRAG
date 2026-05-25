@@ -668,3 +668,36 @@ Added a browser People & Access admin page backed by safe API-key summaries, lin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 113: Browser access key generation
+
+**Date**: 2026-05-25
+**Task**: Browser access key generation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added one-time API key generation to People & Access using a shared auth keygen helper, protected the API with admin scope, verified browser form flow, and covered endpoint/helper/UI behavior with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `43287ef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
