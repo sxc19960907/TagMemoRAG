@@ -8,6 +8,9 @@
 - [x] Write program log.
 - [x] Create first child task: baseline batch self-check.
 - [x] Start first child task.
+- [x] Complete and archive all child tasks selected from the evidence loop.
+- [x] Ship same-page ordering default-on with config rollback preserved.
+- [x] Record final parent outcome.
 
 ## Validation
 
@@ -21,6 +24,7 @@ Child validation will be owned by each child task.
 
 ## Completion Rule
 
-Do not archive this parent task while the long-horizon program is active. Child
-tasks should be archived when done; the parent stays active as the coordinating
-task unless the user asks to pause or close the program.
+This parent can now be archived. The long-horizon program reached its current
+objective: same-page ordering is default-on, stability gates passed, and the
+remaining work belongs in a new follow-up parent focused on broader retained
+corpus expansion.

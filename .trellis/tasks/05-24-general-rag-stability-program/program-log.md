@@ -438,3 +438,36 @@ Decision:
 - The next child should perform a parent-level final wrap-up: update the
   program status, record the completed rollout, and archive the long-running
   stability parent if no further default-on regressions are found.
+
+## 2026-05-25 Parent Final Wrap-Up
+
+Result:
+
+- Completed twelve child tasks from baseline self-check through default-on
+  implementation.
+- Kept all completed children committed and archived, preserving the parent log
+  as the ordered evidence trail.
+- Shipped same-page ordering default-on by changing only the centralized
+  `search.same_page_ordering_enabled` default to `true`.
+- Preserved rollback through explicit YAML/env
+  `search.same_page_ordering_enabled=false`.
+- Preserved `search.same_page_ordering_min_group_size=2`.
+- Final default-on validation:
+  - focused default/override tests: `83 passed`
+  - full related stability tests: `108 passed`
+  - default-on general-web eval: cases `7`, recall@k `0.971429`, MRR
+    `1.000000`, hit@k `1.000000`
+  - candidate-aware gate batch: `passed`
+  - release readiness: `passed`
+  - reranking gate: `passed`
+  - failed checks: `[]`
+- Unrelated untracked files `.codegraph/` and `.mcp.json` were left untouched.
+
+Classification: `ship`
+
+Final Decision:
+
+- Archive this parent program as complete.
+- Open the next long-running parent around broader retained-corpus expansion
+  and post-default-on monitoring if the user wants the stability program to
+  continue into a new phase.

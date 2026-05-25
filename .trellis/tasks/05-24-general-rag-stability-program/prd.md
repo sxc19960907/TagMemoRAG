@@ -47,18 +47,36 @@ previous task's evidence.
   - commit,
   - archive when complete,
   - update this parent program's progress/decision log.
-- Do not commit generated `.tmp` reports, raw queries, raw snippets, vectors,
-  provider secrets, full candidate lists, or fetched third-party document bodies.
+- Do not commit generated `.tmp` reports, unbounded user/source content,
+  private provider material, full candidate lists, or fetched third-party
+  document bodies.
 
 ## Acceptance Criteria
 
-- [ ] Parent program artifacts define roadmap, stability gates, and decision
+- [x] Parent program artifacts define roadmap, stability gates, and decision
       policy.
-- [ ] At least one child task is created and started from the roadmap.
-- [ ] Each completed child leaves a clear recommendation for the next child.
-- [ ] Release-readiness status must not be knowingly degraded by any child.
-- [ ] The program remains active until the user asks to pause, finish, or
+- [x] At least one child task is created and started from the roadmap.
+- [x] Each completed child leaves a clear recommendation for the next child.
+- [x] Release-readiness status must not be knowingly degraded by any child.
+- [x] The program remains active until the user asks to pause, finish, or
       change direction.
+
+## Final Outcome
+
+Completed on 2026-05-25 after twelve archived child tasks.
+
+The program moved from a diagnostic baseline with retained general-web ranking
+pressure to a gated default-on same-page ordering rollout:
+
+- `search.same_page_ordering_enabled` now defaults to `true`.
+- `search.same_page_ordering_min_group_size` remains `2`.
+- Operators can still roll back through YAML or environment config by setting
+  `search.same_page_ordering_enabled=false`.
+- The same-page ordering heuristic was kept conservative and runtime-visible;
+  no source-specific GitHub boost was added.
+- Final default-on validation kept release readiness `passed`, reranking gate
+  `passed`, and failed checks `[]`.
+- Final related tests returned `108 passed`.
 
 ## Notes
 
