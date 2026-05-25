@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Deterministic browser/unit testing guidance."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared Trellis thinking-guide routing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Follow-up context spans browser state, API payload, routing, retrieval, and UI rendering."}

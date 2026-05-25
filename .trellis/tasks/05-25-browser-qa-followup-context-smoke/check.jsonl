@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and test review."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check follow-up context survives frontend/API/retrieval/UI boundaries."}

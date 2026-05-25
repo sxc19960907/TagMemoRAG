@@ -283,6 +283,59 @@ def test_browser_qa_insufficient_evidence_refusal(tmp_path):
             server.wait(timeout=10)
 
 
+def test_browser_qa_followup_uses_conversation_context(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True)
+    upload_path = tmp_path / "followup-service-manual.md"
+    upload_path.write_text(
+        "# 蒸汽故障\n"
+        "蒸汽很小时，请先清洗喷嘴并检查水箱水量。若仍然很小，请执行除垢程序。\n"
+        "# 喷嘴清洁\n"
+        "喷嘴堵塞时，用清洁针疏通喷嘴孔，并在蒸汽结束后冲洗十秒。\n",
+        encoding="utf-8",
+    )
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_qa_followup_context(page, port, upload_path)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
 def _exercise_manual_library(page, port: int) -> None:
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=ui")
     page.get_by_role("heading", name="Manual Library").wait_for()
@@ -515,6 +568,60 @@ def _exercise_qa_insufficient_evidence_refusal(page, port: int, upload_path: Pat
     assert "PN-" not in answer_text
     sources_text = page.locator("#qa-sources").inner_text()
     assert "limited-service-manual.md" in sources_text
+
+
+def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+
+    page.locator("#open-upload").click()
+    page.locator("#upload-form input[name='file']").set_input_files(str(upload_path))
+    page.locator("#upload-form input[name='manual_id']").fill("followup-service-manual")
+    page.locator("#upload-form input[name='title']").fill("Followup Service Manual")
+    page.locator("#upload-form input[name='source_file']").fill("followup/followup-service-manual.md")
+    page.locator("#upload-form input[name='product_category']").fill("coffee")
+    page.locator("#upload-form input[name='language']").fill("zh-CN")
+    page.locator("#upload-form textarea[name='tags']").fill("steam, nozzle")
+    page.locator("#upload-form input[name='trigger_rebuild']").check()
+    page.locator("#validate-upload").click()
+    page.locator("#upload-messages .message.success").wait_for()
+    page.locator("#upload-form button.primary").click()
+    row = page.locator("#manual-rows tr").filter(has_text="followup-service-manual")
+    row.wait_for()
+    page.wait_for_function(
+        """
+        () => {
+          const rows = [...document.querySelectorAll("#manual-rows tr")];
+          const row = rows.find((item) => item.textContent.includes("followup-service-manual"));
+          if (!row) return false;
+          const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent.trim());
+          return cells.includes("yes") && cells.includes("clear") && Number(cells[9] || 0) > 0;
+        }
+        """,
+        timeout=15000,
+    )
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    page.locator("#qa-question").fill("蒸汽很小怎么办？")
+    page.locator("#qa-submit").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    first_answer = page.locator("#qa-answer").inner_text()
+    assert "清洗喷嘴" in first_answer
+    assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
+
+    page.locator("#qa-question").fill("下一步呢？")
+    page.locator("#qa-submit").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    notice = page.locator("#qa-context-notice")
+    notice.wait_for()
+    notice_text = notice.inner_text()
+    assert "Continuing from earlier" in notice_text
+    assert "蒸汽很小怎么办？" in notice_text
+    followup_answer = page.locator("#qa-answer").inner_text()
+    assert "喷嘴" in followup_answer or "除垢" in followup_answer
+    assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
 
 
 def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False) -> Path:
