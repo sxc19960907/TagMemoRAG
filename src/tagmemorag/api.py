@@ -72,6 +72,8 @@ embedder = None  # lazily created in lifespan to avoid import-time model downloa
 rebuild_queue: RebuildQueue | None = None
 WEB_DIR = Path(__file__).resolve().parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+QA_ANSWER_TOP_K = 2
+QA_ANSWER_SOURCE_K = 4
 
 
 @asynccontextmanager
@@ -566,8 +568,8 @@ def qa_answer(
     answer_request = AnswerRequest(
         question=effective_question,
         kb_name=kb_name,
-        top_k=5,
-        source_k=8,
+        top_k=QA_ANSWER_TOP_K,
+        source_k=QA_ANSWER_SOURCE_K,
         mode="classic",
         include_retrieve=request.include_retrieve,
     )

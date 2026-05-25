@@ -163,6 +163,38 @@ def test_qa_answer_routes_single_accessible_kb(tmp_path, fake_embedder):
     assert body["context"] == {"applied": False, "summary": []}
     assert body["answer"]["kind"] == "answer"
     assert body["retrieve"]["kb_name"] == state.kb_name
+    assert len(body["retrieve"]["evidence"]) <= api.QA_ANSWER_TOP_K
+
+
+def test_qa_answer_uses_compact_evidence_window_for_first_screen(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text(
+        "# 蒸汽功能\n蒸汽很小时先检查喷嘴是否堵塞，再检查水箱水量。\n"
+        "# E05 蒸汽异常\nE05 表示蒸汽压力不足或喷嘴堵塞。处理步骤包括清洗喷嘴、补水和重新预热。\n"
+        "# 制作咖啡\n若不出咖啡，请检查研磨器、粉仓和水路。\n",
+        encoding="utf-8",
+    )
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "蒸汽很小怎么办？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]["kind"] == "answer"
+    assert len(body["retrieve"]["evidence"]) == api.QA_ANSWER_TOP_K
+    assert "制作咖啡" not in body["answer"]["text"]
 
 
 def test_qa_answer_clarifies_ambiguous_multi_kb(tmp_path, fake_embedder):
