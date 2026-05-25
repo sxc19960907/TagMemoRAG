@@ -86,6 +86,24 @@ python -m tagmemorag demo qa "蒸汽很小怎么办？" \
 
 The JSON response includes the answer text, citation count, evidence count, bounded source metadata, `build_id`, `plan_id`, and warnings. The demo defaults to the top 2 evidence items for a cleaner first answer; pass `--top-k` to inspect more sources. The same payload is written to `--output` when provided.
 
+To verify the managed-manual path that a normal user exercises, run the local library-to-QA smoke:
+
+```bash
+python -m tagmemorag demo library-qa \
+  --config examples/config/qa-demo.yaml \
+  --output .tmp/tagmemorag-qa-demo/library-qa-response.json
+```
+
+That command uploads the demo service manual into the managed library, performs an incremental rebuild, confirms the manual is searchable, then asks `服务模式怎么进入？`. A passing report has `status: "passed"`, `manual.searchable: true`, `manual.chunk_count` greater than zero, and a cited source ending in `demo/demo-service-manual.md`.
+
+To try the same state through the browser:
+
+```bash
+python -m tagmemorag serve --config examples/config/qa-demo.yaml
+```
+
+Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with two chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `服务模式怎么进入？`, and confirm the answer mentions holding the clean and hot-water buttons for three seconds with `demo-service-manual.md` in the source list.
+
 Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
 ```bash

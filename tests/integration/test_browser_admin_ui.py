@@ -63,6 +63,71 @@ def test_admin_ui_browser_workflows(tmp_path):
             server.wait(timeout=10)
 
 
+def test_browser_manual_library_to_qa_user_flow(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True)
+    seed_output = tmp_path / "library-qa-response.json"
+    seed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "demo",
+            "library-qa",
+            "--config",
+            str(config_path),
+            "--output",
+            str(seed_output),
+        ],
+        cwd=Path.cwd(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=True,
+    )
+    assert seed_output.exists(), seed.stdout
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_library_qa_user_flow(page, port)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
 def _exercise_manual_library(page, port: int) -> None:
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=ui")
     page.get_by_role("heading", name="Manual Library").wait_for()
@@ -115,8 +180,32 @@ def _exercise_retrieval_quality(page, port: int) -> None:
     assert "washer filter blocked" in preview
 
 
-def _write_browser_config(tmp_path: Path) -> Path:
+def _exercise_library_qa_user_flow(page, port: int) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded").wait_for()
+    row = page.locator("#manual-rows tr").filter(has_text="demo-service-manual")
+    row.wait_for()
+    row_text = row.inner_text()
+    assert "demo/demo-service-manual.md" in row_text
+    assert "yes" in row_text
+    assert "2" in row_text
+    assert "clear" in row_text
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    page.locator("#qa-question").fill("服务模式怎么进入？")
+    page.locator("#qa-submit").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    assert "同时按住清洗键和热水键三秒" in answer_text
+    sources_text = page.locator("#qa-sources").inner_text()
+    assert "demo-service-manual.md" in sources_text
+
+
+def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False) -> Path:
     config_path = tmp_path / "browser-ui-config.yaml"
+    answer_block = "\nanswer:\n  enabled: true\n  provider: noop\n" if answer_enabled else ""
     config_path.write_text(
         f"""
 model:
@@ -132,6 +221,7 @@ server:
   port: 0
 auth:
   enabled: false
+{answer_block}
 """,
         encoding="utf-8",
     )
