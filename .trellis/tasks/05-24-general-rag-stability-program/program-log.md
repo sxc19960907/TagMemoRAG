@@ -379,3 +379,29 @@ Decision:
 - The next step should be the parent-level final readiness review: decide
   whether to propose enabling the flag by default, or keep it opt-in while
   adding broader retained-corpus evidence.
+
+## 2026-05-25 Child 11: Same-Page Ordering Default-On Readiness Review
+
+Child task: `05-25-05-25-same-page-ordering-default-on-readiness`
+
+Result:
+
+- Added a parent-level readiness review at
+  `.trellis/tasks/05-25-05-25-same-page-ordering-default-on-readiness/default-on-readiness-review.md`.
+- Reviewed the completed stability-program evidence from the parent log and
+  same-page ordering release candidate summary.
+- Recorded decision `propose-default-on` while keeping this task no-code and
+  preserving the current runtime default `search.same_page_ordering_enabled=false`.
+- Required any actual default flip to happen in a separate implementation task
+  with focused tests, candidate-aware gate batch, release readiness checks, and
+  a bounded before/after summary.
+
+Classification: `ship`
+
+Decision:
+
+- The same-page ordering candidate is ready to propose for default-on rollout.
+- Do not change the default in this review task.
+- Next child, if accepted, should flip only the
+  `search.same_page_ordering_enabled` default, rerun gates, and preserve the
+  config rollback path.
