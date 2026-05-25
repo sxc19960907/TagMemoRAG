@@ -234,3 +234,41 @@ Documented when and how to run the reranking evaluation gate in the README and e
 ### Next Steps
 
 - None - task complete
+
+
+## Session 100: Complete general RAG stability program
+
+**Date**: 2026-05-25
+**Task**: Complete general RAG stability program
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Completed the long-running general RAG stability parent: same-page ordering moved from diagnostics through guarded default-on rollout, with rollback config preserved and final gates passing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1c479a` | (see git log) |
+| `bcffa6c` | (see git log) |
+| `b77af8c` | (see git log) |
+| `60dc36b` | (see git log) |
+| `fe7a9fb` | (see git log) |
+| `713c748` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
