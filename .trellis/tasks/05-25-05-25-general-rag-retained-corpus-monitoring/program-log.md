@@ -47,3 +47,34 @@ Decision:
   summary before adding more corpus cases.
 - Do not change retrieval/ranking behavior until a repeatable monitoring
   manifest exists.
+
+## 2026-05-25 Child 2: Default-On Retained Monitoring Manifest
+
+Child task: `05-25-05-25-default-on-retained-monitoring-manifest`
+
+Result:
+
+- Added `examples/default-on-retained-monitoring.json` with the current
+  post-default-on retained slices and gate report paths.
+- Added `src/tagmemorag/default_on_retained_monitoring.py` to read the manifest
+  and summarize existing bounded reports.
+- Added `scripts/default_on_retained_monitoring.py` as a thin CLI wrapper.
+- Added focused coverage for passing summaries, missing reports, threshold
+  regressions, gate regressions, Markdown output, CLI output, and privacy
+  omissions.
+- Focused tests: `6 passed`.
+- Related gate tests: `31 passed`.
+- CLI smoke wrote `.tmp/eval/default-on-retained-monitoring-summary.json` with
+  status `passed` and failed checks `[]`.
+- Real retained summary covered general-web `7`, mixed-domain `4`,
+  multiformat `3`, and realmanuals `10` cases.
+
+Classification: `ship`
+
+Decision:
+
+- The program now has a repeatable manifest-driven summary for current
+  default-on retained reports.
+- Next child should either wire this summary into a command that can rerun the
+  listed eval slices, or expand the smallest retained slice. Prefer rerun
+  automation first so new cases immediately enter the monitoring loop.
