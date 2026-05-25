@@ -569,3 +569,36 @@ Added a visible Ask Q&A link from Manual Library to the user-facing QA page and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 110: Fix PR quality CI failures
+
+**Date**: 2026-05-25
+**Task**: Fix PR quality CI failures
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Made LangChain optional-extra ingestion coverage skip cleanly without langchain extras, made reranking gate batch tests self-contained with readiness fixtures, and verified the CI pytest command passes locally.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a89a71b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
