@@ -208,3 +208,46 @@ Decision:
 - Next child should run explicit eval with `same_page_ordering_enabled=true`
   against the retained/general-web slice and at least one broader non-GitHub
   slice before considering any default-on proposal.
+
+## 2026-05-25 Child 7: Same-Page Ordering Explicit Eval
+
+Child task: `05-25-same-page-ordering-explicit-eval`
+
+Result:
+
+- Wired `tagmemorag eval run` to honor `search.same_page_ordering_enabled`.
+- Added eval-runner tests proving default-off behavior is unchanged and
+  enabled behavior can promote a same-page pressure fixture.
+- Hardened `reranking_eval_gate` so candidate reports fail if they introduce a
+  new ranking-pressure case id, even when aggregate pressure count does not
+  increase.
+- Refined runtime same-page ordering to preserve rank-1 results whose bounded
+  usefulness is already sufficient.
+- Focused adjacent tests: `103 passed`.
+- Explicit general-web eval with `same_page_ordering_enabled=true`:
+  - cases: `7`
+  - hit@k: `1.000000`
+  - recall@k: `0.971429`
+  - MRR: `1.000000`
+  - ranking pressure count: `0`
+  - highest pressure rank count: `0`
+- Reranking gate with explicit candidate pressure report: `passed`, failed
+  checks `[]`.
+- Mixed-domain guard with the flag enabled:
+  - cases: `4`
+  - hit@k: `1.000000`
+  - recall@k: `1.000000`
+  - MRR: `1.000000`
+- Privacy keyword scan over generated bounded reports found no forbidden raw
+  payload markers checked by this task.
+
+Classification: `ship`
+
+Decision:
+
+- The same-page ordering flag is now validated through both unit tests and
+  explicit eval with retained local corpora.
+- Keep the flag default-off for now. Next child should either expand guard
+  coverage to realmanuals/multiformat if local artifacts are present, or add a
+  release-readiness candidate override that can include same-page enabled
+  reports without manual command stitching.

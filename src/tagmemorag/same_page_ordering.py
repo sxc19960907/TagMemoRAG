@@ -48,6 +48,7 @@ _CHROME_CUES = (
 class SamePageOrderingOptions:
     enabled: bool = False
     min_group_size: int = 2
+    rank_one_min_usefulness: float = 0.55
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,8 @@ def order_same_page_results(
         return ordered
     query_terms = _terms(query_text)
     scored = [_score_result(result, rank=index + 1, query_terms=query_terms) for index, result in enumerate(ordered)]
+    if scored[0].usefulness >= float(opts.rank_one_min_usefulness):
+        return ordered
     first_useful_rank = _first_useful_rank(scored)
     if first_useful_rank is None or first_useful_rank <= 1:
         return ordered

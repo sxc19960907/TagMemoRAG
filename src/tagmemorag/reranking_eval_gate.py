@@ -105,6 +105,7 @@ def run_reranking_eval_gate(
             baseline_pressure_summary.get("highest_pressure_rank_count"),
             candidate_pressure_summary.get("highest_pressure_rank_count"),
         ),
+        *_new_pressure_case_checks(baseline_pressure, candidate_pressure),
         *_case_rank_checks(baseline_pressure, candidate_pressure),
     ]
     status = "failed" if any(check.status == "failed" for check in checks) else "passed"
@@ -215,6 +216,24 @@ def _case_rank_checks(baseline_pressure: dict[str, Any], candidate_pressure: dic
                 baseline=base_rank,
                 candidate=cand_rank,
                 message="tracked pressure case must not move later",
+            )
+        )
+    return checks
+
+
+def _new_pressure_case_checks(baseline_pressure: dict[str, Any], candidate_pressure: dict[str, Any]) -> list[GateCheck]:
+    baseline_items = _pressure_items_by_case(baseline_pressure)
+    candidate_items = _pressure_items_by_case(candidate_pressure)
+    checks: list[GateCheck] = []
+    for case_id in sorted(set(candidate_items) - set(baseline_items)):
+        cand_rank = _as_int(candidate_items[case_id].get("first_matched_rank"))
+        checks.append(
+            GateCheck(
+                name=f"new_pressure_case:{case_id}",
+                status="failed",
+                baseline="absent",
+                candidate=cand_rank,
+                message="candidate must not introduce new ranking-pressure cases",
             )
         )
     return checks

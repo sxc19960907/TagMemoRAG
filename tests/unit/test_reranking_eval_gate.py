@@ -70,6 +70,33 @@ def test_gate_fails_when_tracked_case_moves_later(tmp_path):
     assert "case_first_matched_rank:github-hello-world-repository" in failed
 
 
+def test_gate_fails_new_candidate_pressure_case(tmp_path):
+    paths = _write_inputs(tmp_path)
+    _write(
+        Path(paths["baseline_ranking_pressure_path"]),
+        _pressure(repo_rank=6, pressure_count=2),
+    )
+    candidate = _pressure(repo_rank=6, pressure_count=2)
+    candidate["items"] = [
+        item for item in candidate["items"] if item["case_id"] != "github-hello-world-pull-request"
+    ]
+    candidate["items"].append(
+        {
+            "case_id": "new-pressure",
+            "first_matched_rank": 2,
+            "pressure_rank_count": 1,
+            "metrics": {"mrr": 0.5, "recall_at_k": 1.0, "hit_at_k": 1.0},
+        }
+    )
+    _write(Path(paths["candidate_ranking_pressure_path"]), candidate)
+
+    report = run_reranking_eval_gate(**paths)
+
+    failed = {check.name for check in report.checks if check.status == "failed"}
+    assert report.status == "failed"
+    assert "new_pressure_case:new-pressure" in failed
+
+
 def test_output_omits_raw_queries_and_snippets(tmp_path):
     paths = _write_inputs(tmp_path, include_private_payload=True)
 

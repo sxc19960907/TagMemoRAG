@@ -303,6 +303,24 @@ def test_same_page_ordering_enabled_preserves_rank_one_useful_result():
     assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["matched", "later"]
 
 
+def test_same_page_ordering_enabled_preserves_rank_one_good_enough_result():
+    first = _same_page_result(1, 3.2, "A private cache is a cache tied to a specific client and can store personalized responses.", "first")
+    later = _same_page_result(2, 2.8, "A private cache is a cache tied to a specific client and should revalidate responses.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="MDN HTTP caching no-cache private personalized response shared cache",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
 def test_context_pack_prefers_complementary_evidence_under_budget():
     duplicate = "A repository is a folder with related project files."
     near_duplicate = "A repository folder stores related project files."
