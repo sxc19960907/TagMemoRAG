@@ -1,3 +1,5 @@
+import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+
 const configEl = document.getElementById("rag-workbench-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 
@@ -32,9 +34,7 @@ const el = {
 
 function headers() {
   const out = { "Content-Type": "application/json" };
-  const token = el.token.value.trim();
-  if (token) out.Authorization = `Bearer ${token}`;
-  return out;
+  return { ...out, ...authHeadersFromToken(el.token.value) };
 }
 
 function setStatus(message, kind = "") {
@@ -238,4 +238,5 @@ el.kbForm.addEventListener("submit", (event) => {
 });
 
 el.questionForm.addEventListener("submit", requestAnswer);
+bindSharedApiToken(el.token);
 updateLinks();

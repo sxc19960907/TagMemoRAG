@@ -1,3 +1,5 @@
+import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+
 const config = JSON.parse(document.getElementById("retrieval-quality-config").textContent);
 
 const state = {
@@ -8,8 +10,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function tokenHeaders() {
-  const token = $("quality-api-token").value.trim();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return authHeadersFromToken($("quality-api-token").value);
 }
 
 function apiPath(path) {
@@ -189,4 +190,5 @@ $("quality-preview").addEventListener("click", () => promotion(false).catch((err
 $("quality-preview-selected").addEventListener("click", () => promotion(false).catch((error) => setStatus(error.message, "error")));
 $("quality-export").addEventListener("click", () => promotion(true).catch((error) => setStatus(error.message, "error")));
 
+bindSharedApiToken($("quality-api-token"));
 loadFeedback().catch((error) => setStatus(error.message, "error"));

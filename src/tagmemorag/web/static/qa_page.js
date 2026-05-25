@@ -1,3 +1,5 @@
+import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+
 const configEl = document.getElementById("qa-page-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 
@@ -49,9 +51,7 @@ const el = {
 
 function headers() {
   const out = { "Content-Type": "application/json" };
-  const token = el.token ? el.token.value.trim() : "";
-  if (token) out.Authorization = `Bearer ${token}`;
-  return out;
+  return { ...out, ...authHeadersFromToken(el.token ? el.token.value : "") };
 }
 
 function setStatus(message, kind = "") {
@@ -839,6 +839,7 @@ if (el.feedback) {
 if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
 if (el.question) el.question.addEventListener("input", updateSubmitNewState);
+bindSharedApiToken(el.token);
 renderSuggestions();
 loadSessionMemory();
 renderHistory();

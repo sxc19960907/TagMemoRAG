@@ -1,9 +1,11 @@
+import { bindSharedApiToken, setSharedApiToken } from "./admin_token.js";
+
 const configEl = document.getElementById("manual-library-config");
 const config = JSON.parse(configEl?.textContent || "{}");
 
 const state = {
   kbName: config.defaultKbName || "default",
-  apiToken: sessionStorage.getItem("tagmemoragApiToken") || "",
+  apiToken: "",
   manuals: [],
   dirtyManuals: [],
   dirtyManualCount: 0,
@@ -121,7 +123,7 @@ const el = {
 };
 
 el.kbName.value = state.kbName;
-el.token.value = state.apiToken;
+state.apiToken = bindSharedApiToken(el.token);
 
 function headers(json = true) {
   const result = {};
@@ -937,8 +939,7 @@ el.kbForm.addEventListener("submit", (event) => {
 
 el.token.addEventListener("input", () => {
   state.apiToken = el.token.value.trim();
-  if (state.apiToken) sessionStorage.setItem("tagmemoragApiToken", state.apiToken);
-  else sessionStorage.removeItem("tagmemoragApiToken");
+  setSharedApiToken(state.apiToken);
 });
 
 [

@@ -69,6 +69,20 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "dirtyManualCount" in js.text
     assert "acceptAllSuggestions" in js.text
     assert "pollRebuildJob" in js.text
+    assert "bindSharedApiToken" in js.text
+
+
+def test_admin_token_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/admin_token.js")
+
+    assert js.status_code == 200
+    assert "tagmemoragApiToken" in js.text
+    assert "sessionStorage" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
+    assert "localStorage" not in js.text
 
 
 def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -84,6 +98,7 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="quality-promotion-preview"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/retrieval_quality.js" in body
+    assert 'type="module" src="http://testserver/static/manual-library/retrieval_quality.js"' in body
 
 
 def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
@@ -95,6 +110,8 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "/search/feedback" in js.text
     assert "/search/feedback/promote/preview" in js.text
     assert "quality-feedback-rows" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
 
 
 def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -138,6 +155,8 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "workbench-answer" in js.text
     assert "workbench-evidence" in js.text
     assert "/admin/people" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
 
 
 def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -176,6 +195,8 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
     assert "Copy revoke config" in js.text
     assert "revoked" in js.text
     assert "safeLifecycleEntry" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
 
 
 def test_people_access_summary_returns_safe_payload(tmp_path, fake_embedder):
@@ -384,6 +405,8 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-context-pill" in js.text
     assert "qa-context-notice" in js.text
     assert "sessionStorage" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
     assert "loadSessionMemory" in js.text
     assert "saveSessionMemory" in js.text
     assert "sanitizeAnswerBody" in js.text

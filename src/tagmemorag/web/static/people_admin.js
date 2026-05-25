@@ -1,3 +1,5 @@
+import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+
 const configEl = document.getElementById("people-admin-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 
@@ -44,8 +46,7 @@ const el = {
 };
 
 function headers() {
-  const token = el.token.value.trim();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return authHeadersFromToken(el.token.value);
 }
 
 function escapeHtml(value) {
@@ -334,5 +335,6 @@ el.refresh.addEventListener("click", loadAccessSummary);
 el.generateForm.addEventListener("submit", generateAccessKey);
 el.copyPlaintext.addEventListener("click", () => copyValue(el.plaintextKey, "Plaintext key"));
 el.copyConfig.addEventListener("click", () => copyValue(el.configJson, "Config JSON"));
+bindSharedApiToken(el.token);
 updateLinks();
 loadAccessSummary();
