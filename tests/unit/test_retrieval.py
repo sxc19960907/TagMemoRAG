@@ -248,7 +248,7 @@ def test_build_retrieve_response_context_budget_exhausted():
 
 def test_same_page_ordering_disabled_preserves_result_order():
     first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
-    matched = _same_page_result(2, 2.8, "A repository is a folder that contains README files.", "matched")
+    matched = _same_page_result(2, 3.1, "A repository is a folder that contains README files.", "matched")
 
     payload = build_retrieve_response(
         results=[first, matched],
@@ -267,7 +267,7 @@ def test_same_page_ordering_disabled_preserves_result_order():
 
 def test_same_page_ordering_enabled_promotes_pressure_result():
     first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
-    matched = _same_page_result(2, 2.8, "A repository is a folder that contains README files.", "matched")
+    matched = _same_page_result(2, 3.1, "A repository is a folder that contains README files.", "matched")
 
     payload = build_retrieve_response(
         results=[first, matched],
@@ -316,6 +316,42 @@ def test_same_page_ordering_enabled_preserves_rank_one_good_enough_result():
         retrieve_id="retrieve-1",
         same_page_ordering=SamePageOrderingOptions(enabled=True),
         query_text="MDN HTTP caching no-cache private personalized response shared cache",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
+def test_same_page_ordering_enabled_preserves_large_rank_one_score_lead():
+    first = _same_page_result(1, 3.2, "Standard deduction filing status table.", "first")
+    later = _same_page_result(2, 3.0, "A deduction is available when the worksheet applies.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="IRS standard deduction table filing status",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
+def test_same_page_ordering_enabled_preserves_equivalent_score_peer():
+    first = _same_page_result(1, 3.2, "Hot air bottom heater cooking system.", "first")
+    later = _same_page_result(2, 3.2, "Bottom heater fan cooking system.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="oven cooking system hot air bottom heater",
     )
 
     assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]

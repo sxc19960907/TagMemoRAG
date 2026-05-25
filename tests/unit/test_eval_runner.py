@@ -315,7 +315,7 @@ def _fixed_same_page_search(**_kwargs) -> SearchExecution:
             ),
             Result(
                 node_id=2,
-                score=2.8,
+                score=3.1,
                 text="A repository is a folder that contains README files.",
                 header="Hello World",
                 path=["Hello World"],

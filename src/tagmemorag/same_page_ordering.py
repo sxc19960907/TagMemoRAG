@@ -49,6 +49,7 @@ class SamePageOrderingOptions:
     enabled: bool = False
     min_group_size: int = 2
     rank_one_min_usefulness: float = 0.55
+    rank_one_min_score_lead: float = 0.15
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,10 @@ def order_same_page_results(
     query_terms = _terms(query_text)
     scored = [_score_result(result, rank=index + 1, query_terms=query_terms) for index, result in enumerate(ordered)]
     if scored[0].usefulness >= float(opts.rank_one_min_usefulness):
+        return ordered
+    if _rank_one_has_equivalent_top_score_peer(scored):
+        return ordered
+    if _rank_one_score_lead(scored) >= float(opts.rank_one_min_score_lead):
         return ordered
     first_useful_rank = _first_useful_rank(scored)
     if first_useful_rank is None or first_useful_rank <= 1:
@@ -133,6 +138,28 @@ def _first_useful_rank(scored: Sequence[_ScoredResult]) -> int | None:
         if item.usefulness >= threshold:
             return rank
     return None
+
+
+def _rank_one_score_lead(scored: Sequence[_ScoredResult]) -> float:
+    if len(scored) < 2:
+        return 0.0
+    rank_one_score = float(scored[0].result.score)
+    next_best = max(float(item.result.score) for item in scored[1:])
+    return rank_one_score - next_best
+
+
+def _rank_one_has_equivalent_top_score_peer(scored: Sequence[_ScoredResult]) -> bool:
+    if len(scored) < 2:
+        return False
+    rank_one_score = float(scored[0].result.score)
+    peers = [
+        item
+        for item in scored[1:]
+        if abs(rank_one_score - float(item.result.score)) <= 1e-6
+    ]
+    if not peers:
+        return False
+    return max(item.usefulness for item in peers) <= scored[0].usefulness + 1e-9
 
 
 def _usefulness_score(

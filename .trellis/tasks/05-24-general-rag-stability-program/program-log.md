@@ -288,3 +288,59 @@ Decision:
   enabled-flag guard coverage to any retained multiformat/realmanuals artifacts
   that are locally available, then decide whether a default-on proposal is
   warranted.
+
+## 2026-05-25 Child 9: Same-Page Ordering Cross-Domain Guard
+
+Child task: `05-25-same-page-ordering-cross-domain-guard`
+
+Result:
+
+- Ran broader `search.same_page_ordering_enabled=true` guards across retained
+  general-web, mixed-domain, multiformat, and realmanuals slices.
+- The initial multiformat guard exposed a regression: MRR dropped to
+  `0.500000` because the heuristic overrode strong original rank-1/near-rank
+  evidence in MDN/IRS-style same-page groups.
+- The realmanuals guard exposed the same class of issue on an oven manual table
+  heading.
+- Refined same-page ordering with conservative runtime-visible guards:
+  - preserve rank 1 when its original score lead is at least `0.15`
+  - preserve rank 1 when an equivalent-score peer is not more useful
+- Added focused retrieval/eval tests for the new guard behavior and updated the
+  pressure-promotion fixture to use a realistic small score gap.
+- Focused adjacent tests: `99 passed`.
+- Enabled general-web eval:
+  - cases: `7`
+  - hit@k: `1.000000`
+  - recall@k: `0.971429`
+  - MRR: `1.000000`
+- Enabled mixed-domain retained guard:
+  - cases: `4`
+  - hit@k: `1.000000`
+  - recall@k: `1.000000`
+  - MRR: `1.000000`
+- Enabled multiformat eval:
+  - cases: `3`
+  - hit@k: `1.000000`
+  - recall@k: `1.000000`
+  - MRR: `0.777778`
+  - matched retained baseline MRR `0.777778`
+- Enabled realmanuals eval:
+  - cases: `10`
+  - hit@k: `1.000000`
+  - recall@k: `0.966667`
+  - MRR: `0.825000`
+  - retained baseline MRR `0.775000`
+- Reranking gate batch with derived candidate pressure: `passed`, release
+  readiness `passed`, reranking gate `passed`, failed checks `[]`.
+- Privacy scan over bounded pressure/gate artifacts found no forbidden raw
+  payload markers checked by this task.
+
+Classification: `ship`
+
+Decision:
+
+- Same-page ordering remains default-off, but now has stronger cross-domain
+  evidence and safer runtime guards.
+- Next child should add a small release candidate summary command or document
+  that collects these enabled-slice metrics and default-off status into one
+  operator-facing signoff record before considering any default-on proposal.
