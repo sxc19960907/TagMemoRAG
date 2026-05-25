@@ -602,3 +602,36 @@ Made LangChain optional-extra ingestion coverage skip cleanly without langchain 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 111: Route root to RAG workbench
+
+**Date**: 2026-05-25
+**Task**: Route root to RAG workbench
+**Branch**: `codex/rag-workbench-root-entrypoint`
+
+### Summary
+
+Made the browser root route redirect to the RAG Workbench so users can open the local server without memorizing admin URLs, and covered it with UI route tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f3ee56b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

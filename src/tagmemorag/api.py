@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import structlog
@@ -158,6 +158,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
 app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
+
+
+@app.get("/", include_in_schema=False)
+def browser_entrypoint():
+    return RedirectResponse(url="/admin/rag-workbench?kb_name=default", status_code=303)
 
 
 @app.get("/admin/manual-library")

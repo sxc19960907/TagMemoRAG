@@ -115,6 +115,15 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "/static/manual-library/rag_workbench.js" in body
 
 
+def test_root_route_redirects_to_rag_workbench(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/rag-workbench?kb_name=default"
+
+
 def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     client = _client(tmp_path, fake_embedder)
 
