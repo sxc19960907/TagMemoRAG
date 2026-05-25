@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 110
+- **Total Sessions**: 111
 - **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~604 | Active |
+| `journal-3.md` | ~637 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 111 | 2026-05-25 | Route root to RAG workbench | `f3ee56b` | `codex/rag-workbench-root-entrypoint` |
 | 110 | 2026-05-25 | Fix PR quality CI failures | `a89a71b` | `codex/agent-loop-driver` |
 | 109 | 2026-05-25 | Manual Library QA navigation | `8979f8a` | `codex/agent-loop-driver` |
 | 108 | 2026-05-25 | Browser QA followup context | `d55d01b` | `codex/agent-loop-driver` |
