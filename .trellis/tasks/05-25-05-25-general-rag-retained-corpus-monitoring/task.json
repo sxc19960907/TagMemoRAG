@@ -20,7 +20,8 @@
   "subtasks": [],
   "children": [
     "05-25-05-25-retained-corpus-inventory",
-    "05-25-05-25-default-on-retained-monitoring-manifest"
+    "05-25-05-25-default-on-retained-monitoring-manifest",
+    "05-25-05-25-manifest-retained-monitoring-rerun"
   ],
   "parent": null,
   "relatedFiles": [],

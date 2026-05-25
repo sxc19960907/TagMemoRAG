@@ -31,6 +31,7 @@ def test_monitoring_passes_and_omits_case_payloads(tmp_path):
     assert "private query should not leak" not in serialized
     assert "raw snippet should not leak" not in serialized
     assert "actual_top_k" not in serialized
+    assert body["reruns"] == []
 
 
 def test_monitoring_fails_missing_report(tmp_path):
@@ -82,12 +83,50 @@ def test_monitoring_cli_writes_output(tmp_path):
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "passed"
 
 
+def test_monitoring_rerun_executes_declared_command(tmp_path):
+    report = tmp_path / "general-web.json"
+    command = _write_report_script(tmp_path, report, mrr=1.0)
+    manifest = _write_manifest(tmp_path, report_path=report, rerun_command=command)
+
+    summary = run_default_on_retained_monitoring(manifest, rerun=True)
+
+    assert summary.status == "passed"
+    assert summary.reruns[0].name == "general_web"
+    assert summary.reruns[0].status == "passed"
+    assert report.exists()
+
+
+def test_monitoring_rerun_failure_fails_summary(tmp_path):
+    report = tmp_path / "general-web.json"
+    command = _write_report_script(tmp_path, report, mrr=1.0, exit_code=3)
+    manifest = _write_manifest(tmp_path, report_path=report, rerun_command=command)
+
+    summary = run_default_on_retained_monitoring(manifest, rerun=True)
+
+    assert summary.status == "failed"
+    assert "rerun:general_web:exit_3" in summary.failed_checks
+
+
+def test_monitoring_cli_rerun_flag(tmp_path):
+    report = tmp_path / "general-web.json"
+    command = _write_report_script(tmp_path, report, mrr=1.0)
+    manifest = _write_manifest(tmp_path, report_path=report, rerun_command=command)
+    output = tmp_path / "summary.json"
+
+    exit_code = monitoring_cli.main(["--manifest", str(manifest), "--rerun", "--output", str(output)])
+
+    body = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert body["reruns"][0]["status"] == "passed"
+
+
 def _write_manifest(
     tmp_path: Path,
     *,
     report_path: Path | None = None,
     mrr: float = 1.0,
     gate_status: str = "passed",
+    rerun_command: str | None = None,
 ) -> Path:
     report = report_path or tmp_path / "general-web.json"
     if report_path is None:
@@ -105,7 +144,7 @@ def _write_manifest(
                         "kind": "retrieval",
                         "suite_path": "tests/fixtures/eval/general_web.jsonl",
                         "corpus_path": ".tmp/general-web-eval/general_web",
-                        "rerun_command": None,
+                        "rerun_command": rerun_command,
                         "report_path": str(report),
                         "min_hit_at_k": 1.0,
                         "min_recall_at_k": 0.9,
@@ -119,6 +158,19 @@ def _write_manifest(
         encoding="utf-8",
     )
     return manifest
+
+
+def _write_report_script(tmp_path: Path, report: Path, *, mrr: float, exit_code: int = 0) -> str:
+    script = tmp_path / "write_report.py"
+    payload = json.dumps(_eval_report(mrr=mrr), ensure_ascii=False)
+    script.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        f"Path({str(report)!r}).write_text({payload!r}, encoding='utf-8')\n"
+        f"raise SystemExit({exit_code})\n",
+        encoding="utf-8",
+    )
+    return f"{sys.executable} {script}"
 
 
 def _eval_report(*, mrr: float) -> dict:

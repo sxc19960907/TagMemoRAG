@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import shlex
+import subprocess
 from typing import Any
 
 
@@ -27,6 +29,19 @@ class MonitoringSlice:
 class MonitoringGate:
     name: str
     path: str
+
+
+@dataclass(frozen=True)
+class RerunStatus:
+    name: str
+    status: str
+    return_code: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"name": self.name, "status": self.status}
+        if self.return_code is not None:
+            payload["return_code"] = self.return_code
+        return payload
 
 
 @dataclass(frozen=True)
@@ -76,6 +91,7 @@ class MonitoringReport:
     status: str
     slices: list[SliceStatus]
     gates: list[GateStatus]
+    reruns: list[RerunStatus]
     failed_checks: list[str]
     next_steps: list[str]
     schema_version: str = SCHEMA_VERSION
@@ -86,6 +102,7 @@ class MonitoringReport:
             "status": self.status,
             "slices": [item.to_dict() for item in self.slices],
             "gates": [item.to_dict() for item in self.gates],
+            "reruns": [item.to_dict() for item in self.reruns],
             "failed_checks": list(self.failed_checks),
             "next_steps": list(self.next_steps),
         }
@@ -111,6 +128,12 @@ class MonitoringReport:
             )
         lines.extend(["", "## Gates", "", "| Gate | Status |", "| --- | --- |"])
         lines.extend(f"| `{gate.name}` | `{gate.status}` |" for gate in self.gates)
+        if self.reruns:
+            lines.extend(["", "## Reruns", "", "| Slice | Status | Return Code |", "| --- | --- | ---: |"])
+            lines.extend(
+                f"| `{item.name}` | `{item.status}` | {'' if item.return_code is None else item.return_code} |"
+                for item in self.reruns
+            )
         if self.failed_checks:
             lines.extend(["", "## Failed Checks"])
             lines.extend(f"- `{check}`" for check in self.failed_checks)
@@ -120,18 +143,19 @@ class MonitoringReport:
         return "\n".join(lines) + "\n"
 
 
-def run_default_on_retained_monitoring(manifest_path: str | Path) -> MonitoringReport:
+def run_default_on_retained_monitoring(manifest_path: str | Path, *, rerun: bool = False) -> MonitoringReport:
     manifest = _read_manifest(Path(manifest_path))
+    rerun_statuses = _run_declared_commands(manifest["slices"]) if rerun else []
     slice_statuses = [_slice_status(item) for item in manifest["slices"]]
     gate_statuses = [_gate_status(item) for item in manifest["gates"]]
-    failed_checks = _failed_checks(slice_statuses, gate_statuses)
+    failed_checks = _failed_checks(slice_statuses, gate_statuses, rerun_statuses)
     status = "passed" if not failed_checks else "failed"
     next_steps = (
         ["Default-on retained monitoring is green; expand the smallest retained slices next."]
         if status == "passed"
         else ["Do not expand ranking behavior until failed retained monitoring checks are addressed."]
     )
-    return MonitoringReport(status, slice_statuses, gate_statuses, failed_checks, next_steps)
+    return MonitoringReport(status, slice_statuses, gate_statuses, rerun_statuses, failed_checks, next_steps)
 
 
 def write_monitoring_report(report: MonitoringReport, path: str | Path, *, fmt: str = "json") -> None:
@@ -225,11 +249,36 @@ def _metric(summary: dict[str, Any], name: str) -> float:
     return round(float(summary.get(name) or 0.0), 6)
 
 
-def _failed_checks(slices: list[SliceStatus], gates: list[GateStatus]) -> list[str]:
+def _run_declared_commands(slices: list[MonitoringSlice]) -> list[RerunStatus]:
+    statuses = []
+    for item in slices:
+        if not item.rerun_command:
+            continue
+        args = shlex.split(item.rerun_command)
+        try:
+            completed = subprocess.run(args, check=False, capture_output=True, text=True)
+        except OSError:
+            statuses.append(RerunStatus(item.name, "failed"))
+            continue
+        statuses.append(
+            RerunStatus(
+                item.name,
+                "passed" if completed.returncode == 0 else "failed",
+                return_code=completed.returncode,
+            )
+        )
+    return statuses
+
+
+def _failed_checks(slices: list[SliceStatus], gates: list[GateStatus], reruns: list[RerunStatus]) -> list[str]:
     failed = []
     for item in slices:
         failed.extend(f"slice:{item.name}:{check}" for check in item.failed_checks)
     for item in gates:
         if item.status != "passed":
             failed.append(f"gate:{item.name}:{item.status}")
+    for item in reruns:
+        if item.status != "passed":
+            code = "unreadable" if item.return_code is None else f"exit_{item.return_code}"
+            failed.append(f"rerun:{item.name}:{code}")
     return failed

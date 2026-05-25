@@ -20,9 +20,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=Path("examples/default-on-retained-monitoring.json"))
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
+    parser.add_argument("--rerun", action="store_true", help="Run manifest-declared slice commands before summarizing.")
     args = parser.parse_args(argv)
 
-    report = run_default_on_retained_monitoring(args.manifest)
+    report = run_default_on_retained_monitoring(args.manifest, rerun=args.rerun)
     if args.output:
         write_monitoring_report(report, args.output, fmt=args.format)
     else:

@@ -78,3 +78,30 @@ Decision:
 - Next child should either wire this summary into a command that can rerun the
   listed eval slices, or expand the smallest retained slice. Prefer rerun
   automation first so new cases immediately enter the monitoring loop.
+
+## 2026-05-25 Child 3: Manifest-Driven Retained Monitoring Rerun
+
+Child task: `05-25-05-25-manifest-retained-monitoring-rerun`
+
+Result:
+
+- Extended `run_default_on_retained_monitoring` with optional `rerun=True`.
+- Added `scripts/default_on_retained_monitoring.py --rerun`.
+- Rerun execution is explicit, parses manifest commands as argument lists,
+  and does not persist command stdout/stderr into monitoring reports.
+- Summary-only behavior remains unchanged by default.
+- Added focused coverage for successful rerun, failed rerun, CLI rerun, and
+  unchanged summary-only behavior.
+- Focused tests: `9 passed`.
+- Related gate tests: `34 passed`.
+- Summary-only CLI smoke remained `passed`.
+
+Classification: `ship`
+
+Decision:
+
+- The monitoring path can now summarize retained reports and explicitly rerun
+  manifest-declared diagnostics.
+- Next child should run the manifest rerun path against the current local
+  retained assets, then decide whether to expand mixed-domain or multiformat
+  first.

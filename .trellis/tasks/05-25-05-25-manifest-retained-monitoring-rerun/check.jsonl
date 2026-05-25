@@ -1,0 +1,5 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "src/tagmemorag/default_on_retained_monitoring.py", "reason": "Optional rerun execution and bounded report output."}
+{"file": "scripts/default_on_retained_monitoring.py", "reason": "CLI --rerun behavior."}
+{"file": "tests/unit/test_default_on_retained_monitoring.py", "reason": "Focused rerun coverage."}
+{"file": ".trellis/tasks/05-25-05-25-general-rag-retained-corpus-monitoring/program-log.md", "reason": "Parent log update."}
