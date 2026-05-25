@@ -437,3 +437,36 @@ Added an opt-in browser smoke that uploads a manual through the Manual Library U
 ### Next Steps
 
 - None - task complete
+
+
+## Session 106: Browser RAG failure states
+
+**Date**: 2026-05-25
+**Task**: Browser RAG failure states
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added opt-in browser smoke coverage for empty QA not-ready state, invalid manual upload validation, and upload-without-rebuild pending/searchable=false state.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `81a44ff` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
