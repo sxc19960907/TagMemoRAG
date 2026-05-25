@@ -7,7 +7,7 @@ import sys
 
 import uvicorn
 
-from .demo import DemoQaOptions, run_demo_qa
+from .demo import DemoLibraryQaOptions, DemoQaOptions, run_demo_library_qa, run_demo_qa
 from .auth.config_store import ConfigAuthStore
 from .cli_helpers import create_embedder_from_config
 from .config import load_config
@@ -40,6 +40,8 @@ def run_basic_command(args) -> int:
         return _run_search(args)
     if args.command == "demo" and args.demo_command == "qa":
         return _run_demo_qa(args)
+    if args.command == "demo" and args.demo_command == "library-qa":
+        return _run_demo_library_qa(args)
     if args.command == "serve":
         cfg = load_config(args.config)
         configure_logging(cfg.logging.level, cfg.logging.format)
@@ -143,6 +145,21 @@ def _run_demo_qa(args) -> int:
             source_k=args.source_k,
             token_budget=args.token_budget,
             output_path=args.output,
+        )
+    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload["status"] == "passed" else 1
+
+
+def _run_demo_library_qa(args) -> int:
+    payload = run_demo_library_qa(
+        DemoLibraryQaOptions(
+            question=args.question,
+            config_path=args.config,
+            kb_name=args.kb,
+            manual_id=args.manual_id,
+            output_path=args.output,
+            overwrite=not args.no_overwrite,
         )
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))

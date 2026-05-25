@@ -156,6 +156,52 @@ def test_cli_demo_qa_wires_arguments_and_outputs_summary(tmp_path, monkeypatch, 
     assert body["status"] == "passed"
 
 
+def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monkeypatch, capsys):
+    captured = {}
+
+    def fake_run_demo_library_qa(options):
+        captured["options"] = options
+        return {
+            "schema_version": "demo_library_qa.v1",
+            "status": "passed",
+            "kb_name": options.kb_name,
+            "manual_id": options.manual_id,
+            "qa": {"answer_kind": "answer"},
+        }
+
+    monkeypatch.setattr(cli_basic, "run_demo_library_qa", fake_run_demo_library_qa)
+
+    exit_code = cli.main(
+        [
+            "demo",
+            "library-qa",
+            "--config",
+            "examples/config/qa-demo.yaml",
+            "--kb",
+            "default",
+            "--manual-id",
+            "demo-service-manual",
+            "--question",
+            "服务模式怎么进入？",
+            "--output",
+            str(tmp_path / "library-qa.json"),
+            "--no-overwrite",
+        ]
+    )
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert options.config_path == "examples/config/qa-demo.yaml"
+    assert options.kb_name == "default"
+    assert options.manual_id == "demo-service-manual"
+    assert options.question == "服务模式怎么进入？"
+    assert options.output_path == str(tmp_path / "library-qa.json")
+    assert options.overwrite is False
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "demo_library_qa.v1"
+    assert body["status"] == "passed"
+
+
 def test_demo_qa_summary_is_bounded_and_user_visible():
     payload = summarize_demo_qa_response(
         "蒸汽很小怎么办？",
