@@ -344,3 +344,38 @@ Decision:
 - Next child should add a small release candidate summary command or document
   that collects these enabled-slice metrics and default-off status into one
   operator-facing signoff record before considering any default-on proposal.
+
+## 2026-05-25 Child 10: Same-Page Ordering Release Candidate Summary
+
+Child task: `05-25-same-page-ordering-rc-summary`
+
+Result:
+
+- Added
+  `.trellis/tasks/05-25-same-page-ordering-rc-summary/release-candidate-summary.md`
+  as the operator-facing release candidate signoff record.
+- Recorded default-off status and config keys:
+  `search.same_page_ordering_enabled` and
+  `search.same_page_ordering_min_group_size`.
+- Summarized retained validation metrics across general-web, mixed-domain,
+  multiformat, and realmanuals without committing generated `.tmp/` reports.
+- Recorded gate status: reranking gate batch `passed`, release readiness
+  `passed`, reranking gate `passed`, failed checks `[]`.
+- Recorded candidate general-web ranking pressure count `0` and highest
+  pressure rank count `0`.
+- Focused adjacent tests:
+  `tests/unit/test_eval_runner.py`, `tests/unit/test_retrieval.py`,
+  `tests/unit/test_reranking_gate_batch.py`, and
+  `tests/unit/test_reranking_eval_gate.py`: `52 passed`.
+- Privacy keyword scan over the release candidate summary found no forbidden
+  raw payload markers checked by this task.
+
+Classification: `ship`
+
+Decision:
+
+- Same-page ordering is ready for a default-on decision review, but remains
+  default-off until rollout approval.
+- The next step should be the parent-level final readiness review: decide
+  whether to propose enabling the flag by default, or keep it opt-in while
+  adding broader retained-corpus evidence.
