@@ -18,6 +18,9 @@ def test_langchain_provider_adds_html_suffixes():
 
 
 def test_langchain_provider_builds_html_document(tmp_path, fake_embedder):
+    pytest.importorskip("langchain_community.document_loaders")
+    pytest.importorskip("langchain_text_splitters")
+
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "manual.html").write_text(

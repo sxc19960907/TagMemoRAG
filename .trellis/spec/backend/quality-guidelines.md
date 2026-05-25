@@ -81,6 +81,7 @@ Tests should avoid network access by default. Heavy model tests should be opt-in
 - Testing only happy-path search while missing rebuild and storage failure paths.
 - Treating `node_id` as stable across rebuilds.
 - Forgetting that `implement.jsonl` and `check.jsonl` determine what future agents automatically load.
+- Letting tests pass only because the developer workspace has optional extras or generated `.tmp/` reports. Tests for optional integrations should skip clearly when the extra is absent, and batch/CLI tests should create their own report fixtures instead of depending on local evaluation artifacts.
 
 ## Scenario: HTTP Embedding Provider
 

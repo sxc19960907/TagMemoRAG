@@ -14,9 +14,11 @@ if str(SCRIPTS_ROOT) not in sys.path:
 import reranking_gate_batch as batch_cli  # noqa: E402
 
 
-def test_batch_passes_and_writes_bounded_reports(tmp_path):
+def test_batch_passes_and_writes_bounded_reports(tmp_path, monkeypatch):
     pressure = tmp_path / "pressure.json"
+    readiness_paths = _reports(tmp_path)
     _write(pressure, _pressure())
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     report = run_reranking_gate_batch(
         output_dir=tmp_path / "out",
@@ -36,11 +38,13 @@ def test_batch_passes_and_writes_bounded_reports(tmp_path):
     assert "raw snippet should not leak" not in serialized
 
 
-def test_batch_fails_when_candidate_gate_fails(tmp_path):
+def test_batch_fails_when_candidate_gate_fails(tmp_path, monkeypatch):
     baseline_pressure = tmp_path / "baseline-pressure.json"
     candidate_pressure = tmp_path / "candidate-pressure.json"
+    readiness_paths = _reports(tmp_path)
     _write(baseline_pressure, _pressure(repo_rank=6, pressure_count=2))
     _write(candidate_pressure, _pressure(repo_rank=7, pressure_count=3))
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     report = run_reranking_gate_batch(
         output_dir=tmp_path / "out",
@@ -55,11 +59,13 @@ def test_batch_fails_when_candidate_gate_fails(tmp_path):
     assert "case_first_matched_rank:github-hello-world-repository" in report.failed_checks
 
 
-def test_batch_derives_candidate_pressure_from_eval_report(tmp_path):
+def test_batch_derives_candidate_pressure_from_eval_report(tmp_path, monkeypatch):
     baseline_pressure = tmp_path / "baseline-pressure.json"
     candidate_eval = tmp_path / "candidate-eval.json"
+    readiness_paths = _reports(tmp_path)
     _write(baseline_pressure, _pressure(repo_rank=6, pressure_count=2))
     _write(candidate_eval, _eval_report(first_rank=1))
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     report = run_reranking_gate_batch(
         output_dir=tmp_path / "out",
@@ -79,13 +85,15 @@ def test_batch_derives_candidate_pressure_from_eval_report(tmp_path):
     assert "actual_top_k" not in serialized
 
 
-def test_batch_prefers_explicit_candidate_pressure_over_eval_report(tmp_path):
+def test_batch_prefers_explicit_candidate_pressure_over_eval_report(tmp_path, monkeypatch):
     baseline_pressure = tmp_path / "baseline-pressure.json"
     candidate_pressure = tmp_path / "candidate-pressure.json"
     candidate_eval = tmp_path / "candidate-eval.json"
+    readiness_paths = _reports(tmp_path)
     _write(baseline_pressure, _pressure(repo_rank=6, pressure_count=2))
     _write(candidate_pressure, _pressure(repo_rank=6, pressure_count=2))
     _write(candidate_eval, _eval_report(first_rank=7))
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     report = run_reranking_gate_batch(
         output_dir=tmp_path / "out",
@@ -100,9 +108,11 @@ def test_batch_prefers_explicit_candidate_pressure_over_eval_report(tmp_path):
     assert not (tmp_path / "out" / "candidate-ranking-pressure.json").exists()
 
 
-def test_batch_markdown_summary(tmp_path):
+def test_batch_markdown_summary(tmp_path, monkeypatch):
     pressure = tmp_path / "pressure.json"
+    readiness_paths = _reports(tmp_path)
     _write(pressure, _pressure())
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     report = run_reranking_gate_batch(
         output_dir=tmp_path / "out",
@@ -115,9 +125,11 @@ def test_batch_markdown_summary(tmp_path):
     assert text.startswith("# Reranking Gate Batch")
 
 
-def test_cli_returns_zero_for_passing_batch(tmp_path):
+def test_cli_returns_zero_for_passing_batch(tmp_path, monkeypatch):
     pressure = tmp_path / "pressure.json"
+    readiness_paths = _reports(tmp_path)
     _write(pressure, _pressure())
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     exit_code = batch_cli.main(
         [
@@ -132,11 +144,13 @@ def test_cli_returns_zero_for_passing_batch(tmp_path):
     assert (tmp_path / "out" / "batch-summary.json").exists()
 
 
-def test_cli_accepts_candidate_eval_report(tmp_path):
+def test_cli_accepts_candidate_eval_report(tmp_path, monkeypatch):
     pressure = tmp_path / "pressure.json"
     candidate_eval = tmp_path / "candidate-eval.json"
+    readiness_paths = _reports(tmp_path)
     _write(pressure, _pressure(repo_rank=6, pressure_count=2))
     _write(candidate_eval, _eval_report(first_rank=1))
+    monkeypatch.setattr("tagmemorag.reranking_gate_batch.DEFAULT_REPORT_PATHS", readiness_paths)
 
     exit_code = batch_cli.main(
         [
@@ -200,6 +214,58 @@ def _pressure(*, repo_rank: int = 6, pressure_count: int = 2) -> dict:
 
 def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _reports(tmp_path: Path) -> dict[str, str]:
+    paths = {}
+    for name in (
+        "general_web_retrieval",
+        "multiformat_retrieval",
+        "mixed_domain_retrieval",
+        "realmanuals_retrieval",
+        "general_web_context",
+        "general_web_context_tight",
+        "multiformat_context",
+        "multiformat_context_tight",
+        "general_web_answer",
+        "multiformat_answer",
+        "product_qa_answer_quality",
+        "general_web_ranking_pressure",
+    ):
+        paths[name] = str(tmp_path / f"{name}.json")
+    for name in ("general_web_retrieval", "multiformat_retrieval", "mixed_domain_retrieval", "realmanuals_retrieval"):
+        _write(
+            tmp_path / f"{name}.json",
+            {"summary": {"cases": 3, "hit_at_k": 1.0, "recall_at_k": 1.0, "mrr": 1.0}},
+        )
+    for name in ("general_web_context", "general_web_context_tight", "multiformat_context", "multiformat_context_tight"):
+        _write(
+            tmp_path / f"{name}.json",
+            {
+                "summary": {
+                    "cases": 3,
+                    "cases_with_expected_retrieved": 3,
+                    "cases_with_expected_selected": 3,
+                    "selected_expected_rate": 1.0,
+                },
+            },
+        )
+    for name in ("general_web_answer", "multiformat_answer"):
+        _write(tmp_path / f"{name}.json", {"summary": {"cases": 3, "failed": 0, "passed": True}})
+    _write(
+        tmp_path / "product_qa_answer_quality.json",
+        {
+            "summary": {
+                "cases": 2,
+                "passed": True,
+                "dimensions": {
+                    "grounded": {"passed": 2, "failed": 0},
+                    "relevant": {"passed": 2, "failed": 0},
+                },
+            },
+        },
+    )
+    return paths
 
 
 def _eval_report(*, first_rank: int) -> dict:
