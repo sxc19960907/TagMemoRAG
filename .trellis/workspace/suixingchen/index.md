@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 103
+- **Total Sessions**: 104
 - **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~373 | Active |
+| `journal-3.md` | ~406 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 104 | 2026-05-25 | Document browser RAG user flow | `3548529` | `codex/agent-loop-driver` |
 | 103 | 2026-05-25 | Manual library to QA smoke | `8b75b08` | `codex/agent-loop-driver` |
 | 102 | 2026-05-25 | Web QA RAG validation | `6a2511c` | `codex/agent-loop-driver` |
 | 101 | 2026-05-25 | Local QA demo path | `13848a9` | `codex/agent-loop-driver` |

@@ -371,3 +371,36 @@ Added and validated a deterministic local smoke for managed manual upload, rebui
 ### Next Steps
 
 - None - task complete
+
+
+## Session 104: Document browser RAG user flow
+
+**Date**: 2026-05-25
+**Task**: Document browser RAG user flow
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Documented the local managed-manual RAG user path and added an opt-in browser smoke covering Manual Library to QA with cited demo-service-manual evidence.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3548529` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
