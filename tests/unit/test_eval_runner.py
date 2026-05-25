@@ -107,13 +107,14 @@ def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
         "metadata_narrowing_brand_policy": "boost_if_not_unique",
         "metadata_narrowing_category_policy": "hard_filter_product_manual",
         "metadata_narrowing_min_candidates": 1,
-        "same_page_ordering_enabled": False,
+        "same_page_ordering_enabled": True,
         "same_page_ordering_min_group_size": 2,
     }
 
 
-def test_run_eval_same_page_ordering_default_off_preserves_pressure_order(monkeypatch, tmp_path, test_config):
+def test_run_eval_same_page_ordering_explicit_false_preserves_pressure_order(monkeypatch, tmp_path, test_config):
     test_config.model = ModelConfig(provider="hashing", dim=64)
+    test_config.search.same_page_ordering_enabled = False
     docs = _write_same_page_eval_docs(tmp_path)
     suite = tmp_path / "suite.jsonl"
     suite.write_text(

@@ -405,3 +405,36 @@ Decision:
 - Next child, if accepted, should flip only the
   `search.same_page_ordering_enabled` default, rerun gates, and preserve the
   config rollback path.
+
+## 2026-05-25 Child 12: Same-Page Ordering Default-On Implementation
+
+Child task: `05-25-05-25-same-page-ordering-default-on-implementation`
+
+Result:
+
+- Changed the centralized default for `search.same_page_ordering_enabled` from
+  `false` to `true`.
+- Preserved `search.same_page_ordering_min_group_size=2`.
+- Added explicit YAML/env false override coverage so operators can still roll
+  back to opt-in behavior through config.
+- Updated eval config snapshots and same-page eval tests for default-on
+  behavior while preserving an explicit false test for baseline ordering.
+- Did not modify the same-page ordering heuristic.
+- Focused default/override tests: `83 passed`.
+- Full related stability tests: `108 passed`.
+- Default-on general-web eval:
+  - cases: `7`
+  - recall@k: `0.971429`
+  - MRR: `1.000000`
+  - hit@k: `1.000000`
+- Candidate-aware gate batch: `passed`, release readiness `passed`,
+  reranking gate `passed`, failed checks `[]`.
+
+Classification: `ship`
+
+Decision:
+
+- Same-page ordering is now default-on in code, with config rollback preserved.
+- The next child should perform a parent-level final wrap-up: update the
+  program status, record the completed rollout, and archive the long-running
+  stability parent if no further default-on regressions are found.

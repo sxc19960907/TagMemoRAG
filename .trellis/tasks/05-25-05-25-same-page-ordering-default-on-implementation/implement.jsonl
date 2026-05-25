@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and authoritative spec pointers."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Config defaults, privacy, and focused testing requirements."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Search/runtime privacy constraints touched by retrieval behavior."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Config value changes require search-first and single-source default discipline."}
+{"file": ".trellis/tasks/archive/2026-05/05-25-05-25-same-page-ordering-default-on-readiness/default-on-readiness-review.md", "reason": "Decision record authorizing a separate default-on implementation task."}

@@ -700,7 +700,7 @@ def test_reranker_defaults(tmp_path):
 def test_same_page_ordering_defaults(tmp_path):
     cfg = load_config(tmp_path / "missing.yaml")
 
-    assert cfg.search.same_page_ordering_enabled is False
+    assert cfg.search.same_page_ordering_enabled is True
     assert cfg.search.same_page_ordering_min_group_size == 2
 
 
@@ -714,6 +714,15 @@ def test_same_page_ordering_env_overrides(tmp_path, monkeypatch):
     assert cfg.search.same_page_ordering_min_group_size == 3
 
 
+def test_same_page_ordering_env_false_overrides_default_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__SAME_PAGE_ORDERING_ENABLED", "false")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.same_page_ordering_enabled is False
+    assert cfg.search.same_page_ordering_min_group_size == 2
+
+
 def test_same_page_ordering_yaml_overrides(tmp_path):
     config = tmp_path / "config.yaml"
     config.write_text(
@@ -725,6 +734,16 @@ def test_same_page_ordering_yaml_overrides(tmp_path):
 
     assert cfg.search.same_page_ordering_enabled is True
     assert cfg.search.same_page_ordering_min_group_size == 4
+
+
+def test_same_page_ordering_yaml_false_overrides_default_on(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("search:\n  same_page_ordering_enabled: false\n", encoding="utf-8")
+
+    cfg = load_config(config)
+
+    assert cfg.search.same_page_ordering_enabled is False
+    assert cfg.search.same_page_ordering_min_group_size == 2
 
 
 def test_reranker_env_overrides(tmp_path, monkeypatch):

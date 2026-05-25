@@ -60,7 +60,7 @@ class SearchConfig(BaseModel):
     metadata_narrowing_brand_policy: Literal["boost_if_not_unique", "hard_filter", "boost"] = "boost_if_not_unique"
     metadata_narrowing_category_policy: Literal["hard_filter_product_manual", "hard_filter", "boost"] = "hard_filter_product_manual"
     metadata_narrowing_min_candidates: int = Field(default=1, ge=1)
-    same_page_ordering_enabled: bool = False
+    same_page_ordering_enabled: bool = True
     same_page_ordering_min_group_size: int = Field(default=2, ge=2)
 
 

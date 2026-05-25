@@ -1,0 +1,5 @@
+{"file": "src/tagmemorag/config.py", "reason": "Single source of truth for the same-page ordering default."}
+{"file": "tests/unit/test_config_env.py", "reason": "Default and override behavior for Settings search config."}
+{"file": "tests/unit/test_eval_runner.py", "reason": "Eval config snapshot expectations and same-page behavior."}
+{"file": "tests/unit/test_retrieval.py", "reason": "Runtime safety coverage for enabled same-page ordering."}
+{"file": ".trellis/tasks/05-24-general-rag-stability-program/program-log.md", "reason": "Parent log must record the default-on implementation result."}

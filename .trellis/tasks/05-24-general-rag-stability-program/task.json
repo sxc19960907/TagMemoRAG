@@ -29,7 +29,8 @@
     "05-25-05-25-candidate-aware-reranking-gate-batch",
     "05-25-same-page-ordering-cross-domain-guard",
     "05-25-same-page-ordering-rc-summary",
-    "05-25-05-25-same-page-ordering-default-on-readiness"
+    "05-25-05-25-same-page-ordering-default-on-readiness",
+    "05-25-05-25-same-page-ordering-default-on-implementation"
   ],
   "parent": null,
   "relatedFiles": [],
