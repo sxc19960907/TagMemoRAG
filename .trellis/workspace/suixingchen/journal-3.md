@@ -272,3 +272,36 @@ Completed the long-running general RAG stability parent: same-page ordering move
 ### Next Steps
 
 - None - task complete
+
+
+## Session 101: Local QA demo path
+
+**Date**: 2026-05-25
+**Task**: Local QA demo path
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline demo qa CLI path for the seeded coffee-machine RAG fixture, documented the workflow, and verified the answer/evidence smoke path.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `13848a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

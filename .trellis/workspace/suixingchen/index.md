@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 100
+- **Total Sessions**: 101
 - **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~274 | Active |
+| `journal-3.md` | ~307 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 101 | 2026-05-25 | Local QA demo path | `13848a9` | `codex/agent-loop-driver` |
 | 100 | 2026-05-25 | Complete general RAG stability program | `d1c479a`, `bcffa6c`, `b77af8c`, `60dc36b`, `fe7a9fb`, `713c748` | `codex/agent-loop-driver` |
 | 99 | 2026-05-24 | Document reranking evaluation gate | `c7efc9f` | `codex/agent-loop-driver` |
 | 98 | 2026-05-24 | Reranking evaluation gate runner | `f6168a5` | `codex/agent-loop-driver` |
