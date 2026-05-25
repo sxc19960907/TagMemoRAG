@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Deterministic testing and privacy guidance for browser smoke coverage."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Failure states should preserve structured errors and user-readable messages."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared Trellis thinking-guide routing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Failure state coverage spans UI/API/storage/retrieval boundaries."}

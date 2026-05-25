@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and browser smoke review."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify empty/invalid/pending states remain clear and structured."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check failure-state data survives UI/API/storage boundaries."}
