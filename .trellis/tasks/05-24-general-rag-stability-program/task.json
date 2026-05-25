@@ -25,7 +25,8 @@
     "05-24-github-same-page-ordering-diagnostic",
     "05-24-same-page-ordering-candidate-dry-run",
     "05-24-same-page-ordering-runtime-flag",
-    "05-25-same-page-ordering-explicit-eval"
+    "05-25-same-page-ordering-explicit-eval",
+    "05-25-05-25-candidate-aware-reranking-gate-batch"
   ],
   "parent": null,
   "relatedFiles": [],

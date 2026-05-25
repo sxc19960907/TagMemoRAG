@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate-readiness", type=Path, default=None)
     parser.add_argument("--baseline-ranking-pressure", type=Path, default=None)
     parser.add_argument("--candidate-ranking-pressure", type=Path, default=None)
+    parser.add_argument("--candidate-eval-report", type=Path, default=None)
     parser.add_argument("--format", choices=["json", "markdown"], default="json")
     args = parser.parse_args(argv)
 
@@ -35,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate_readiness_path=args.candidate_readiness,
             baseline_ranking_pressure_path=args.baseline_ranking_pressure,
             candidate_ranking_pressure_path=args.candidate_ranking_pressure,
+            candidate_eval_report_path=args.candidate_eval_report,
             summary_format=args.format,
         )
     except RerankingEvalGateInputError as exc:

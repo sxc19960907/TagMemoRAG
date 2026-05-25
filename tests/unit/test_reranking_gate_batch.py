@@ -55,6 +55,51 @@ def test_batch_fails_when_candidate_gate_fails(tmp_path):
     assert "case_first_matched_rank:github-hello-world-repository" in report.failed_checks
 
 
+def test_batch_derives_candidate_pressure_from_eval_report(tmp_path):
+    baseline_pressure = tmp_path / "baseline-pressure.json"
+    candidate_eval = tmp_path / "candidate-eval.json"
+    _write(baseline_pressure, _pressure(repo_rank=6, pressure_count=2))
+    _write(candidate_eval, _eval_report(first_rank=1))
+
+    report = run_reranking_gate_batch(
+        output_dir=tmp_path / "out",
+        general_web_ranking_pressure_path=baseline_pressure,
+        baseline_ranking_pressure_path=baseline_pressure,
+        candidate_eval_report_path=candidate_eval,
+    )
+
+    candidate_pressure = tmp_path / "out" / "candidate-ranking-pressure.json"
+    assert report.status == "passed"
+    assert report.reports["candidate_ranking_pressure"] == str(candidate_pressure)
+    body = json.loads(candidate_pressure.read_text(encoding="utf-8"))
+    assert body["summary"]["ranking_pressure_count"] == 0
+    serialized = json.dumps(body, ensure_ascii=False)
+    assert "private query should not leak" not in serialized
+    assert "raw snippet should not leak" not in serialized
+    assert "actual_top_k" not in serialized
+
+
+def test_batch_prefers_explicit_candidate_pressure_over_eval_report(tmp_path):
+    baseline_pressure = tmp_path / "baseline-pressure.json"
+    candidate_pressure = tmp_path / "candidate-pressure.json"
+    candidate_eval = tmp_path / "candidate-eval.json"
+    _write(baseline_pressure, _pressure(repo_rank=6, pressure_count=2))
+    _write(candidate_pressure, _pressure(repo_rank=6, pressure_count=2))
+    _write(candidate_eval, _eval_report(first_rank=7))
+
+    report = run_reranking_gate_batch(
+        output_dir=tmp_path / "out",
+        general_web_ranking_pressure_path=baseline_pressure,
+        baseline_ranking_pressure_path=baseline_pressure,
+        candidate_ranking_pressure_path=candidate_pressure,
+        candidate_eval_report_path=candidate_eval,
+    )
+
+    assert report.status == "passed"
+    assert report.reports["candidate_ranking_pressure"] == str(candidate_pressure)
+    assert not (tmp_path / "out" / "candidate-ranking-pressure.json").exists()
+
+
 def test_batch_markdown_summary(tmp_path):
     pressure = tmp_path / "pressure.json"
     _write(pressure, _pressure())
@@ -85,6 +130,29 @@ def test_cli_returns_zero_for_passing_batch(tmp_path):
 
     assert exit_code == 0
     assert (tmp_path / "out" / "batch-summary.json").exists()
+
+
+def test_cli_accepts_candidate_eval_report(tmp_path):
+    pressure = tmp_path / "pressure.json"
+    candidate_eval = tmp_path / "candidate-eval.json"
+    _write(pressure, _pressure(repo_rank=6, pressure_count=2))
+    _write(candidate_eval, _eval_report(first_rank=1))
+
+    exit_code = batch_cli.main(
+        [
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--general-web-ranking-pressure",
+            str(pressure),
+            "--baseline-ranking-pressure",
+            str(pressure),
+            "--candidate-eval-report",
+            str(candidate_eval),
+        ]
+    )
+
+    assert exit_code == 0
+    assert (tmp_path / "out" / "candidate-ranking-pressure.json").exists()
 
 
 def test_cli_returns_two_for_missing_pressure(tmp_path, capsys):
@@ -132,3 +200,42 @@ def _pressure(*, repo_rank: int = 6, pressure_count: int = 2) -> dict:
 
 def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _eval_report(*, first_rank: int) -> dict:
+    actual_top_k = []
+    for rank in range(1, max(first_rank, 1) + 1):
+        actual_top_k.append(
+            {
+                "text": "raw snippet should not leak",
+                "header": "GitHub Docs",
+                "source_file": "github.md",
+                "matched_expected_indexes": [0] if rank == first_rank else [],
+            }
+        )
+    return {
+        "suite": "tests/fixtures/eval/general_web.jsonl",
+        "summary": {
+            "cases": 1,
+            "passed": True,
+            "precision_at_k": 0.2,
+            "recall_at_k": 1.0,
+            "mrr": 1.0 if first_rank == 1 else 1 / first_rank,
+            "hit_at_k": 1.0,
+        },
+        "cases": [
+            {
+                "id": "github-hello-world-repository",
+                "kb_name": "general_web",
+                "query": "private query should not leak",
+                "expected": ["expected fixture text"],
+                "metrics": {
+                    "precision_at_k": 0.2,
+                    "recall_at_k": 1.0,
+                    "mrr": 1.0 if first_rank == 1 else 1 / first_rank,
+                    "hit_at_k": 1.0,
+                },
+                "actual_top_k": actual_top_k,
+            }
+        ],
+    }

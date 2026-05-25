@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .general_web_ranking_pressure import summarize_ranking_pressure, write_report as write_ranking_pressure_report
 from .release_readiness import DEFAULT_REPORT_PATHS, run_release_readiness, write_release_readiness_report
 from .reranking_eval_gate import (
     RerankingEvalGateReport,
@@ -68,6 +69,7 @@ def run_reranking_gate_batch(
     candidate_readiness_path: str | Path | None = None,
     baseline_ranking_pressure_path: str | Path | None = None,
     candidate_ranking_pressure_path: str | Path | None = None,
+    candidate_eval_report_path: str | Path | None = None,
     summary_format: str = "json",
 ) -> RerankingGateBatchReport:
     output_root = Path(output_dir)
@@ -88,10 +90,11 @@ def run_reranking_gate_batch(
         if baseline_ranking_pressure_path is not None
         else Path(general_web_ranking_pressure_path)
     )
-    candidate_pressure = (
-        Path(candidate_ranking_pressure_path)
-        if candidate_ranking_pressure_path is not None
-        else Path(general_web_ranking_pressure_path)
+    candidate_pressure = _candidate_pressure_path(
+        output_root=output_root,
+        general_web_ranking_pressure_path=general_web_ranking_pressure_path,
+        candidate_ranking_pressure_path=candidate_ranking_pressure_path,
+        candidate_eval_report_path=candidate_eval_report_path,
     )
     gate = run_reranking_eval_gate(
         baseline_readiness_path=baseline_readiness,
@@ -101,7 +104,14 @@ def run_reranking_gate_batch(
     )
     write_reranking_eval_gate_report(gate, gate_path, fmt="json")
 
-    report = _batch_report(readiness.status, gate, readiness_path, gate_path, summary_path)
+    report = _batch_report(
+        readiness.status,
+        gate,
+        readiness_path,
+        gate_path,
+        summary_path,
+        candidate_pressure_path=candidate_pressure if candidate_pressure != Path(general_web_ranking_pressure_path) else None,
+    )
     write_reranking_gate_batch_report(report, summary_path, fmt=summary_format)
     return report
 
@@ -124,6 +134,7 @@ def _batch_report(
     readiness_path: Path,
     gate_path: Path,
     summary_path: Path,
+    candidate_pressure_path: Path | None = None,
 ) -> RerankingGateBatchReport:
     failed_checks = [check.name for check in gate.checks if check.status != "passed"]
     status = "passed" if readiness_status == "passed" and gate.status == "passed" else "failed"
@@ -132,15 +143,35 @@ def _batch_report(
         if status == "passed"
         else ["Do not proceed to candidate ranking work until failed batch gates are addressed."]
     )
+    reports = {
+        "release_readiness": str(readiness_path),
+        "reranking_gate": str(gate_path),
+        "summary": str(summary_path),
+    }
+    if candidate_pressure_path is not None:
+        reports["candidate_ranking_pressure"] = str(candidate_pressure_path)
     return RerankingGateBatchReport(
         status=status,
         release_readiness_status=readiness_status,
         reranking_gate_status=gate.status,
-        reports={
-            "release_readiness": str(readiness_path),
-            "reranking_gate": str(gate_path),
-            "summary": str(summary_path),
-        },
+        reports=reports,
         failed_checks=failed_checks,
         next_steps=next_steps,
     )
+
+
+def _candidate_pressure_path(
+    *,
+    output_root: Path,
+    general_web_ranking_pressure_path: str | Path,
+    candidate_ranking_pressure_path: str | Path | None,
+    candidate_eval_report_path: str | Path | None,
+) -> Path:
+    if candidate_ranking_pressure_path is not None:
+        return Path(candidate_ranking_pressure_path)
+    if candidate_eval_report_path is None:
+        return Path(general_web_ranking_pressure_path)
+    candidate_pressure = output_root / "candidate-ranking-pressure.json"
+    pressure_report = summarize_ranking_pressure(candidate_eval_report_path)
+    write_ranking_pressure_report(pressure_report, candidate_pressure, fmt="json")
+    return candidate_pressure

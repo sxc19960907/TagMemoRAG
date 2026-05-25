@@ -251,3 +251,40 @@ Decision:
   coverage to realmanuals/multiformat if local artifacts are present, or add a
   release-readiness candidate override that can include same-page enabled
   reports without manual command stitching.
+
+## 2026-05-25 Child 8: Candidate-Aware Reranking Gate Batch
+
+Child task: `05-25-05-25-candidate-aware-reranking-gate-batch`
+
+Result:
+
+- Moved the general-web ranking-pressure diagnostic into
+  `src/tagmemorag/general_web_ranking_pressure.py`.
+- Kept `scripts/diag_general_web_ranking_pressure.py` as a thin CLI wrapper.
+- Added `--candidate-eval-report` to the reranking gate batch so a candidate
+  eval output can derive `<output-dir>/candidate-ranking-pressure.json`
+  automatically.
+- Preserved explicit `--candidate-ranking-pressure` precedence for existing
+  scripted callers.
+- Added focused coverage for derived candidate pressure, explicit pressure
+  precedence, CLI wiring, and privacy omissions.
+- Focused tests:
+  `tests/unit/test_diag_general_web_ranking_pressure.py`,
+  `tests/unit/test_reranking_gate_batch.py`, and
+  `tests/unit/test_reranking_eval_gate.py`: `24 passed`.
+- Local batch run with `.tmp/eval/same-page-enabled-general-web.json` through
+  `--candidate-eval-report`: `passed`, release readiness `passed`, reranking
+  gate `passed`, failed checks `[]`.
+- Privacy keyword scan over generated batch artifacts found no forbidden raw
+  payload markers checked by this task.
+
+Classification: `ship`
+
+Decision:
+
+- Future same-page or retrieval-ranking candidates can now run the batch gate
+  from an eval report without a manual intermediate diagnostic command.
+- Keep the same-page ordering flag default-off. Next child should expand the
+  enabled-flag guard coverage to any retained multiformat/realmanuals artifacts
+  that are locally available, then decide whether a default-on proposal is
+  warranted.
