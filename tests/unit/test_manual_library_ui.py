@@ -151,6 +151,7 @@ def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "People & Access" in body
     assert 'id="people-key-rows"' in body
     assert 'id="people-detail-list"' in body
+    assert 'id="people-lifecycle"' in body
     assert 'id="people-public-paths"' in body
     assert 'id="people-generate-form"' in body
     assert 'id="people-generation-result"' in body
@@ -171,6 +172,10 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
     assert "people-key-rows" in js.text
     assert "generate-key" in js.text
     assert "Copy plaintext key" in js.text or "copyPlaintext" in js.text
+    assert "Use as template" in js.text
+    assert "Copy revoke config" in js.text
+    assert "revoked" in js.text
+    assert "safeLifecycleEntry" in js.text
 
 
 def test_people_access_summary_returns_safe_payload(tmp_path, fake_embedder):

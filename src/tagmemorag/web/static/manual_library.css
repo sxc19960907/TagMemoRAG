@@ -272,6 +272,49 @@ textarea {
   font-size: 12px;
 }
 
+.people-lifecycle {
+  display: grid;
+  gap: 10px;
+}
+
+.people-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.people-lifecycle-block {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  padding: 10px;
+}
+
+.people-lifecycle-block p,
+.people-rotate-plan {
+  margin: 0;
+}
+
+.people-lifecycle textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.people-rotate-plan {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.people-rotate-plan code {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 1px 4px;
+}
+
 .qa-shell {
   min-height: 100vh;
   background: #eef2f6;

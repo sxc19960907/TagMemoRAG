@@ -23,6 +23,7 @@ const el = {
   refresh: document.getElementById("people-refresh"),
   detailSubtitle: document.getElementById("people-detail-subtitle"),
   detailList: document.getElementById("people-detail-list"),
+  lifecycle: document.getElementById("people-lifecycle"),
   publicPaths: document.getElementById("people-public-paths"),
   generateCommand: document.getElementById("people-generate-command"),
   generateForm: document.getElementById("people-generate-form"),
@@ -201,6 +202,7 @@ function renderDetail(item) {
     state.selectedId = "";
     el.detailSubtitle.textContent = "No access identity selected";
     el.detailList.innerHTML = "<dt>Status</dt><dd class=\"muted\">No configured API keys.</dd>";
+    renderLifecycle(null);
     return;
   }
   state.selectedId = item.id;
@@ -215,6 +217,7 @@ function renderDetail(item) {
     <dt>Created</dt><dd>${escapeHtml(formatDate(item.created_at))}</dd>
     <dt>Last used</dt><dd>${escapeHtml(formatDate(item.last_used_at))}</dd>
   `;
+  renderLifecycle(item);
 }
 
 function renderError(error) {
@@ -227,6 +230,69 @@ function renderGeneratedKey(body) {
   el.generationResult.hidden = false;
   el.plaintextKey.value = body.plaintext_key || "";
   el.configJson.value = body.config_json || JSON.stringify(body.config_entry || {}, null, 2);
+}
+
+function renderLifecycle(item) {
+  if (!item) {
+    el.lifecycle.className = "people-lifecycle empty-state";
+    el.lifecycle.textContent = "Select an access identity to prepare revoke or rotation steps.";
+    return;
+  }
+  const revokeEntry = safeLifecycleEntry(item, { revoked: true });
+  const replacementId = `${item.id}-replacement`;
+  const scopes = listForInput(item.scopes, "search");
+  const kbs = listForInput(item.kb_allowlist, state.kbName || "default");
+  const rate = item.rate_limit_per_minute == null ? "default" : `${item.rate_limit_per_minute}/min`;
+  el.lifecycle.className = "people-lifecycle";
+  el.lifecycle.innerHTML = `
+    <div class="people-lifecycle-actions">
+      <button id="people-template-key" type="button">Use as template</button>
+      <button id="people-copy-revoke" type="button">Copy revoke config</button>
+    </div>
+    <div class="people-lifecycle-block">
+      <strong>Revoke config entry</strong>
+      <p class="muted">Set the old key to revoked in config. The original hash is intentionally not shown here.</p>
+      <textarea id="people-revoke-json" readonly rows="7">${escapeHtml(JSON.stringify(revokeEntry, null, 2))}</textarea>
+    </div>
+    <div class="people-lifecycle-block">
+      <strong>Rotate plan</strong>
+      <ol class="people-rotate-plan">
+        <li>Use this key as a template and generate <code>${escapeHtml(replacementId)}</code>.</li>
+        <li>Keep scopes <code>${escapeHtml(scopes)}</code>, KB access <code>${escapeHtml(kbs)}</code>, and rate <code>${escapeHtml(rate)}</code>.</li>
+        <li>Add the generated config entry, deploy or reload config, then revoke <code>${escapeHtml(item.id)}</code>.</li>
+      </ol>
+    </div>
+  `;
+  document.getElementById("people-template-key").addEventListener("click", () => useKeyAsTemplate(item));
+  document.getElementById("people-copy-revoke").addEventListener("click", () => {
+    copyValue(document.getElementById("people-revoke-json"), "Revoke config");
+  });
+}
+
+function safeLifecycleEntry(item, extra = {}) {
+  return {
+    id: item.id,
+    label: item.label || "",
+    kb_allowlist: Array.isArray(item.kb_allowlist) ? item.kb_allowlist : [],
+    scopes: Array.isArray(item.scopes) ? item.scopes : [],
+    rate_limit_per_minute: item.rate_limit_per_minute ?? null,
+    ...extra,
+  };
+}
+
+function useKeyAsTemplate(item) {
+  el.newId.value = `${item.id}-replacement`;
+  el.newLabel.value = item.label ? `${item.label} replacement` : "";
+  el.newScopes.value = listForInput(item.scopes, "search");
+  el.newKbs.value = listForInput(item.kb_allowlist, state.kbName || "default");
+  el.newRate.value = item.rate_limit_per_minute == null ? "" : String(item.rate_limit_per_minute);
+  el.newId.focus();
+  setStatus(`Generation form prefilled from ${item.id}.`, "success");
+}
+
+function listForInput(values, fallback) {
+  if (!Array.isArray(values) || values.length === 0) return fallback;
+  return values.join(",");
 }
 
 function splitList(value, fallback) {
