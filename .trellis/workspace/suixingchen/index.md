@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 114
+- **Total Sessions**: 115
 - **Last Active**: 2026-05-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~736 | Active |
+| `journal-3.md` | ~769 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 115 | 2026-05-26 | Shared admin API token | `8b7fa41` | `codex/admin-people-management-ui` |
 | 114 | 2026-05-26 | Access key lifecycle guidance | `4e295fd` | `codex/admin-people-management-ui` |
 | 113 | 2026-05-25 | Browser access key generation | `43287ef` | `codex/admin-people-management-ui` |
 | 112 | 2026-05-25 | People access admin UI | `50b03bc` | `codex/admin-people-management-ui` |

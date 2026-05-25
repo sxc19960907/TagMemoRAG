@@ -734,3 +734,36 @@ Added People & Access lifecycle guidance for config-backed keys: revoke snippets
 ### Next Steps
 
 - None - task complete
+
+
+## Session 115: Shared admin API token
+
+**Date**: 2026-05-26
+**Task**: Shared admin API token
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a shared sessionStorage API-token helper and wired Manual Library, RAG Workbench, People & Access, Retrieval Quality, and QA so browser users paste the admin token once per session.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8b7fa41` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
