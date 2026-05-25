@@ -701,3 +701,36 @@ Added one-time API key generation to People & Access using a shared auth keygen 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 114: Access key lifecycle guidance
+
+**Date**: 2026-05-26
+**Task**: Access key lifecycle guidance
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added People & Access lifecycle guidance for config-backed keys: revoke snippets, rotation plan, and template-prefill action, then verified with focused tests and browser smoke checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e295fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
