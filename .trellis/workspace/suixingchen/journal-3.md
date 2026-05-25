@@ -503,3 +503,36 @@ Mapped QA no-results refusal to friendly browser copy and added opt-in browser s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 108: Browser QA followup context
+
+**Date**: 2026-05-25
+**Task**: Browser QA followup context
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added opt-in browser smoke coverage for QA multi-turn follow-up context: upload/rebuild manual, ask initial grounded question, ask short follow-up, verify context notice and cited answer.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d55d01b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
