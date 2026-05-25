@@ -37,6 +37,8 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="verify-blobs"' in body
     assert 'id="queue-job-rows"' in body
     assert 'id="audit-rows"' in body
+    assert 'id="manual-library-qa-link"' in body
+    assert 'href="/qa?kb_name=ops"' in body
     assert 'id="open-tag-governance"' in body
     assert 'id="tag-stat-rows"' in body
     assert 'id="rewrite-preview-rows"' in body

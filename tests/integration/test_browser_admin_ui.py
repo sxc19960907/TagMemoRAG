@@ -451,8 +451,9 @@ def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) ->
     assert "clear" in row_text
     assert "browser-upload" in row_text
 
-    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.locator("#manual-library-qa-link").click()
     page.get_by_role("heading", name="Manual Q&A").wait_for()
+    assert page.url.endswith("/qa?kb_name=default")
     page.locator("#qa-question").fill("浏览器上传的手册里，服务模式怎么进入？")
     page.locator("#qa-submit").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
