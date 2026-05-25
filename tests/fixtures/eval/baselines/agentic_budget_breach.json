@@ -1,0 +1,336 @@
+{
+  "build_id": "20260521021017208984",
+  "build_ids": {
+    "default": "20260521021017208984"
+  },
+  "cases": [
+    {
+      "actual_top_k": [
+        {
+          "header": "E01 不出咖啡",
+          "matched_expectations": [],
+          "node_id": 12,
+          "rank": 1,
+          "score": 0.775477,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "制作咖啡",
+          "matched_expectations": [],
+          "node_id": 5,
+          "rank": 2,
+          "score": 0.739345,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "蒸汽功能",
+          "matched_expectations": [],
+          "node_id": 6,
+          "rank": 3,
+          "score": 0.701623,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "水箱安装",
+          "matched_expectations": [],
+          "node_id": 3,
+          "rank": 4,
+          "score": 0.654785,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "产品介绍",
+          "matched_expectations": [],
+          "node_id": 0,
+          "rank": 5,
+          "score": 0.63249,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "电源连接",
+          "matched_expectations": [],
+          "node_id": 2,
+          "rank": 6,
+          "score": 0.354251,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "E05 蒸汽异常",
+          "matched_expectations": [],
+          "node_id": 13,
+          "rank": 7,
+          "score": 0.346115,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "喷嘴清洗",
+          "matched_expectations": [],
+          "node_id": 9,
+          "rank": 8,
+          "score": 0.345402,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "冷藏室温度",
+          "matched_expectations": [],
+          "node_id": 26,
+          "rank": 9,
+          "score": 0.307036,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "洗衣机震动",
+          "matched_expectations": [],
+          "node_id": 34,
+          "rank": 10,
+          "score": 0.292096,
+          "source_file": "product_manuals/washer/washer_wm8.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-budget-unresolved-combo",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.3,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    },
+    {
+      "actual_top_k": [
+        {
+          "header": "蒸汽功能",
+          "matched_expectations": [],
+          "node_id": 6,
+          "rank": 1,
+          "score": 0.843229,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "除垢",
+          "matched_expectations": [],
+          "node_id": 10,
+          "rank": 2,
+          "score": 0.822873,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "E05 蒸汽异常",
+          "matched_expectations": [],
+          "node_id": 13,
+          "rank": 3,
+          "score": 0.749086,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "喷嘴清洗",
+          "matched_expectations": [],
+          "node_id": 9,
+          "rank": 4,
+          "score": 0.726139,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "电源连接",
+          "matched_expectations": [],
+          "node_id": 2,
+          "rank": 5,
+          "score": 0.715607,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "水箱安装",
+          "matched_expectations": [],
+          "node_id": 3,
+          "rank": 6,
+          "score": 0.67624,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "制作咖啡",
+          "matched_expectations": [],
+          "node_id": 5,
+          "rank": 7,
+          "score": 0.60026,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "E01 不出咖啡",
+          "matched_expectations": [],
+          "node_id": 12,
+          "rank": 8,
+          "score": 0.498061,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "冷藏室温度",
+          "matched_expectations": [],
+          "node_id": 26,
+          "rank": 9,
+          "score": 0.281483,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "产品介绍",
+          "matched_expectations": [],
+          "node_id": 0,
+          "rank": 10,
+          "score": 0.278662,
+          "source_file": "coffee_machine.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-budget-many-symptoms",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 0.5,
+        "precision_at_k": 0.3,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    },
+    {
+      "actual_top_k": [
+        {
+          "header": "E05 蒸汽异常",
+          "matched_expectations": [],
+          "node_id": 13,
+          "rank": 1,
+          "score": 0.78299,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "E01 不出咖啡",
+          "matched_expectations": [],
+          "node_id": 12,
+          "rank": 2,
+          "score": 0.675644,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "冷藏室温度",
+          "matched_expectations": [],
+          "node_id": 26,
+          "rank": 3,
+          "score": 0.603183,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "水箱安装",
+          "matched_expectations": [],
+          "node_id": 3,
+          "rank": 4,
+          "score": 0.543546,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "Compressor Noise",
+          "matched_expectations": [],
+          "node_id": 27,
+          "rank": 5,
+          "score": 0.368938,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        },
+        {
+          "header": "喷嘴清洗",
+          "matched_expectations": [],
+          "node_id": 9,
+          "rank": 6,
+          "score": 0.31106,
+          "source_file": "coffee_machine.md"
+        },
+        {
+          "header": "Drum Clean Maintenance",
+          "matched_expectations": [],
+          "node_id": 33,
+          "rank": 7,
+          "score": 0.306639,
+          "source_file": "product_manuals/washer/washer_wm8.md"
+        },
+        {
+          "header": "F2 Water Leak Recovery",
+          "matched_expectations": [],
+          "node_id": 23,
+          "rank": 8,
+          "score": 0.303889,
+          "source_file": "product_manuals/dishwasher/dishwasher_dw6.md"
+        },
+        {
+          "header": "A-10 Child Lock",
+          "matched_expectations": [],
+          "node_id": 32,
+          "rank": 9,
+          "score": 0.303837,
+          "source_file": "product_manuals/washer/washer_wm8.md"
+        },
+        {
+          "header": "Door Alarm",
+          "matched_expectations": [],
+          "node_id": 28,
+          "rank": 10,
+          "score": 0.303473,
+          "source_file": "product_manuals/refrigerator/refrigerator_nrk6192.md"
+        }
+      ],
+      "ann_candidate_count": 0,
+      "failures": [],
+      "id": "agentic-budget-cross-intent",
+      "metrics": {
+        "hit_at_k": 1.0,
+        "mrr": 1.0,
+        "precision_at_k": 0.3,
+        "recall_at_k": 1.0
+      },
+      "passed": true,
+      "search_strategy": "exact_local"
+    }
+  ],
+  "docs": "tests/fixtures",
+  "generated_at": "2026-05-21T00:00:00Z",
+  "kb_names": [
+    "default"
+  ],
+  "mode": "classic",
+  "model": {
+    "dim": 64,
+    "name": "hashing",
+    "provider": "hashing"
+  },
+  "schema": "agentic_baseline.v1",
+  "search": {
+    "aggregate": "max",
+    "amplitude_cutoff": 0.01,
+    "decay": 0.7,
+    "lexical_boost": 0.2,
+    "lexical_candidate_k": 32,
+    "lexical_enabled": true,
+    "lexical_exact_code_boost": 0.15,
+    "lexical_min_token_chars": 2,
+    "lexical_model_boost": 0.12,
+    "lexical_source_k": 3,
+    "metadata_field_boost": 0.05,
+    "metadata_narrowing_brand_policy": "boost_if_not_unique",
+    "metadata_narrowing_category_policy": "hard_filter_product_manual",
+    "metadata_narrowing_enabled": true,
+    "metadata_narrowing_min_candidates": 1,
+    "source_k": 3,
+    "steps": 3,
+    "tag_boost": 0.03,
+    "top_k": 5
+  },
+  "suite": "tests/fixtures/eval/agentic_budget_breach.jsonl",
+  "summary": {
+    "cases": 3,
+    "hit_at_k": 1.0,
+    "mrr": 0.833333,
+    "passed": true,
+    "precision_at_k": 0.3,
+    "recall_at_k": 1.0
+  },
+  "top_k": 5
+}

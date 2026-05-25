@@ -402,9 +402,21 @@ def test_nested_env_delimiter(tmp_path, monkeypatch):
 def test_parser_profile_defaults_to_product_manual():
     cfg = load_config("missing.yaml")
 
+    assert cfg.parser.provider == "native"
     assert cfg.parser.pdf_profile == "product_manual"
     assert cfg.parser.pdf_heading_hints == []
     assert cfg.parser.overlap_chars == 0
+
+
+def test_parser_provider_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__PARSER__PROVIDER", "langchain")
+
+    assert load_config(tmp_path / "missing.yaml").parser.provider == "langchain"
+
+
+def test_parser_provider_rejects_unknown_explicit_value():
+    with pytest.raises(ValidationError):
+        ParserConfig(provider="unknown")
 
 
 def test_parser_profile_env_overrides(tmp_path, monkeypatch):
@@ -523,6 +535,22 @@ def test_search_ann_env_overrides(tmp_path, monkeypatch):
     assert cfg.search.ann_candidate_k == 32
     assert cfg.search.ann_force_exact_on_filters is True
     assert cfg.search.debug_metadata_enabled is True
+
+
+def test_agentic_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__MODE", "agentic")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__PROVIDER", "openai_compatible")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__MODEL_ID", "decision-env")
+    monkeypatch.setenv("TAGMEMORAG__AGENTIC__DECISION__API_KEY_ENV", "DECISION_ENV_KEY")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.agentic.mode == "agentic"
+    assert cfg.agentic.decision.enabled is True
+    assert cfg.agentic.decision.provider == "openai_compatible"
+    assert cfg.agentic.decision.model_id == "decision-env"
+    assert cfg.agentic.decision.api_key_env == "DECISION_ENV_KEY"
 
 
 def test_search_lexical_env_overrides(tmp_path, monkeypatch):
@@ -667,6 +695,55 @@ def test_reranker_defaults(tmp_path):
     assert r.min_budget_ms == 500
     assert r.hard_timeout_ms == 3000
     assert r.cache_max_entries == 5000
+
+
+def test_same_page_ordering_defaults(tmp_path):
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.same_page_ordering_enabled is True
+    assert cfg.search.same_page_ordering_min_group_size == 2
+
+
+def test_same_page_ordering_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__SAME_PAGE_ORDERING_ENABLED", "true")
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__SAME_PAGE_ORDERING_MIN_GROUP_SIZE", "3")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.same_page_ordering_enabled is True
+    assert cfg.search.same_page_ordering_min_group_size == 3
+
+
+def test_same_page_ordering_env_false_overrides_default_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAGMEMORAG__SEARCH__SAME_PAGE_ORDERING_ENABLED", "false")
+
+    cfg = load_config(tmp_path / "missing.yaml")
+
+    assert cfg.search.same_page_ordering_enabled is False
+    assert cfg.search.same_page_ordering_min_group_size == 2
+
+
+def test_same_page_ordering_yaml_overrides(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "search:\n  same_page_ordering_enabled: true\n  same_page_ordering_min_group_size: 4\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(config)
+
+    assert cfg.search.same_page_ordering_enabled is True
+    assert cfg.search.same_page_ordering_min_group_size == 4
+
+
+def test_same_page_ordering_yaml_false_overrides_default_on(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("search:\n  same_page_ordering_enabled: false\n", encoding="utf-8")
+
+    cfg = load_config(config)
+
+    assert cfg.search.same_page_ordering_enabled is False
+    assert cfg.search.same_page_ordering_min_group_size == 2
 
 
 def test_reranker_env_overrides(tmp_path, monkeypatch):

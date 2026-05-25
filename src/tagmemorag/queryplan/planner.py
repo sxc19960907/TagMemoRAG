@@ -59,6 +59,9 @@ def _resolve_budget(spec: dict | None, settings: "Settings") -> Budget:
             else qpc.default_allow_external_reranker
         ),
         deadline_at=0.0,  # set below
+        max_iterations=int(spec.get("max_iterations") if spec.get("max_iterations") is not None else 3),
+        max_agent_tokens=int(spec.get("max_agent_tokens") if spec.get("max_agent_tokens") is not None else 4096),
+        max_tool_calls=int(spec.get("max_tool_calls") if spec.get("max_tool_calls") is not None else 12),
     )
 
 

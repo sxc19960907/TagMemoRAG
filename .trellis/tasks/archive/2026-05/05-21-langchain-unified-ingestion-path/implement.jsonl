@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Parser, chunk identity, rebuild, and dependency invariants."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Optional dependency, safe diagnostics, and eval gate discipline."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Backend module boundaries and dependency direction."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-langchain-loader-splitter-adapter/design.md", "reason": "C1 adapter boundary and rollback design."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-langchain-loader-splitter-adapter/implement.md", "reason": "C1 validation results and adapter constraints."}

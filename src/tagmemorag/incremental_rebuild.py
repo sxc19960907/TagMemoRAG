@@ -16,7 +16,7 @@ from .graph_builder import build_graph
 from .manual_library import ManualLibraryManifest, is_active_status, list_records
 from .manuals import load_manual_metadata, metadata_from_node
 from .observability.metrics import get_metrics
-from .parser import parse_document
+from .parser_provider import parse_chunks_for_config
 from .rebuild_impact import make_impact_report
 from .storage.json_anchor import JsonAnchorStore
 from .tag_rebuild import sync_rebuild_tags
@@ -315,15 +315,11 @@ def _build_plan(
         if not is_active_status(metadata.status):
             continue
         plan.manual_tags_by_id[metadata.manual_id] = metadata.tags
-        for chunk in parse_document(
+        for chunk in parse_chunks_for_config(
             path,
-            cfg.parser.max_chars,
-            cfg.parser.min_chars,
-            overlap_chars=cfg.parser.overlap_chars,
+            cfg.parser,
             root_dir=docs_root,
             metadata=manual_node_attrs(metadata),
-            pdf_profile=cfg.parser.pdf_profile,
-            pdf_heading_hints=cfg.parser.pdf_heading_hints,
         ):
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)

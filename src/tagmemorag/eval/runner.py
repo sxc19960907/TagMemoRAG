@@ -8,6 +8,7 @@ from uuid import uuid4
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.embedder import create_embedder
 from tagmemorag.metadata_narrowing import infer_metadata_narrowing, merge_inferred_filters
+from tagmemorag.same_page_ordering import SamePageOrderingOptions, order_same_page_results
 from tagmemorag.search_runtime import execute_search
 from tagmemorag.state import build_kb, load_kb, save_kb
 
@@ -37,7 +38,10 @@ def run_eval(
     reuse_built_kb: bool = False,
     eval_data_dir: str | Path | None = None,
     thresholds: EvalThresholds = DEFAULT_THRESHOLDS,
+    force_mode: str | None = None,
 ) -> EvalReport:
+    if force_mode not in {None, "classic", "agentic"}:
+        raise EvalSuiteError("force_mode must be classic or agentic")
     resolved_top_k = top_k or cfg.search.top_k or 5
     _validate_top_k(resolved_top_k)
     _validate_thresholds(thresholds)
@@ -98,7 +102,14 @@ def run_eval(
             filters=merge_inferred_filters(None, narrowing),
             boost_filters=narrowing.boost_filters,
         )
-        results = execution.results
+        results = order_same_page_results(
+            execution.results,
+            query_text=case.query,
+            options=SamePageOrderingOptions(
+                enabled=run_cfg.search.same_page_ordering_enabled,
+                min_group_size=run_cfg.search.same_page_ordering_min_group_size,
+            ),
+        )
         rank_matches = match_expectations(results, case.relevant, case_id=case.id)
         metrics = compute_ranking_metrics(rank_matches, len(case.relevant), case_top_k)
         negative_hits = match_negatives(results[:case_top_k], case.negatives, case_id=case.id)
@@ -155,8 +166,10 @@ def run_eval(
         config_snapshot={
             "model": {"provider": run_cfg.model.provider, "name": run_cfg.model.name, "dim": run_cfg.model.dim},
             "search": {"top_k": resolved_top_k, **search_params},
+            "agentic": {"force_mode": force_mode, "mode": force_mode or run_cfg.agentic.mode},
             "storage": storage_snapshot,
             "reuse_built_kb": reuse_built_kb,
+            "build_ids": {kb_name: states[kb_name].build_id for kb_name in sorted(states)},
         },
     )
 
@@ -248,6 +261,8 @@ def _resolve_search_params(
         "metadata_narrowing_brand_policy": cfg.search.metadata_narrowing_brand_policy,
         "metadata_narrowing_category_policy": cfg.search.metadata_narrowing_category_policy,
         "metadata_narrowing_min_candidates": cfg.search.metadata_narrowing_min_candidates,
+        "same_page_ordering_enabled": cfg.search.same_page_ordering_enabled,
+        "same_page_ordering_min_group_size": cfg.search.same_page_ordering_min_group_size,
     }
     if int(resolved["source_k"]) <= 0:
         raise EvalSuiteError("source_k must be a positive integer")

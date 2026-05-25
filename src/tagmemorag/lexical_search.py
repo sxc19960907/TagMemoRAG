@@ -13,6 +13,25 @@ _CJK_RE = re.compile(r"[\u3400-\u9fff]+")
 _CODE_RE = re.compile(r"^[a-z]{1,4}[- ]?\d{1,5}[a-z0-9]*$", re.IGNORECASE)
 _SPACED_CODE_RE = re.compile(r"\b[a-z]{1,4}\s+\d{1,5}[a-z0-9]*\b", re.IGNORECASE)
 _STOP_WORDS = {"a", "an", "and", "for", "if", "in", "is", "of", "on", "or", "the", "to", "with"}
+_CJK_STOP_TERMS = {
+    "洗衣",
+    "衣機",
+    "洗衣機",
+    "洗衣机",
+    "烘乾",
+    "烘干",
+    "乾衣",
+    "干衣",
+    "烤箱",
+    "冰箱",
+    "怎麼",
+    "怎么",
+    "哪裡",
+    "哪里",
+    "如何",
+    "什麼",
+    "什么",
+}
 
 
 @dataclass(frozen=True)
@@ -20,6 +39,16 @@ class LexicalMatch:
     node_id: int
     score: float
     mode: str
+
+
+@dataclass(frozen=True)
+class _SearchField:
+    text: str
+    weight: float
+    allow_term_hits: bool = True
+    allow_identity_hits: bool = True
+    allow_proximity_hits: bool = False
+    allow_compact_evidence_hits: bool = False
 
 
 def lexical_search(
@@ -34,6 +63,7 @@ def lexical_search(
     model_boost: float = 0.12,
 ) -> list[LexicalMatch]:
     tokens = extract_lexical_tokens(query, min_token_chars=min_token_chars)
+    ordered_terms = _ordered_ordinary_terms(query, min_token_chars=min_token_chars)
     if not tokens or candidate_k <= 0:
         return []
     eligible = set(graph.nodes) if eligible_node_ids is None else set(eligible_node_ids)
@@ -41,7 +71,7 @@ def lexical_search(
         return []
 
     matches: list[LexicalMatch] = []
-    cap = max(float(boost), float(exact_code_boost), float(model_boost))
+    cap = max(float(boost) * 8.0, float(exact_code_boost) + float(model_boost) + float(boost))
     for node_id in sorted(eligible):
         fields = _node_search_fields(graph.nodes[node_id])
         score, mode = _score_fields(
@@ -50,6 +80,7 @@ def lexical_search(
             boost=float(boost),
             exact_code_boost=float(exact_code_boost),
             model_boost=float(model_boost),
+            ordered_terms=ordered_terms,
             cap=cap,
         )
         if score > 0.0:
@@ -60,6 +91,72 @@ def lexical_search(
 
 def lexical_score_map(matches: Sequence[LexicalMatch]) -> dict[int, float]:
     return {match.node_id: match.score for match in matches}
+
+
+def lexical_evidence_score(
+    query: str,
+    node: Mapping[str, Any],
+    *,
+    min_token_chars: int = 2,
+) -> float:
+    """Small deterministic query-evidence prior for final local ranking."""
+    tokens = extract_lexical_tokens(query, min_token_chars=min_token_chars)
+    if not any(tokens.values()):
+        return 0.0
+    ordered_terms = _ordered_ordinary_terms(query, min_token_chars=min_token_chars)
+    heading = str(node.get("header", ""))
+    body = str(node.get("text", ""))
+    heading_text = heading.lower()
+    body_text = body.lower()
+    combined_text = f"{heading_text}\n{body_text}".strip()
+    if not combined_text:
+        return 0.0
+
+    ordinary_terms = {_normalize_english_term(term) for term in tokens["ordinary"]}
+    body_words = _normalized_word_set(body_text)
+    heading_words = _normalized_word_set(heading_text)
+    ordinary_count = max(1, len(ordinary_terms))
+    body_hits = sum(1 for term in ordinary_terms if term in body_words or term in body_text)
+    heading_hits = sum(1 for term in ordinary_terms if term in heading_words or term in heading_text)
+    cjk_terms = tokens["cjk"]
+    cjk_count = max(1, len(cjk_terms))
+    cjk_body_hits = sum(1 for term in cjk_terms if term in body_text)
+    cjk_heading_hits = sum(1 for term in cjk_terms if term in heading_text)
+
+    score = 0.0
+    score += 0.45 * min(1.0, body_hits / ordinary_count)
+    score += 0.16 * min(1.0, heading_hits / ordinary_count)
+    score += 0.42 * min(1.0, cjk_body_hits / cjk_count)
+    score += 0.18 * min(1.0, cjk_heading_hits / cjk_count)
+
+    if ordered_terms:
+        proximity_hits = _proximity_hits(body_text, ordered_terms)
+        compact_hits = _compact_window_hits(body_text, set(ordered_terms))
+        score += 0.08 * min(2, proximity_hits)
+        score += 0.08 * min(2, compact_hits)
+
+    identity_text = " ".join(
+        [
+            str(node.get("source_file", "")),
+            str(metadata_from_node(dict(node)).get("manual_id", "")),
+            heading,
+        ]
+    ).lower()
+    identity_compact = _compact_token(identity_text)
+    for token in tokens["exact_code"] | tokens["model"]:
+        if _contains_token_variant(identity_text, identity_compact, token):
+            score += 0.16
+            break
+
+    score += _focused_heading_bonus(query, heading, tokens)
+
+    body_word_count = len(_ALNUM_RE.findall(body_text)) + len(_CJK_RE.findall(body_text))
+    has_cjk = bool(tokens["cjk"])
+    if body_word_count < 8 and not has_cjk:
+        score *= 0.35
+    elif body_word_count < 18 and not has_cjk:
+        score *= 0.65
+    return min(0.85, max(0.0, score))
 
 
 def extract_lexical_tokens(query: str, *, min_token_chars: int = 2) -> dict[str, set[str]]:
@@ -89,29 +186,46 @@ def extract_lexical_tokens(query: str, *, min_token_chars: int = 2) -> dict[str,
 
     for raw in _CJK_RE.findall(normalized):
         if len(raw) >= min_token_chars:
-            tokens["cjk"].add(raw)
+            if raw not in _CJK_STOP_TERMS:
+                tokens["cjk"].add(raw)
+            tokens["cjk"].update(_cjk_ngrams(raw, min_token_chars=min_token_chars))
     return tokens
 
 
-def _node_search_fields(node: Mapping[str, Any]) -> list[tuple[str, float]]:
+def _cjk_ngrams(value: str, *, min_token_chars: int) -> set[str]:
+    grams: set[str] = set()
+    for size in (2, 3):
+        if size < min_token_chars:
+            continue
+        if len(value) < size:
+            continue
+        grams.update(
+            gram
+            for index in range(0, len(value) - size + 1)
+            if (gram := value[index : index + size]) not in _CJK_STOP_TERMS
+        )
+    return grams
+
+
+def _node_search_fields(node: Mapping[str, Any]) -> list[_SearchField]:
     metadata = metadata_from_node(dict(node))
     path = node.get("path", [])
     if not isinstance(path, list):
         path = []
-    high = " ".join(
+    heading = " ".join(
         [
             str(node.get("header", "")),
             " ".join(str(part) for part in path if part),
-            str(node.get("source_file", "")),
-            str(metadata.get("manual_id", "")),
-            str(metadata.get("product_model", "")),
         ]
     )
     tags = metadata.get("tags", [])
     if not isinstance(tags, list):
         tags = []
-    medium = " ".join(
+    identity = " ".join(
         [
+            str(node.get("source_file", "")),
+            str(metadata.get("manual_id", "")),
+            str(metadata.get("product_model", "")),
             str(metadata.get("brand", "")),
             str(metadata.get("product_category", "")),
             str(metadata.get("product_name", "")),
@@ -119,41 +233,150 @@ def _node_search_fields(node: Mapping[str, Any]) -> list[tuple[str, float]]:
             " ".join(str(tag) for tag in tags),
         ]
     )
-    return [(high, 1.0), (medium, 0.85), (str(node.get("text", "")), 0.75)]
+    body = str(node.get("text", ""))
+    is_web_document = _is_web_document(node, metadata)
+    fields = [
+        _SearchField(heading, 1.0, allow_term_hits=True, allow_identity_hits=True),
+        _SearchField(
+            body,
+            0.9,
+            allow_term_hits=True,
+            allow_identity_hits=False,
+            allow_proximity_hits=True,
+            allow_compact_evidence_hits=is_web_document,
+        ),
+        _SearchField(identity, 0.85, allow_term_hits=False, allow_identity_hits=True),
+    ]
+    return fields
 
 
 def _score_fields(
-    fields: Sequence[tuple[str, float]],
+    fields: Sequence[_SearchField],
     tokens: Mapping[str, set[str]],
     *,
     boost: float,
     exact_code_boost: float,
     model_boost: float,
+    ordered_terms: Sequence[str] = (),
     cap: float,
 ) -> tuple[float, str]:
     score = 0.0
+    evidence_tiebreak = 0.0
     best_mode = ""
-    for text, weight in fields:
-        normalized = text.lower()
+    for field in fields:
+        normalized = field.text.lower()
         compact = _compact_token(normalized)
-        for token in tokens["exact_code"]:
-            if _contains_token_variant(normalized, compact, token):
-                score += exact_code_boost * weight
-                best_mode = _max_mode(best_mode, "exact_code")
-                break
-        for token in tokens["model"]:
-            if _contains_token_variant(normalized, compact, token):
-                score += model_boost * weight
-                best_mode = _max_mode(best_mode, "model")
-                break
-        text_hits = sum(1 for token in tokens["ordinary"] if token in normalized)
-        text_hits += sum(1 for token in tokens["cjk"] if token in normalized)
-        if text_hits:
-            score += boost * weight * min(2, text_hits)
-            best_mode = _max_mode(best_mode, "ordinary")
+        if field.allow_identity_hits:
+            for token in tokens["exact_code"]:
+                if _contains_token_variant(normalized, compact, token):
+                    score += exact_code_boost * field.weight
+                    best_mode = _max_mode(best_mode, "exact_code")
+                    break
+            for token in tokens["model"]:
+                if _contains_token_variant(normalized, compact, token):
+                    score += model_boost * field.weight
+                    best_mode = _max_mode(best_mode, "model")
+                    break
+        if field.allow_term_hits:
+            normalized_words = _normalized_word_set(normalized)
+            text_hits = sum(1 for token in tokens["ordinary"] if _ordinary_term_hit(normalized, normalized_words, token))
+            text_hits += sum(1 for token in tokens["cjk"] if token in normalized)
+            if text_hits:
+                score += boost * field.weight * min(4, text_hits)
+                best_mode = _max_mode(best_mode, "ordinary")
+            if field.allow_proximity_hits:
+                proximity_hits = _proximity_hits(normalized, ordered_terms)
+                if proximity_hits:
+                    score += boost * field.weight * 0.5 * min(2, proximity_hits)
+                    best_mode = _max_mode(best_mode, "ordinary")
+                if field.allow_compact_evidence_hits:
+                    compact_hits = _compact_window_hits(normalized, tokens["ordinary"])
+                    if compact_hits:
+                        score += boost * field.weight * 0.35 * min(2, compact_hits)
+                        best_mode = _max_mode(best_mode, "ordinary")
+                    evidence_tiebreak += boost * 0.01 * min(8, text_hits)
+                    evidence_tiebreak += boost * 0.015 * min(4, compact_hits)
     if score <= 0.0:
         return 0.0, ""
-    return min(score, cap), best_mode or "ordinary"
+    return min(score, cap) + min(boost * 0.12, evidence_tiebreak), best_mode or "ordinary"
+
+
+def _ordered_ordinary_terms(query: str, *, min_token_chars: int) -> tuple[str, ...]:
+    terms: list[str] = []
+    for raw in _ALNUM_RE.findall(query.lower()):
+        token = raw.strip("-_")
+        if not token or token.isdigit():
+            continue
+        compact = _compact_token(token)
+        if len(compact) >= 4 and any(ch.isalpha() for ch in compact) and any(ch.isdigit() for ch in compact):
+            continue
+        if _CODE_RE.match(token) or _CODE_RE.match(compact):
+            continue
+        if len(token) >= min_token_chars and token not in _STOP_WORDS:
+            terms.append(token)
+    return tuple(terms)
+
+
+def _proximity_hits(normalized: str, ordered_terms: Sequence[str]) -> int:
+    if len(ordered_terms) < 2:
+        return 0
+    hits = 0
+    for left, right in zip(ordered_terms, ordered_terms[1:]):
+        if _terms_within_window(normalized, left, right):
+            hits += 1
+    return hits
+
+
+def _terms_within_window(text: str, left: str, right: str, *, max_gap_words: int = 2) -> bool:
+    pattern = re.compile(
+        rf"\b{re.escape(left)}\b(?:\W+\w+){{0,{max_gap_words}}}\W+\b{re.escape(right)}\b",
+        re.IGNORECASE,
+    )
+    return bool(pattern.search(text))
+
+
+def _compact_window_hits(text: str, terms: set[str], *, window_words: int = 14) -> int:
+    if len(terms) < 3:
+        return 0
+    normalized_terms = {_normalize_english_term(term) for term in terms}
+    words = [_normalize_english_term(word) for word in _ALNUM_RE.findall(text.lower())]
+    if len(words) < 24:
+        return 0
+    best = 0
+    for index in range(len(words)):
+        window = words[index : index + window_words]
+        if len(window) < 3:
+            break
+        best = max(best, len({term for term in terms if term in window}))
+        if best >= 5:
+            break
+    return max(0, best - 2)
+
+
+def _ordinary_term_hit(text: str, normalized_words: set[str], token: str) -> bool:
+    return token in text or _normalize_english_term(token) in normalized_words
+
+
+def _normalized_word_set(text: str) -> set[str]:
+    return {_normalize_english_term(word) for word in _ALNUM_RE.findall(text.lower())}
+
+
+def _normalize_english_term(token: str) -> str:
+    value = token.lower().strip("-_")
+    if len(value) > 4 and value.endswith("ies"):
+        return value[:-3] + "y"
+    if len(value) > 5 and value.endswith("sses"):
+        return value[:-2]
+    if len(value) > 4 and value.endswith(("ches", "shes", "xes", "zes")):
+        return value[:-2]
+    if len(value) > 3 and value.endswith("s") and not value.endswith("ss"):
+        return value[:-1]
+    return value
+
+
+def _is_web_document(node: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool:
+    source_file = str(node.get("source_file", ""))
+    return source_file.startswith("public_web/")
 
 
 def _contains_token_variant(normalized: str, compact: str, token: str) -> bool:
@@ -162,6 +385,21 @@ def _contains_token_variant(normalized: str, compact: str, token: str) -> bool:
 
 def _compact_token(value: str) -> str:
     return re.sub(r"[^a-z0-9\u3400-\u9fff]+", "", value.lower())
+
+
+def _focused_heading_bonus(query: str, heading: str, tokens: Mapping[str, set[str]]) -> float:
+    normalized_heading = _compact_token(heading)
+    if not normalized_heading:
+        return 0.0
+    query_compact = _compact_token(query)
+    bonus = 0.0
+    for token in tokens["cjk"] | tokens["ordinary"]:
+        compact = _compact_token(token)
+        if len(compact) >= 2 and normalized_heading == compact:
+            bonus = max(bonus, 0.18)
+        elif len(compact) >= 3 and compact in normalized_heading and normalized_heading in query_compact:
+            bonus = max(bonus, 0.08)
+    return bonus
 
 
 def _max_mode(current: str, candidate: str) -> str:

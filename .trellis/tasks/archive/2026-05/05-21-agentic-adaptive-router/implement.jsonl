@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-21-agentic-adaptive-router/prd.md", "reason": "C2 router requirements, acceptance criteria, and out-of-scope boundaries."}
+{"file": ".trellis/tasks/05-21-agentic-adaptive-router/design.md", "reason": "Router contracts, rule classification order, and driver preflight design."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agent-loop-driver/design.md", "reason": "C1 driver/state/plan_steps contracts that C2 extends."}
+{"file": ".trellis/tasks/05-21-agentic-rag-mode-toggle/design.md", "reason": "Parent D1-D4 decisions for adaptive routing and simple passthrough gate."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Living backend architecture and agentic foundation boundary."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Package boundary and dependency direction rules."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, default-off, provenance, and forbidden-pattern rules."}

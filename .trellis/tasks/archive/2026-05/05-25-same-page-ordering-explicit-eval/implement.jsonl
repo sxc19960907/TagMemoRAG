@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "General-web eval slice, eval-as-driver requirements, and ranking rollout constraints."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Default-off behavior, deterministic tests, and forbidden raw diagnostics."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Eval runner and diagnostic script boundary guidance."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Privacy constraints for eval and diagnostics."}

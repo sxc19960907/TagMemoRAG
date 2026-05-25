@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests, gate stability, and no generated/raw artifacts committed."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Verify explicit eval remains gate-aligned and default-off."}

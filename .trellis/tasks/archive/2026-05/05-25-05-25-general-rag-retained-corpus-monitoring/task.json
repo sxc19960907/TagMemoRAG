@@ -1,0 +1,31 @@
+{
+  "id": "05-25-general-rag-retained-corpus-monitoring",
+  "name": "05-25-general-rag-retained-corpus-monitoring",
+  "title": "General RAG retained corpus and monitoring program",
+  "description": "Expand retained evaluation coverage and post-default-on monitoring for general-purpose RAG stability.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "suixingchen",
+  "assignee": "suixingchen",
+  "createdAt": "2026-05-25",
+  "completedAt": "2026-05-25",
+  "branch": null,
+  "base_branch": "codex/agent-loop-driver",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-25-05-25-retained-corpus-inventory",
+    "05-25-05-25-default-on-retained-monitoring-manifest",
+    "05-25-05-25-manifest-retained-monitoring-rerun",
+    "05-25-05-25-user-facing-rag-demo-smoke"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

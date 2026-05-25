@@ -53,15 +53,31 @@ class Budget:
     allow_external_reranker: bool = True
     deadline_at: float = 0.0  # set by build_plan; not serialized
     rerank_candidates_n: int = 0  # T3: candidate window when rerank_tier!=off; 0 means "use request.top_k"
+    max_iterations: int = 3
+    max_agent_tokens: int = 4096
+    max_tool_calls: int = 12
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "latency_ms": self.latency_ms,
             "rerank_tier": self.rerank_tier,
             "max_evidence": self.max_evidence,
             "allow_external_reranker": self.allow_external_reranker,
             "rerank_candidates_n": self.rerank_candidates_n,
         }
+        if (
+            self.max_iterations != 3
+            or self.max_agent_tokens != 4096
+            or self.max_tool_calls != 12
+        ):
+            payload.update(
+                {
+                    "max_iterations": self.max_iterations,
+                    "max_agent_tokens": self.max_agent_tokens,
+                    "max_tool_calls": self.max_tool_calls,
+                }
+            )
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Budget":
@@ -71,6 +87,9 @@ class Budget:
             max_evidence=int(data.get("max_evidence") or 8),
             allow_external_reranker=bool(data.get("allow_external_reranker", True)),
             rerank_candidates_n=int(data.get("rerank_candidates_n") or 0),
+            max_iterations=int(data.get("max_iterations") or 3),
+            max_agent_tokens=int(data.get("max_agent_tokens") or 4096),
+            max_tool_calls=int(data.get("max_tool_calls") or 12),
         )
 
 

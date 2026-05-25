@@ -1,0 +1,3 @@
+{"id":"agentic-simple-steam","kb_name":"default","query":"蒸汽很小怎么办","relevant":[{"source_file":"coffee_machine.md","header":"蒸汽功能","text_contains":["蒸汽很小","喷嘴"]}],"tags":["agentic","simple","passthrough"]}
+{"id":"agentic-simple-water-tank","kb_name":"default","query":"缺水导致出水量不足怎么办","relevant":[{"source_file":"coffee_machine.md","header":"水箱安装","text_contains":["缺水","出水量不足"]}],"tags":["agentic","simple","passthrough"]}
+{"id":"agentic-simple-e01","kb_name":"default","query":"E01 不出咖啡检查什么","relevant":[{"source_file":"coffee_machine.md","header":"E01 不出咖啡","text_contains":["水箱","泵"]}],"tags":["agentic","simple","passthrough"]}

@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/capability-audit.md", "reason": "Prompt/context quality gap."}
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/library-reuse-matrix.md", "reason": "Prompt/context reuse recommendation."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Evidence, context pack, answer, and citation contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Safe answer failure behavior."}

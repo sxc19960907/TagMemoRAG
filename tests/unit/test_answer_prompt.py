@@ -34,6 +34,9 @@ def test_prompt_keeps_retrieved_content_in_user_data_message():
     assert "untrusted" in prompt.messages[0]["content"].lower()
     assert "[cit_001]" in prompt.messages[0]["content"]
     assert "Do not invent citation ids" in prompt.messages[0]["content"]
+    assert "directly supports the claim" in prompt.messages[0]["content"]
+    assert "context items conflict" in prompt.messages[0]["content"]
+    assert "do not guess" in prompt.messages[0]["content"]
     assert prompt.allowed_citation_ids == frozenset({"cit_001", "cit_002"})
 
 

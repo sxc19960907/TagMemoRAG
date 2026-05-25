@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/capability-audit.md", "reason": "Answer/eval diagnostics gaps."}
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/library-reuse-matrix.md", "reason": "Ragas/diagnostics reuse recommendation."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Safe report and provider error handling."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Provider-gated tests and dependency discipline."}

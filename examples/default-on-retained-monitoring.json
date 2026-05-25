@@ -1,0 +1,60 @@
+{
+  "schema_version": "default_on_retained_monitoring.manifest.v1",
+  "slices": [
+    {
+      "name": "general_web",
+      "kind": "retrieval",
+      "suite_path": "tests/fixtures/eval/general_web.jsonl",
+      "corpus_path": ".tmp/general-web-eval/general_web",
+      "report_path": ".tmp/eval/default-on-general-web.json",
+      "min_hit_at_k": 1.0,
+      "min_recall_at_k": 0.9,
+      "min_mrr": 0.95
+    },
+    {
+      "name": "mixed_domain",
+      "kind": "retrieval",
+      "suite_path": "tests/fixtures/eval/mixed_knowledge.jsonl",
+      "corpus_path": null,
+      "rerun_command": "python scripts/diag_mixed_domain_eval.py --stage-from-defaults --output .tmp/eval/same-page-enabled-mixed-domain.json",
+      "report_path": ".tmp/eval/same-page-enabled-mixed-domain.json",
+      "min_hit_at_k": 1.0,
+      "min_recall_at_k": 1.0,
+      "min_mrr": 0.95
+    },
+    {
+      "name": "multiformat",
+      "kind": "retrieval",
+      "suite_path": "tests/fixtures/eval/multiformat_real_knowledge.jsonl",
+      "corpus_path": ".tmp/multiformat-real-knowledge/multiformat_real",
+      "report_path": ".tmp/eval/same-page-enabled-multiformat-cross-guard.json",
+      "min_hit_at_k": 1.0,
+      "min_recall_at_k": 1.0,
+      "min_mrr": 0.75
+    },
+    {
+      "name": "realmanuals",
+      "kind": "retrieval",
+      "suite_path": "tests/fixtures/eval/realmanuals.jsonl",
+      "corpus_path": "data/realmanuals",
+      "report_path": ".tmp/eval/same-page-enabled-realmanuals-cross-guard.json",
+      "min_hit_at_k": 1.0,
+      "min_recall_at_k": 0.95,
+      "min_mrr": 0.80
+    }
+  ],
+  "gates": [
+    {
+      "name": "default_on_gate_batch",
+      "path": ".tmp/eval/default-on-implementation-gate/batch-summary.json"
+    },
+    {
+      "name": "release_readiness",
+      "path": ".tmp/eval/default-on-implementation-gate/release-readiness.json"
+    },
+    {
+      "name": "reranking_gate",
+      "path": ".tmp/eval/default-on-implementation-gate/reranking-gate.json"
+    }
+  ]
+}

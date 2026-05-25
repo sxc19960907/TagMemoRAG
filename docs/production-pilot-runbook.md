@@ -51,8 +51,15 @@ The command runs:
 | `config_validate` | Load config, check local writable paths, env-var names, optional dependencies, and auth/metrics posture. | `failed` fails the pilot; `warning` keeps the pilot in warning. |
 | `provider_probe` | Probe configured remote providers through the existing explicit live-probe contract. | `failed` fails the pilot; all-skipped is acceptable for local/offline profiles. |
 | `readiness_smoke` | Build/retrieve/answer/queryplan/bundle composition with deterministic local data. | Must pass. |
+| `answer_quality` | Run deterministic answer-quality diagnostics for groundedness, citation support, refusal behavior, and conflict handling. | Must pass unless explicitly skipped with `--skip-answer-quality`. |
 | `eval` | Retrieval fixture run with sanitized summary metrics. | Must pass the pilot thresholds. |
 | `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Non-informational, non-accepted warnings require reviewer signoff; informational and accepted suites are retained in detail but do not gate the stage. Invalid baseline input fails. |
+
+The answer-quality stage defaults to
+`tests/fixtures/answer_quality/basic.jsonl` and is offline: it does not call a
+live answer provider. Override it with `--answer-quality-suite <jsonl>` for a
+profile-specific fixture, or use `--skip-answer-quality` only when the pilot
+owner deliberately wants a retrieval-only gate.
 
 ## Thresholds
 

@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Quality gates and real-data verification guidance for the long-horizon RAG batch."}
+{"file":".trellis/spec/backend/architecture.md","reason":"Retrieval/context-pack architecture boundaries used when choosing context expansion instead of parser mutation."}

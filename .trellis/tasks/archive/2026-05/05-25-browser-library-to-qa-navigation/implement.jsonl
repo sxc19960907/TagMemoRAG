@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend/UI spec index and pre-development checklist."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused testing and deterministic browser smoke guidance."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared Trellis thinking-guide routing."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Navigation path spans template, current KB state, and browser QA flow."}

@@ -1,0 +1,5 @@
+{"path":"src/tagmemorag/release_readiness.py","reason":"Release readiness module to reuse."}
+{"path":"src/tagmemorag/reranking_eval_gate.py","reason":"Reranking gate module to reuse."}
+{"path":"scripts/release_readiness.py","reason":"Existing CLI pattern."}
+{"path":"scripts/reranking_eval_gate.py","reason":"Existing CLI pattern."}
+{"path":".trellis/tasks/05-24-general-rag-stability-program/program-log.md","reason":"Parent program log to update."}

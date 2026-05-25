@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend and API pre-development checklist for managed-library rebuild flow."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "RAG architecture, rebuild, evidence, and answer contracts."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "API/manual-library/web module boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing, storage, rebuild, and privacy expectations."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and reuse thinking guide routing."}

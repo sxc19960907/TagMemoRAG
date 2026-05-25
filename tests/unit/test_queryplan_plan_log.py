@@ -13,6 +13,7 @@ import pytest
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.errors import ErrorCode, ServiceError
 from tagmemorag.observability.metrics import get_metrics
+from tagmemorag.agentic.state import GradeOutcome, StepRecord, ToolObservation
 from tagmemorag.queryplan import (
     PLAN_LOG_SCHEMA_VERSION,
     BackgroundWriter,
@@ -59,6 +60,12 @@ def test_schema_migration_creates_v1_on_fresh_db(tmp_path, s_settings):
             "evidence_ids_json", "warnings_json", "rerank_json",
         ):
             assert required in cols
+        step_cols = {row[1] for row in conn.execute("PRAGMA table_info(plan_steps)").fetchall()}
+        for required in (
+            "plan_id", "step_idx", "tool", "args_json", "observation_json",
+            "signal", "decision_source", "tokens", "latency_ms",
+        ):
+            assert required in step_cols
     finally:
         conn.close()
 
@@ -178,6 +185,54 @@ def test_update_result_async_partial_does_not_clobber(tmp_path, s_settings):
         db.close()
     assert row[0] == "hit"  # preserved across second update
     assert row[1] == 50
+
+
+# ---------- plan_steps ----------
+
+def _step(idx: int = 0, *, tool: str = "retrieve") -> StepRecord:
+    return StepRecord(
+        step_idx=idx,
+        tool=tool,
+        args={"query": "masked"},
+        observation=ToolObservation(
+            payload={"result_count": 2},
+            tokens_consumed=7,
+            latency_ms=12,
+            warnings=("stub",),
+        ),
+        grade=GradeOutcome(top1_score=0.9, margin=0.2, depth=2, signal="no_signal", reason="c1_stub"),
+        decision_source="rule",
+        rationale="c1_stub",
+        ts="2026-05-21T00:00:00Z",
+    )
+
+
+def test_append_and_load_plan_steps(tmp_path, s_settings):
+    log = PlanLog("kb-steps", s_settings)
+    plan = build_plan("q", "kb-steps", s_settings)
+    log.insert_basic(plan)
+    log.append_step_async(plan.plan_id, _step(1, tool="retrieve"))
+    log.append_step_async(plan.plan_id, _step(2, tool="final"))
+    _flush(log)
+
+    rows = log.load_steps(plan.plan_id)
+    assert [row.step_idx for row in rows] == [1, 2]
+    assert [row.tool for row in rows] == ["retrieve", "final"]
+    assert rows[0].args == {"query": "masked"}
+    assert rows[0].observation.payload == {"result_count": 2}
+    assert rows[0].observation.tokens_consumed == 7
+    assert rows[0].grade is not None
+    assert rows[0].grade.signal == "no_signal"
+    assert log.has_steps(plan.plan_id) is True
+
+
+def test_has_steps_false_for_classic_plan(tmp_path, s_settings):
+    log = PlanLog("kb-no-steps", s_settings)
+    plan = build_plan("q", "kb-no-steps", s_settings)
+    log.insert_basic(plan)
+
+    assert log.has_steps(plan.plan_id) is False
+    assert log.load_steps(plan.plan_id) == []
 
 
 # ---------- BackgroundWriter overflow ----------

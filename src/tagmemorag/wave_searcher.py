@@ -6,6 +6,7 @@ from typing import Any, Literal, Mapping
 import networkx as nx
 import numpy as np
 
+from .lexical_search import lexical_evidence_score
 from .manuals import manual_result_fields, metadata_from_node, normalize_tag
 from .types import Anchor, Result
 
@@ -28,6 +29,8 @@ def wave_search(
     tag_boost: float = 0.0,
     lexical_scores: Mapping[int, float] | None = None,
     lexical_source_k: int = 0,
+    query_text: str = "",
+    lexical_min_token_chars: int = 2,
     *,
     disable_legacy_tag_boost: bool = False,
     rerank_pool_size: int | None = None,
@@ -110,10 +113,42 @@ def wave_search(
         )
         for node_id, score in amplitudes.items()
     }
-    ranked = sorted(boosted.items(), key=lambda item: (-item[1], item[0]))
+    ranked = _rank_boosted_results(
+        graph,
+        boosted,
+        query_text=query_text,
+        lexical_min_token_chars=lexical_min_token_chars,
+    )
     limit = top_k if rerank_pool_size is None else max(int(rerank_pool_size), 0)
     ranked = ranked[:limit]
     return [_make_result(graph, node_id, score) for node_id, score in ranked]
+
+
+def _rank_boosted_results(
+    graph: nx.Graph,
+    boosted: Mapping[int, float],
+    *,
+    query_text: str = "",
+    lexical_min_token_chars: int = 2,
+) -> list[tuple[int, float]]:
+    if not query_text.strip():
+        return sorted(boosted.items(), key=lambda item: (-item[1], item[0]))
+    evidence_scores = {
+        int(node_id): lexical_evidence_score(
+            query_text,
+            graph.nodes[node_id],
+            min_token_chars=lexical_min_token_chars,
+        )
+        for node_id in boosted
+    }
+    return sorted(
+        boosted.items(),
+        key=lambda item: (
+            -float(item[1]),
+            -evidence_scores[int(item[0])],
+            item[0],
+        ),
+    )
 
 
 def _apply_lexical_boost(score: float, lexical_score: float) -> float:

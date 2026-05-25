@@ -79,7 +79,8 @@ def test_answer_noop_provider_returns_cited_answer(tmp_path, fake_embedder):
     body = response.json()
     answer = body["answer"]
     assert answer["kind"] == "answer"
-    assert answer["text"] == "Answer generation is running in noop mode."
+    assert "蒸汽功能可以打奶泡" in answer["text"]
+    assert answer["text"].endswith(f"[{body['retrieve']['citations'][0]['citation_id']}]")
     assert answer["model_id"] == "noop"
     assert answer["prompt_version"] == "answer_prompt.v1"
     assert answer["citations"] == [{"citation_id": body["retrieve"]["citations"][0]["citation_id"]}]
@@ -122,3 +123,184 @@ def test_answer_can_omit_retrieve_payload(tmp_path, fake_embedder):
     body = response.json()
     assert body["answer"]["kind"] == "answer"
     assert "retrieve" not in body
+
+
+def test_answer_request_accepts_agentic_surface(tmp_path, fake_embedder):
+    client, _state = _client_with_docs(
+        tmp_path,
+        fake_embedder,
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+
+    response = client.post(
+        "/answer",
+        json={
+            "question": "蒸汽很小",
+            "top_k": 1,
+            "mode": "agentic",
+            "agentic": {"max_iterations": 0, "max_agent_tokens": 128, "max_tool_calls": 2},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]["kind"] == "answer"
+    assert body["retrieve"]["plan_id"]
+
+
+def test_qa_answer_routes_single_accessible_kb(tmp_path, fake_embedder):
+    client, state = _client_with_docs(
+        tmp_path,
+        fake_embedder,
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+
+    response = client.post("/qa/answer", json={"question": "蒸汽很小"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == {"kind": "answered", "kb_name": "default", "reason": "single_kb"}
+    assert body["context"] == {"applied": False, "summary": []}
+    assert body["answer"]["kind"] == "answer"
+    assert body["retrieve"]["kb_name"] == state.kb_name
+    assert len(body["retrieve"]["evidence"]) <= api.QA_ANSWER_TOP_K
+
+
+def test_qa_answer_uses_compact_evidence_window_for_first_screen(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text(
+        "# 蒸汽功能\n蒸汽很小时先检查喷嘴是否堵塞，再检查水箱水量。\n"
+        "# E05 蒸汽异常\nE05 表示蒸汽压力不足或喷嘴堵塞。处理步骤包括清洗喷嘴、补水和重新预热。\n"
+        "# 制作咖啡\n若不出咖啡，请检查研磨器、粉仓和水路。\n",
+        encoding="utf-8",
+    )
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "蒸汽很小怎么办？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]["kind"] == "answer"
+    assert len(body["retrieve"]["evidence"]) == api.QA_ANSWER_TOP_K
+    assert "制作咖啡" not in body["answer"]["text"]
+
+
+def test_qa_answer_clarifies_ambiguous_multi_kb(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs_a = tmp_path / "docs-a"
+    docs_b = tmp_path / "docs-b"
+    docs_a.mkdir()
+    docs_b.mkdir()
+    (docs_a / "manual.md").write_text("# CM1\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs_b / "manual.md").write_text("# TX2\n清洗功能需要定期维护。\n", encoding="utf-8")
+    state_a = build_kb(docs_a, "coffee", cfg, embedder=fake_embedder)
+    state_b = build_kb(docs_b, "washer", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.swap_kb("coffee", state_a)
+    api.app_state.swap_kb("washer", state_b)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "这个怎么处理？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["kind"] == "clarification"
+    assert {candidate["kb_name"] for candidate in body["route"]["candidates"]} == {"coffee", "washer"}
+    assert body["answer"]["kind"] == "clarification"
+
+
+def test_qa_answer_routes_multi_kb_when_question_mentions_context(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs_a = tmp_path / "docs-a"
+    docs_b = tmp_path / "docs-b"
+    docs_a.mkdir()
+    docs_b.mkdir()
+    (docs_a / "manual.md").write_text("# CM1\n蒸汽功能可以打奶泡。\n", encoding="utf-8")
+    (docs_b / "manual.md").write_text("# TX2\n清洗功能需要定期维护。\n", encoding="utf-8")
+    state_a = build_kb(docs_a, "coffee", cfg, embedder=fake_embedder)
+    state_b = build_kb(docs_b, "washer", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.swap_kb("coffee", state_a)
+    api.app_state.swap_kb("washer", state_b)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post("/qa/answer", json={"question": "CM1 蒸汽很小怎么办？"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["kind"] == "answered"
+    assert body["route"]["kb_name"] == "coffee"
+    assert body["route"]["reason"] == "lexical_route"
+
+
+def test_qa_answer_routes_followup_with_conversation_context(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        model={"dim": 64},
+        search=SearchConfig(metadata_narrowing_enabled=False),
+        answer=AnswerConfig(enabled=True, provider="noop"),
+    )
+    docs_a = tmp_path / "docs-a"
+    docs_b = tmp_path / "docs-b"
+    docs_a.mkdir()
+    docs_b.mkdir()
+    (docs_a / "manual.md").write_text("# CM1\n蒸汽很小需要清洁喷嘴并检查除垢。\n", encoding="utf-8")
+    (docs_b / "manual.md").write_text("# TX2\n清洗功能需要定期维护。\n", encoding="utf-8")
+    state_a = build_kb(docs_a, "coffee", cfg, embedder=fake_embedder)
+    state_b = build_kb(docs_b, "washer", cfg, embedder=fake_embedder)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState()
+    api.app_state.swap_kb("coffee", state_a)
+    api.app_state.swap_kb("washer", state_b)
+    api._ANSWER_GENERATOR_CACHE.clear()
+    client = TestClient(api.app)
+
+    response = client.post(
+        "/qa/answer",
+        json={
+            "question": "还是不行怎么办？",
+            "conversation_context": [
+                {
+                    "question": "CM1 蒸汽很小怎么办？",
+                    "answer": "需要清洁喷嘴、检查水箱并考虑除垢。",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"]["kind"] == "answered"
+    assert body["route"]["kb_name"] == "coffee"
+    assert body["question"] == "还是不行怎么办？"
+    assert body["context"] == {"applied": True, "summary": [{"question": "CM1 蒸汽很小怎么办？"}]}
+    assert body["answer"]["kind"] == "answer"

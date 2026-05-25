@@ -2,13 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-import csv
-import hashlib
-import json
 import sys
 import time
-from io import StringIO
-from typing import Literal, cast
 import uuid
 
 from pathlib import Path
@@ -17,78 +12,59 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import numpy as np
-from pydantic import BaseModel, Field
 import structlog
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from .anchor import AnchorSystem
-from .answer import create_answer_generator
-from .answer.base import AnswerGenerationError, AnswerGenerator, AnswerRequestContext
-from .answer.prompt import build_answer_prompt, validate_generation_citations
 from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .cache.lru_ttl import LRUTTLCache
+from . import api_admin, api_feedback, api_manual_routes, api_search
+from .api_models import (
+    AgenticRequestOverrides,
+    AnchorRequest,
+    AnswerRequest,
+    BudgetSpec,
+    CacheClearRequest,
+    FeedbackPromoteRequest,
+    FeedbackReviewRequest,
+    FeedbackSubmitRequest,
+    GhostTagSpec,
+    IndexGenBuildShadowRequest,
+    IndexGenCancelShadowRequest,
+    IndexGenRetireRequest,
+    IndexGenSwapRequest,
+    ManualLibraryRebuildRequest,
+    ManualMetadataUpdateRequest,
+    ManualMetadataValidationRequest,
+    ManualTagSuggestRequest,
+    QaAnswerRequest,
+    QaConversationTurn,
+    RebuildRequest,
+    RetrieveRequest,
+    SearchFilters,
+    SearchRequest,
+    TagPolicyUpdateRequest,
+    TagRewriteRequest,
+)
+from .api_manual import (
+    resolved_filter_dict,
+)
+from .api_qa import qa_clarification_response, qa_not_ready_response, route_qa_question
 from .config import Settings, load_config
 from .document_assets import create_asset_store, load_asset_manifest
 from .embedder import create_embedder
 from .errors import ErrorCode, KbNotLoadedError, ServiceError
 from .logging_setup import configure_logging
-from .manuals import metadata_from_node, public_tags_from_metadata
-from .manual_bulk_import import BulkImportMode, BulkUploadedFile, commit_bulk_import, preview_bulk_import
-from .manual_library import (
-    build_dirty_state_report,
-    delete_manual,
-    disable_manual,
-    library_root,
-    list_records,
-    load_manifest,
-    registry_enabled,
-    registry_inspect,
-    replace_manual_file,
-    update_manual_metadata,
-    upsert_manual,
-    validate_metadata,
-    verify_registry_blobs,
-)
-from .manual_registry import create_registry
-from .metadata_narrowing import NarrowingDecision, infer_metadata_narrowing, merge_inferred_filters
-from .observability.metrics import configure_metrics, get_metrics, metrics_response_bytes
+from .observability.metrics import configure_metrics, get_metrics
 from .observability.tracing import configure_tracing, set_span_attributes, start_span
 from .rate_limit.memory_sliding import InMemorySlidingWindowStore
 from .rebuild_queue import RebuildQueue
-from .retrieval import DEFAULT_TOKEN_BUDGET, VisualEvidenceResolver, build_retrieve_response, retrieve_inspect_payload
-from .retrieval import VisualRetrievalResolver
-from .retrieval_feedback import (
-    create_feedback,
-    export_eval_promotion,
-    list_feedback,
-    preview_eval_promotion,
-    review_feedback,
-)
-from .search_runtime import (
-    execute_search,
-    search_ann_enabled,
-    search_cache_suffix,
-    search_debug_enabled,
-    search_debug_payload,
-)
-from .wave_tag_spike import GhostTag
-from .state import AppState, load_kb, start_library_rebuild
+from .search_runtime import execute_search
+from .state import AppState, load_kb
 from .storage.json_anchor import JsonAnchorStore
-from .tag_suggestions import DEFAULT_LIMIT, suggest_tags
-from .visual_retrieval import create_visual_components
-from .tag_governance import (
-    commit_tag_rewrite,
-    load_tag_policy,
-    resolve_tags_for_search,
-    save_tag_policy,
-    tag_usage_report,
-    preview_tag_rewrite,
-)
 from .types import GraphState
-from .wave_searcher import normalize_filters
 
 settings = load_config()
 app_state = AppState()
@@ -96,6 +72,8 @@ embedder = None  # lazily created in lifespan to avoid import-time model downloa
 rebuild_queue: RebuildQueue | None = None
 WEB_DIR = Path(__file__).resolve().parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
+QA_ANSWER_TOP_K = 2
+QA_ANSWER_SOURCE_K = 4
 
 
 @asynccontextmanager
@@ -182,207 +160,6 @@ app = FastAPI(title="TagMemoRAG", lifespan=lifespan)
 app.mount("/static/manual-library", StaticFiles(directory=str(WEB_DIR / "static")), name="manual-library-static")
 
 
-class GhostTagSpec(BaseModel):
-    """Caller-supplied tag with explicit vector, bypassing the KB tag store.
-
-    `vector` length must equal the model embedding dim at request time;
-    mismatched ghosts are silently skipped and counted in `info.ghost_skipped_dim_mismatch`.
-    """
-
-    name: str = Field(..., min_length=1, max_length=128)
-    vector: list[float] = Field(..., min_length=1)
-    is_core: bool = False
-
-
-class SearchRequest(BaseModel):
-    question: str
-    top_k: int | None = None
-    source_k: int | None = None
-    steps: int | None = None
-    decay: float | None = None
-    amplitude_cutoff: float | None = None
-    aggregate: str | None = None
-    kb_name: str = "default"
-    filters: "SearchFilters | None" = None
-    debug: bool | None = None
-    # Phase 2b-2: caller-supplied "spotlight" tags. Only take effect under
-    # `wave_phase1.dynamic_boost_factor_strategy="pyramid"` (PRD R10);
-    # otherwise they round-trip through `info.core_tags_input/resolved` for
-    # diagnostics with no impact on weights.
-    core_tags: list[str] = Field(default_factory=list)
-    ghost_tags: list[GhostTagSpec] = Field(default_factory=list)
-    # T2: optional per-request budget override; missing fields fall through to
-    # Settings.queryplan.default_*. None means "use settings defaults entirely".
-    budget: "BudgetSpec | None" = None
-
-
-class BudgetSpec(BaseModel):
-    """T2: optional per-request resource budget override.
-
-    Missing fields fall through to Settings.queryplan.default_*. The
-    deadline_at lifecycle field on the runtime Budget is computed by
-    build_plan and never appears in the API surface.
-    """
-
-    latency_ms: int | None = Field(default=None, ge=1)
-    rerank_tier: Literal["off", "tier1", "tier2"] | None = None
-    max_evidence: int | None = Field(default=None, ge=1)
-    allow_external_reranker: bool | None = None
-
-    def to_planner_dict(self) -> dict:
-        """Convert to the dict shape expected by build_plan(budget_spec=...)."""
-        out: dict = {}
-        if self.latency_ms is not None:
-            out["latency_ms"] = self.latency_ms
-        if self.rerank_tier is not None:
-            out["rerank_tier"] = self.rerank_tier
-        if self.max_evidence is not None:
-            out["max_evidence"] = self.max_evidence
-        if self.allow_external_reranker is not None:
-            out["allow_external_reranker"] = self.allow_external_reranker
-        return out
-
-
-class RetrieveRequest(SearchRequest):
-    token_budget: int = Field(default=DEFAULT_TOKEN_BUDGET, ge=0, le=128000)
-
-
-class AnswerRequest(RetrieveRequest):
-    answer_token_budget: int | None = Field(default=None, ge=1, le=128000)
-    include_retrieve: bool = True
-
-
-class SearchFilters(BaseModel):
-    manual_id: str | None = None
-    brand: str | None = None
-    product_category: str | None = None
-    product_model: str | None = None
-    language: str | None = None
-    tags: list[str] = Field(default_factory=list)
-
-    def to_filter_dict(self) -> dict[str, object]:
-        return {
-            "manual_id": self.manual_id,
-            "brand": self.brand,
-            "product_category": self.product_category,
-            "product_model": self.product_model,
-            "language": self.language,
-            "tags": self.tags,
-        }
-
-
-class RebuildRequest(BaseModel):
-    docs_dir: str
-    kb_name: str = "default"
-
-
-class ManualMetadataValidationRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-    mode: str = "create"
-    current_manual_id: str | None = None
-
-
-class ManualMetadataUpdateRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-
-
-class ManualTagSuggestRequest(BaseModel):
-    kb_name: str = "default"
-    metadata: dict[str, object]
-    text_sample: str = Field(default="", max_length=4000)
-    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=24)
-
-
-class ManualLibraryRebuildRequest(BaseModel):
-    kb_name: str = "default"
-    mode: str = "full"
-    allow_fallback: bool = True
-
-
-class TagPolicyUpdateRequest(BaseModel):
-    kb_name: str = "default"
-    policy: dict[str, object]
-
-
-class TagRewriteRequest(BaseModel):
-    kb_name: str = "default"
-    source_tags: list[str]
-    target_tag: str
-    mode: str = "merge"
-    update_policy: bool = False
-    policy_alias_mode: str | None = None
-
-
-class AnchorRequest(BaseModel):
-    node_id: int
-    label: str
-    boost: float = Field(default=2.0, gt=0)
-    propagation_boost: float = Field(default=1.0, gt=0)
-    kb_name: str = "default"
-
-
-class CacheClearRequest(BaseModel):
-    kb_name: str | None = None
-
-
-class IndexGenBuildShadowRequest(BaseModel):
-    kb_name: str = "default"
-    docs_dir: str | None = None
-    embedding_model_id: str | None = None
-    embedding_model_version: str | None = None
-    parser_version: str | None = None
-    chunker_version: str | None = None
-    index_schema_version: int | None = None
-
-
-class IndexGenCancelShadowRequest(BaseModel):
-    kb_name: str = "default"
-
-
-class IndexGenSwapRequest(BaseModel):
-    kb_name: str = "default"
-
-
-class IndexGenRetireRequest(BaseModel):
-    kb_name: str = "default"
-    generation: int
-    force: bool = False
-
-
-class FeedbackSubmitRequest(BaseModel):
-    kb_name: str = "default"
-    trace_id: str = ""
-    search_id: str = ""
-    retrieve_id: str = ""
-    build_id: str = ""
-    query: str = Field(..., max_length=1000)
-    outcome: str
-    selected_results: list[dict[str, object]] = Field(default_factory=list, max_length=20)
-    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=20)
-    selected_context_item_ids: list[str] = Field(default_factory=list, max_length=20)
-    answerable: bool | None = None
-    failure_reason: str = Field(default="", max_length=120)
-    expected: list[dict[str, object]] = Field(default_factory=list, max_length=20)
-    note: str = Field(default="", max_length=2000)
-    plan_id: str | None = Field(default=None, max_length=120)
-
-
-class FeedbackReviewRequest(BaseModel):
-    kb_name: str = "default"
-    status: str | None = None
-    operator_note: str | None = Field(default=None, max_length=2000)
-
-
-class FeedbackPromoteRequest(BaseModel):
-    kb_name: str = "default"
-    feedback_ids: list[str]
-    output_path: str | None = None
-    append: bool = False
-    overwrite: bool = False
-
-
 @app.get("/admin/manual-library")
 def manual_library_admin(request: Request, kb_name: str = "default"):
     return templates.TemplateResponse(
@@ -401,6 +178,32 @@ def retrieval_quality_admin(request: Request, kb_name: str = "default"):
     return templates.TemplateResponse(
         request,
         "retrieval_quality.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
+@app.get("/admin/rag-workbench")
+def rag_workbench_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "rag_workbench.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
+@app.get("/qa")
+def qa_page(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "qa_page.html",
         {
             "default_kb_name": kb_name or "default",
             "api_base_path": "",
@@ -461,175 +264,73 @@ def _load_all_kbs(logger) -> None:
             logger.warning("kb_load_skipped", kb_name="default")
 
 
+def _sync_api_search() -> None:
+    answer_override = None if _answer_generator is _default_answer_generator else _answer_generator
+    api_search.configure(
+        settings,
+        app_state,
+        embedder,
+        runtime_execute_search=execute_search,
+        runtime_answer_generator=answer_override,
+    )
+
+
 def _normalize_question(question: str) -> str:
-    return " ".join(question.strip().split())
+    _sync_api_search()
+    return api_search.normalize_question_for_cache(question)
 
 
-def _search_param_values(request: SearchRequest) -> dict[str, object]:
-    return {
-        "top_k": request.top_k or settings.search.top_k,
-        "source_k": request.source_k or settings.search.source_k,
-        "steps": request.steps if request.steps is not None else settings.search.steps,
-        "decay": request.decay if request.decay is not None else settings.search.decay,
-        "amplitude_cutoff": request.amplitude_cutoff
-        if request.amplitude_cutoff is not None
-        else settings.search.amplitude_cutoff,
-        "aggregate": request.aggregate or settings.search.aggregate,
-    }
+def _trim_context_text(value: str | None, limit: int) -> str:
+    _sync_api_search()
+    return api_search.trim_context_text_for_api(value, limit)
 
 
-def _spotlight_cache_suffix(request: SearchRequest) -> str:
-    """Stable hash of caller-supplied core_tags / ghost_tags for cache keying.
+def _qa_contextual_question(request: QaAnswerRequest) -> str:
+    _sync_api_search()
+    return api_search.qa_contextual_question(request)
 
-    Different spotlight inputs ⇒ different results, so cache must split on them.
-    Empty lists ⇒ stable empty suffix (no cache busting for default callers).
-    """
-    if not request.core_tags and not request.ghost_tags:
-        return "spot:none"
-    payload = {
-        "core": [str(t).strip().lower() for t in request.core_tags],
-        "ghost": [
-            {
-                "name": str(g.name).strip().lower(),
-                "is_core": bool(g.is_core),
-                "vec_hash": hashlib.sha256(
-                    np.asarray(g.vector, dtype=np.float32).tobytes()
-                ).hexdigest()[:16],
-            }
-            for g in request.ghost_tags
-        ],
-    }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()[:16]
-    return f"spot:{digest}"
+
+def _qa_context_meta(request: QaAnswerRequest) -> dict[str, object]:
+    _sync_api_search()
+    return api_search.qa_context_meta(request)
 
 
 def _compute_cache_key(request: SearchRequest, state: GraphState) -> str:
-    params = _search_param_values(request)
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
-    canonical_filters = normalize_filters(filter_dict)
-    strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
-    debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
-    spotlight_suffix = _spotlight_cache_suffix(request)
-    parts = [
-        request.kb_name,
-        state.build_id,
-        str(state.anchors_version),
-        _normalize_question(request.question),
-        str(params["top_k"]),
-        str(params["source_k"]),
-        str(params["steps"]),
-        str(params["decay"]),
-        str(params["amplitude_cutoff"]),
-        str(params["aggregate"]),
-        json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
-        strategy_suffix,
-        debug_suffix,
-        spotlight_suffix,
-    ]
-    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+    _sync_api_search()
+    return api_search.compute_cache_key(request, state)
 
 
 def _compute_search_id(request: SearchRequest, state: GraphState, trace_id: str) -> str:
-    params = _search_param_values(request)
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
-    canonical_filters = normalize_filters(filter_dict)
-    strategy_suffix = search_cache_suffix(settings, has_filters=bool(canonical_filters))
-    debug_suffix = f"debug:{int(search_debug_enabled(request.debug, settings))}"
-    spotlight_suffix = _spotlight_cache_suffix(request)
-    parts = [
-        state.kb_name,
-        state.build_id,
-        trace_id,
-        _normalize_question(request.question),
-        str(params["top_k"]),
-        str(params["source_k"]),
-        str(params["steps"]),
-        str(params["decay"]),
-        str(params["amplitude_cutoff"]),
-        str(params["aggregate"]),
-        json.dumps(canonical_filters, sort_keys=True, separators=(",", ":")),
-        strategy_suffix,
-        debug_suffix,
-        spotlight_suffix,
-    ]
-    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+    _sync_api_search()
+    return api_search.compute_search_id(request, state, trace_id)
 
 
-def _compute_retrieve_id(request: RetrieveRequest, state: GraphState, trace_id: str) -> str:
-    base = _compute_search_id(request, state, trace_id)
-    parts = ["retrieve", base, str(int(request.token_budget))]
-    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
+    _sync_api_search()
+    return api_search.search_impl(request, http_request, state, t0)
 
 
-def _build_and_log_plan(request: SearchRequest, state: GraphState):
-    """T2: construct QueryPlan + insert basic row. Returns (plan, plan_log).
-
-    Caller is responsible for calling plan_log.update_result_async() before
-    returning the response to fill in result columns.
-    """
-    from .queryplan import PlanLog, build_plan
-
-    filter_dict, _narrowing = _resolved_filter_dict(request, state)
-    budget_spec = request.budget.to_planner_dict() if request.budget else None
-    plan = build_plan(
-        request.question,
-        request.kb_name,
-        settings,
-        filters=filter_dict,
-        budget_spec=budget_spec,
-    )
-    plan_log = PlanLog(request.kb_name, settings)
-    plan_log.insert_basic(plan)
-    return plan, plan_log
+def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):
+    _sync_api_search()
+    return api_search.retrieve_impl(request, http_request, state, t0)
 
 
-def _served_by_generation(state: GraphState) -> int | None:
-    """T2: Try to read served_by_generation from state.meta; falls back to None
-    when index.json is not yet wired into rebuilds."""
-    if not isinstance(state.meta, dict):
-        return None
-    gen = state.meta.get("served_by_generation")
-    return int(gen) if gen is not None else None
+def _build_answer_response(request: AnswerRequest, retrieve_payload: dict) -> dict:
+    _sync_api_search()
+    return api_search.build_answer_response(request, retrieve_payload)
 
 
-_RERANK_DISPATCHER_CACHE: dict[int, "object"] = {}
+_ANSWER_GENERATOR_CACHE = api_search._ANSWER_GENERATOR_CACHE
+_RERANK_DISPATCHER_CACHE = api_search._RERANK_DISPATCHER_CACHE
 
 
-def _rerank_dispatcher():
-    """T3: lazy singleton dispatcher keyed by current Settings identity.
-
-    Rebuilt when api.settings is replaced (test fixtures swap settings
-    between tests).
-    """
-    from .reranker import RerankerDispatcher
-
-    key = id(settings)
-    cached = _RERANK_DISPATCHER_CACHE.get(key)
-    if cached is None:
-        cached = RerankerDispatcher(settings)
-        _RERANK_DISPATCHER_CACHE[key] = cached
-    return cached
+def _default_answer_generator():
+    return api_search.answer_generator()
 
 
-def _reorder_results(original_results, rerank_outcome):
-    """Reorder execute_search results by rerank_outcome's chunk_id ordering.
+_answer_generator = _default_answer_generator
 
-    Items not in rerank_outcome are dropped (rerank already filtered to top_n).
-    Falls back to original order when rerank_outcome is empty.
-    """
-    if not rerank_outcome.items:
-        return list(original_results)
-    from .reranker.dispatcher import _candidate_chunk_id
 
-    by_id = {_candidate_chunk_id(r): r for r in original_results}
-    out = []
-    for item in rerank_outcome.items:
-        cid = item.chunk_id
-        if cid in by_id and by_id[cid] is not None:
-            out.append(by_id[cid])
-    return out
 
 
 @app.middleware("http")
@@ -729,32 +430,21 @@ async def unexpected_error_handler(request: Request, exc: Exception):
 
 @app.get("/health", include_in_schema=False)
 def health():
-    return PlainTextResponse("ok", status_code=200)
+    return api_admin.health_response()
 
 
 @app.get("/ready", include_in_schema=False)
 def ready():
-    if app_state.is_shutting_down:
-        return PlainTextResponse("shutting down", status_code=503)
-    if not app_state.embedder_ready:
-        return PlainTextResponse("embedder not ready", status_code=503)
-    if app_state.current is None:
-        return PlainTextResponse("kb not loaded", status_code=503)
-    return PlainTextResponse("ok", status_code=200)
+    return api_admin.ready_response(app_state)
 
 
 @app.get("/metrics", include_in_schema=False)
 def metrics_endpoint():
-    if not settings.observability.metrics.enabled:
-        return PlainTextResponse("metrics disabled", status_code=404)
-    if settings.observability.metrics.path != "/metrics":
-        return PlainTextResponse("metrics not found", status_code=404)
-    return _metrics_response()
+    return api_admin.metrics_endpoint_response(settings)
 
 
 def _metrics_response() -> Response:
-    body, content_type = metrics_response_bytes()
-    return Response(content=body, media_type=content_type)
+    return api_admin.metrics_response()
 
 
 @app.post("/search")
@@ -855,504 +545,67 @@ def answer(
         raise
 
 
-def _search_impl(request: SearchRequest, http_request: Request, state: GraphState, t0: float):
-    plan, plan_log = _build_and_log_plan(request, state)
-    warnings: list[str] = []
-
-    # Out-of-scope short-circuit (T2 D2): skip retrieval, return empty results,
-    # still write plan log so we can study these queries later.
-    from .queryplan import Intent
-
-    if plan.intent == Intent.OUT_OF_SCOPE:
-        warnings.append("out_of_scope_intent")
-        trace_id = str(getattr(http_request.state, "trace_id", ""))
-        search_id = _compute_search_id(request, state, trace_id)
-        payload = {
-            "build_id": state.build_id,
-            "kb_name": state.kb_name,
-            "trace_id": trace_id,
-            "search_id": search_id,
-            "plan_id": plan.plan_id,
-            "results": [],
-            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
-            "cache": "disabled",
-            "warnings": list(warnings),
-        }
-        plan_log.update_result_async(plan.plan_id, {
-            "served_by_generation": _served_by_generation(state),
-            "served_by_build_id": state.build_id,
-            "cache_status": "disabled",
-            "evidence_ids": [],
-            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
-            "warnings": list(warnings),
-        })
-        get_metrics().record_search(
-            kb_name=state.kb_name,
-            cache_status="disabled",
-            outcome="success",
-            duration=time.perf_counter() - t0,
-            result_count=0,
-        )
+@app.post("/qa/answer")
+def qa_answer(
+    request: QaAnswerRequest,
+    http_request: Request,
+    api_key: ApiKey = Depends(require_scope("search")),
+    _: None = Depends(rate_limit_dep),
+):
+    effective_question = _qa_contextual_question(request)
+    context_meta = _qa_context_meta(request)
+    route = route_qa_question(effective_question, api_key, app_state)
+    if route["kind"] == "not_ready":
+        payload = qa_not_ready_response(route)
+        payload["context"] = context_meta
+        return payload
+    if route["kind"] == "clarification":
+        payload = qa_clarification_response(request, route)
+        payload["context"] = context_meta
         return payload
 
-    cache_status = "disabled"
-    cache_key = _compute_cache_key(request, state)
-    cache = app_state.query_cache if settings.cache.enabled else None
-    with start_span("tagmemorag.search.cache", **{"tagmemorag.kb_name": state.kb_name}):
-        cached = cache.get(cache_key) if cache is not None else None
-        cache_status = "hit" if cached is not None else ("miss" if cache is not None else "disabled")
-        set_span_attributes(**{"tagmemorag.cache_status": cache_status})
-    get_metrics().record_cache_operation(operation="get", outcome=cache_status)
-    if cached is not None:
-        search_time_ms = (time.perf_counter() - t0) * 1000.0
-        trace_id = str(getattr(http_request.state, "trace_id", ""))
-        search_id = _compute_search_id(request, state, trace_id)
-        payload = {**cached, "trace_id": trace_id, "search_id": search_id, "search_time_ms": round(search_time_ms, 3), "cache": "hit", "plan_id": plan.plan_id}
-        result_count = len(payload.get("results", []))
-        plan_log.update_result_async(plan.plan_id, {
-            "served_by_generation": _served_by_generation(state),
-            "served_by_build_id": state.build_id,
-            "cache_status": "hit",
-            "evidence_ids": [],
-            "latency_ms_observed": int(search_time_ms),
-            "warnings": list(warnings),
-        })
-        get_metrics().record_search(
-            kb_name=state.kb_name,
-            cache_status="hit",
-            outcome="success",
-            duration=time.perf_counter() - t0,
-            result_count=result_count,
-        )
-        set_span_attributes(
-            **{
-                "tagmemorag.cache_status": "hit",
-                "tagmemorag.result_count": result_count,
+    kb_name = str(route["kb_name"])
+    answer_request = AnswerRequest(
+        question=effective_question,
+        kb_name=kb_name,
+        top_k=QA_ANSWER_TOP_K,
+        source_k=QA_ANSWER_SOURCE_K,
+        mode="classic",
+        include_retrieve=request.include_retrieve,
+    )
+    ensure_kb_access(api_key, kb_name)
+    state = app_state.get_current(kb_name)
+    t0 = time.perf_counter()
+    try:
+        span_attrs = {
+            "tagmemorag.kb_name": state.kb_name,
+            "tagmemorag.build_id": state.build_id,
+            "tagmemorag.query_len": len(effective_question),
+            "tagmemorag.top_k": answer_request.top_k or settings.search.top_k,
+            "tagmemorag.x_trace_id": getattr(http_request.state, "trace_id", ""),
+        }
+        with start_span("tagmemorag.qa.answer", **span_attrs):
+            retrieve_payload = _retrieve_impl(answer_request, http_request, state, t0)
+            payload = _build_answer_response(answer_request, retrieve_payload)
+            payload["route"] = {
+                "kind": "answered",
+                "kb_name": state.kb_name,
+                "reason": route.get("reason", "single_kb"),
             }
-        )
-        structlog.get_logger().info(
-            "search",
-            kb_name=state.kb_name,
-            build_id=state.build_id,
-            query_len=len(request.question),
-            top_k=request.top_k or settings.search.top_k,
-            result_count=result_count,
-            latency_ms=round(search_time_ms, 3),
-            cache_status="hit",
-        )
-        return payload
-    emb_t0 = time.perf_counter()
-    try:
-        with start_span("tagmemorag.search.embedding", **{"tagmemorag.kb_name": state.kb_name}):
-            query_vec = embedder.encode_query(request.question)
-        get_metrics().record_embedding(operation="query", outcome="success", duration=time.perf_counter() - emb_t0)
-    except Exception:
-        get_metrics().record_embedding(operation="query", outcome="error", duration=time.perf_counter() - emb_t0)
-        raise
-    params = _search_param_values(request)
-    aggregate = str(params["aggregate"])
-    if aggregate not in {"max", "sum"}:
-        raise ServiceError(
-            ErrorCode.INVALID_INPUT,
-            "aggregate must be 'max' or 'sum'.",
-            {"aggregate": aggregate},
-        )
-    with start_span("tagmemorag.search.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict, narrowing = _resolved_filter_dict(request, state)
-        ghost_tag_args = tuple(
-            GhostTag(
-                name=str(g.name),
-                vector=np.asarray(g.vector, dtype=np.float32),
-                is_core=bool(g.is_core),
-            )
-            for g in request.ghost_tags
-        )
-        execution = execute_search(
-            state=state,
-            query_vec=query_vec,
-            settings=settings,
-            query_text=request.question,
-            top_k=int(params["top_k"]),
-            source_k=int(params["source_k"]),
-            steps=int(params["steps"]),
-            decay=float(params["decay"]),
-            amplitude_cutoff=float(params["amplitude_cutoff"]),
-            aggregate=aggregate,
-            filters=filter_dict,
-            boost_filters=narrowing.boost_filters,
-            core_tags=tuple(request.core_tags),
-            ghost_tags=ghost_tag_args,
-        )
-        results = execution.results
-    search_time_ms = (time.perf_counter() - t0) * 1000.0
-    trace_id = str(getattr(http_request.state, "trace_id", ""))
-    structlog.get_logger().info(
-        "search",
-        kb_name=state.kb_name,
-        build_id=state.build_id,
-        query_len=len(request.question),
-        top_k=request.top_k or settings.search.top_k,
-        result_count=len(results),
-        latency_ms=round(search_time_ms, 3),
-        cache_status="miss",
-        search_strategy=execution.strategy,
-        ann_candidate_count=execution.ann_candidate_count,
-        ann_fallback_reason=execution.ann_fallback_reason,
-    )
-    get_metrics().record_search(
-        kb_name=state.kb_name,
-        cache_status=cache_status,
-        outcome="success",
-        duration=time.perf_counter() - t0,
-        result_count=len(results),
-    )
-    set_span_attributes(
-        **{
-            "tagmemorag.cache_status": cache_status,
-            "tagmemorag.result_count": len(results),
-            "tagmemorag.search.strategy": execution.strategy,
-            "tagmemorag.search.ann_candidate_count": execution.ann_candidate_count,
-            "tagmemorag.search.ann_fallback_reason": execution.ann_fallback_reason,
-        }
-    )
-    payload = {
-        "build_id": state.build_id,
-        "kb_name": state.kb_name,
-        "trace_id": trace_id,
-        "search_id": _compute_search_id(request, state, trace_id),
-        "plan_id": plan.plan_id,
-        "results": [r.to_dict() for r in results],
-        "search_time_ms": round(search_time_ms, 3),
-        "cache": "miss",
-    }
-    if warnings:
-        payload["warnings"] = list(warnings)
-    if search_debug_enabled(request.debug, settings):
-        payload["debug"] = search_debug_payload(
-            execution,
-            params,
-            ann_enabled=search_ann_enabled(state, settings),
-        )
-        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
-            enabled=settings.search.metadata_narrowing_enabled
-        )
-    if cache is not None:
-        cache.set(
-            cache_key,
-            {k: v for k, v in payload.items() if k not in {"trace_id", "search_id", "search_time_ms", "cache", "plan_id"}},
-            kb_name=request.kb_name,
-        )
-        get_metrics().record_cache_operation(operation="set", outcome="success")
-        get_metrics().set_cache_entries(len(cache))
-    plan_log.update_result_async(plan.plan_id, {
-        "served_by_generation": _served_by_generation(state),
-        "served_by_build_id": state.build_id,
-        "cache_status": cache_status,
-        "evidence_ids": [r.id for r in results if hasattr(r, "id")],
-        "latency_ms_observed": int(search_time_ms),
-        "warnings": list(warnings),
-    })
-    return payload
-
-
-def _build_answer_response(request: AnswerRequest, retrieve_payload: dict) -> dict:
-    warnings = list(retrieve_payload.get("warnings") or [])
-    answerability = dict(retrieve_payload.get("answerability") or {})
-    if not bool(answerability.get("answerable")):
-        reason = str(answerability.get("fallback_reason") or "insufficient_evidence")
-        answer_obj = _answer_error_obj(
-            kind="refusal",
-            reason=reason,
-            warning=f"answer_refused:{reason}",
-            confidence=float(answerability.get("confidence") or 0.0),
-            missing_evidence_hints=[reason],
-        )
-        warnings.append(f"answer_refused:{reason}")
-        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
-
-    if not settings.answer.enabled:
-        answer_obj = _answer_error_obj(
-            kind="error",
-            reason="generation_disabled",
-            warning="answer_generation_disabled",
-            confidence=float(answerability.get("confidence") or 0.0),
-            missing_evidence_hints=[],
-        )
-        warnings.append("answer_generation_disabled")
-        return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
-
-    prompt = build_answer_prompt(
-        question=request.question,
-        retrieve_payload=retrieve_payload,
-        prompt_version=settings.answer.prompt_version,
-    )
-    context = AnswerRequestContext(
-        question=request.question,
-        retrieve_payload=retrieve_payload,
-        prompt=prompt,
-        max_output_tokens=int(request.answer_token_budget or settings.answer.max_output_tokens),
-    )
-    try:
-        generation = _answer_generator().generate(context)
-        cleaned = validate_generation_citations(generation, prompt.allowed_citation_ids)
-        answer_obj = cleaned.to_answer_dict(confidence=float(answerability.get("confidence") or 0.0))
-        warnings.extend(cleaned.warnings)
-    except (AnswerGenerationError, ServiceError, ValueError) as exc:
-        reason = type(exc).__name__
-        answer_obj = _answer_error_obj(
-            kind="error",
-            reason="generation_failed",
-            warning=f"answer_generation_failed:{reason}",
-            confidence=float(answerability.get("confidence") or 0.0),
-            missing_evidence_hints=[],
-        )
-        warnings.append(f"answer_generation_failed:{reason}")
-    return _answer_response_payload(request, retrieve_payload, answer_obj, warnings)
-
-
-def _answer_error_obj(
-    *,
-    kind: str,
-    reason: str,
-    warning: str,
-    confidence: float,
-    missing_evidence_hints: list[str],
-) -> dict:
-    return {
-        "kind": kind,
-        "text": "",
-        "confidence": confidence,
-        "citations": [],
-        "refusal_reason": reason,
-        "missing_evidence_hints": missing_evidence_hints,
-        "model_id": settings.answer.model_id or settings.answer.provider,
-        "model_version": settings.answer.model_version,
-        "prompt_version": settings.answer.prompt_version,
-        "warnings": [warning],
-    }
-
-
-def _answer_response_payload(request: AnswerRequest, retrieve_payload: dict, answer_obj: dict, warnings: list[str]) -> dict:
-    payload = {
-        "schema_version": "answer.v1",
-        "build_id": retrieve_payload.get("build_id", ""),
-        "kb_name": retrieve_payload.get("kb_name", request.kb_name),
-        "trace_id": retrieve_payload.get("trace_id", ""),
-        "plan_id": retrieve_payload.get("plan_id", ""),
-        "answer": answer_obj,
-        "warnings": list(dict.fromkeys(warnings)),
-    }
-    if request.include_retrieve:
-        payload["retrieve"] = retrieve_payload
-    return payload
-
-
-_ANSWER_GENERATOR_CACHE: dict[int, AnswerGenerator] = {}
-
-
-def _answer_generator() -> AnswerGenerator:
-    key = id(settings)
-    cached = _ANSWER_GENERATOR_CACHE.get(key)
-    if cached is None:
-        cached = create_answer_generator(settings)
-        _ANSWER_GENERATOR_CACHE[key] = cached
-    return cached
-
-
-def _retrieve_impl(request: RetrieveRequest, http_request: Request, state: GraphState, t0: float):
-    plan, plan_log = _build_and_log_plan(request, state)
-    warnings: list[str] = []
-
-    # Out-of-scope short-circuit (T2 D2)
-    from .queryplan import Intent
-    from .queryplan.budget import BudgetGuard
-
-    if plan.intent == Intent.OUT_OF_SCOPE:
-        warnings.append("out_of_scope_intent")
-        trace_id = str(getattr(http_request.state, "trace_id", ""))
-        search_id = _compute_search_id(request, state, trace_id)
-        retrieve_id = _compute_retrieve_id(request, state, trace_id)
-        empty_payload = {
-            "build_id": state.build_id,
-            "kb_name": state.kb_name,
-            "trace_id": trace_id,
-            "search_id": search_id,
-            "retrieve_id": retrieve_id,
-            "plan_id": plan.plan_id,
-            "results": [],
-            "evidence": [],
-            "context_pack": {"items": []},
-            "search_time_ms": round((time.perf_counter() - t0) * 1000.0, 3),
-            "warnings": list(warnings),
-        }
-        plan_log.update_result_async(plan.plan_id, {
-            "served_by_generation": _served_by_generation(state),
-            "served_by_build_id": state.build_id,
-            "cache_status": "disabled",
-            "evidence_ids": [],
-            "latency_ms_observed": int((time.perf_counter() - t0) * 1000.0),
-            "warnings": list(warnings),
-        })
+            payload["question"] = request.question
+            payload["context"] = context_meta
+            return payload
+    except ServiceError as exc:
         get_metrics().record_search(
-            kb_name=state.kb_name,
-            cache_status="disabled",
-            outcome="success",
+            kb_name=kb_name,
+            cache_status="none",
+            outcome="error",
             duration=time.perf_counter() - t0,
-            result_count=0,
+            error_code=exc.code.value,
         )
-        return empty_payload
-
-    emb_t0 = time.perf_counter()
-    try:
-        with start_span("tagmemorag.retrieve.embedding", **{"tagmemorag.kb_name": state.kb_name}):
-            query_vec = embedder.encode_query(request.question)
-        get_metrics().record_embedding(operation="query", outcome="success", duration=time.perf_counter() - emb_t0)
-    except Exception:
-        get_metrics().record_embedding(operation="query", outcome="error", duration=time.perf_counter() - emb_t0)
+        set_span_attributes(**{"tagmemorag.error_code": exc.code.value})
         raise
-    params = _search_param_values(request)
-    aggregate = str(params["aggregate"])
-    if aggregate not in {"max", "sum"}:
-        raise ServiceError(
-            ErrorCode.INVALID_INPUT,
-            "aggregate must be 'max' or 'sum'.",
-            {"aggregate": aggregate},
-        )
-    with start_span("tagmemorag.retrieve.wave", **{"tagmemorag.kb_name": state.kb_name}):
-        filter_dict, narrowing = _resolved_filter_dict(request, state)
-        ghost_tag_args = tuple(
-            GhostTag(
-                name=str(g.name),
-                vector=np.asarray(g.vector, dtype=np.float32),
-                is_core=bool(g.is_core),
-            )
-            for g in request.ghost_tags
-        )
-        # T3 D1: when reranker active, expand candidate window to
-        # rerank_candidates_n; reranker prunes back to top_n; downstream
-        # build_retrieve_response truncates to user's token_budget.
-        effective_top_k = int(params["top_k"])
-        rerank_active = (
-            plan.budget.rerank_tier != "off"
-            and plan.budget.rerank_candidates_n > 0
-        )
-        if rerank_active:
-            effective_top_k = max(effective_top_k, plan.budget.rerank_candidates_n)
-        execution = execute_search(
-            state=state,
-            query_vec=query_vec,
-            settings=settings,
-            query_text=request.question,
-            top_k=effective_top_k,
-            source_k=int(params["source_k"]),
-            steps=int(params["steps"]),
-            decay=float(params["decay"]),
-            amplitude_cutoff=float(params["amplitude_cutoff"]),
-            aggregate=aggregate,
-            filters=filter_dict,
-            boost_filters=narrowing.boost_filters,
-            core_tags=tuple(request.core_tags),
-            ghost_tags=ghost_tag_args,
-        )
-    candidates_used = execution.results
-    rerank_log_entry: dict | None = None
-    if rerank_active:
-        guard = BudgetGuard(plan)
-        rerank_outcome = _rerank_dispatcher().rerank(
-            plan,
-            list(execution.results),
-            guard,
-            query_text=request.question,
-        )
-        if rerank_outcome.warnings:
-            warnings.extend(rerank_outcome.warnings)
-        candidates_used = _reorder_results(execution.results, rerank_outcome)
-        rerank_log_entry = {
-            "vendor_used": rerank_outcome.vendor_used,
-            "calibrator": settings.reranker.calibrator,
-            "calibrated": True,
-            "latency_ms": rerank_outcome.latency_ms,
-            "top_n_returned": len(rerank_outcome.items),
-            "truncated_count": len(rerank_outcome.truncated_chunk_ids),
-            "cache_status": rerank_outcome.cache_status,
-            "warnings": list(rerank_outcome.warnings),
-        }
-    search_time_ms = (time.perf_counter() - t0) * 1000.0
-    trace_id = str(getattr(http_request.state, "trace_id", ""))
-    search_id = _compute_search_id(request, state, trace_id)
-    asset_manifest = load_asset_manifest(state.kb_name, settings) if settings.assets.enabled else None
-    visual_provider, visual_reranker = create_visual_components(settings)
-    payload = build_retrieve_response(
-        results=candidates_used,
-        build_id=state.build_id,
-        kb_name=state.kb_name,
-        trace_id=trace_id,
-        search_id=search_id,
-        retrieve_id=_compute_retrieve_id(request, state, trace_id),
-        token_budget=request.token_budget,
-        search_time_ms=search_time_ms,
-        visual_resolver=VisualEvidenceResolver(kb_name=state.kb_name, manifest=asset_manifest) if settings.assets.enabled else None,
-        visual_retrieval_resolver=VisualRetrievalResolver(
-            kb_name=state.kb_name,
-            manifest=asset_manifest,
-            provider=visual_provider,
-            reranker=visual_reranker,
-            enabled=settings.visual_retrieval.enabled,
-            max_candidates=settings.visual_retrieval.max_candidates,
-            min_score=settings.visual_retrieval.min_score,
-            trigger=settings.visual_retrieval.trigger,
-        ),
-        query_text=request.question,
-    )
-    if search_debug_enabled(request.debug, settings):
-        payload["debug"] = search_debug_payload(
-            execution,
-            params,
-            ann_enabled=search_ann_enabled(state, settings),
-        )
-        payload["debug"]["metadata_narrowing"] = narrowing.to_debug_dict(
-            enabled=settings.search.metadata_narrowing_enabled
-        )
-        payload["debug"]["retrieve_inspect"] = retrieve_inspect_payload(payload)
-    get_metrics().record_search(
-        kb_name=state.kb_name,
-        cache_status="disabled",
-        outcome="success",
-        duration=time.perf_counter() - t0,
-        result_count=len(execution.results),
-    )
-    set_span_attributes(
-        **{
-            "tagmemorag.result_count": len(execution.results),
-            "tagmemorag.search.strategy": execution.strategy,
-        }
-    )
-    structlog.get_logger().info(
-        "retrieve",
-        kb_name=state.kb_name,
-        build_id=state.build_id,
-        query_len=len(request.question),
-        top_k=request.top_k or settings.search.top_k,
-        result_count=len(execution.results),
-        latency_ms=round(search_time_ms, 3),
-        search_strategy=execution.strategy,
-    )
-    payload["plan_id"] = plan.plan_id
-    if warnings:
-        payload["warnings"] = list(warnings)
-    plan_log.update_result_async(plan.plan_id, {
-        "served_by_generation": _served_by_generation(state),
-        "served_by_build_id": state.build_id,
-        "cache_status": "disabled",
-        "evidence_ids": [
-            ev.get("evidence_id") for ev in payload.get("evidence", [])
-            if isinstance(ev, dict) and ev.get("evidence_id")
-        ],
-        "latency_ms_observed": int(search_time_ms),
-        "warnings": list(warnings),
-        "rerank": rerank_log_entry,
-    })
-    return payload
+
 
 
 @app.post("/rebuild", status_code=202)
@@ -1372,16 +625,7 @@ def submit_search_feedback(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    feedback = create_feedback(request.kb_name, request.model_dump(), settings)
-    structlog.get_logger().info(
-        "search_feedback_created",
-        kb_name=feedback.kb_name,
-        outcome=feedback.outcome,
-        status=feedback.status,
-        trace_id=feedback.trace_id,
-    )
-    return {"feedback": feedback.to_dict()}
+    return api_feedback.submit_feedback(request, api_key, settings, kind="search")
 
 
 @app.post("/retrieve/feedback")
@@ -1390,16 +634,7 @@ def submit_retrieve_feedback(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    feedback = create_feedback(request.kb_name, request.model_dump(), settings)
-    structlog.get_logger().info(
-        "retrieve_feedback_created",
-        kb_name=feedback.kb_name,
-        outcome=feedback.outcome,
-        status=feedback.status,
-        trace_id=feedback.trace_id,
-    )
-    return {"feedback": feedback.to_dict()}
+    return api_feedback.submit_feedback(request, api_key, settings, kind="retrieve")
 
 
 @app.get("/search/feedback")
@@ -1412,9 +647,15 @@ def get_search_feedback(
     api_key: ApiKey = Depends(require_scope("admin")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    rows = list_feedback(kb_name, settings, status=status, outcome=outcome, query=query, limit=limit)
-    return {"kb_name": kb_name, "feedback": [row.to_dict() for row in rows]}
+    return api_feedback.list_search_feedback(
+        kb_name,
+        api_key,
+        settings,
+        status=status,
+        outcome=outcome,
+        query=query,
+        limit=limit,
+    )
 
 
 @app.patch("/search/feedback/{feedback_id}")
@@ -1424,22 +665,7 @@ def patch_search_feedback(
     api_key: ApiKey = Depends(require_scope("admin")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    feedback = review_feedback(
-        request.kb_name,
-        feedback_id,
-        settings,
-        status=request.status,
-        operator_note=request.operator_note,
-    )
-    structlog.get_logger().info(
-        "search_feedback_reviewed",
-        kb_name=feedback.kb_name,
-        status=feedback.status,
-        outcome=feedback.outcome,
-        trace_id=feedback.trace_id,
-    )
-    return {"feedback": feedback.to_dict()}
+    return api_feedback.review_search_feedback(feedback_id, request, api_key, settings)
 
 
 @app.post("/search/feedback/promote/preview")
@@ -1448,14 +674,7 @@ def preview_search_feedback_promotion(
     api_key: ApiKey = Depends(require_scope("admin")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    preview = preview_eval_promotion(
-        request.kb_name,
-        request.feedback_ids,
-        settings,
-        output_path=request.output_path,
-    )
-    return preview.to_dict()
+    return api_feedback.preview_search_feedback(request, api_key, settings)
 
 
 @app.post("/search/feedback/promote")
@@ -1464,22 +683,7 @@ def promote_search_feedback(
     api_key: ApiKey = Depends(require_scope("admin")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    preview = export_eval_promotion(
-        request.kb_name,
-        request.feedback_ids,
-        settings,
-        output_path=request.output_path,
-        append=request.append,
-        overwrite=request.overwrite,
-    )
-    structlog.get_logger().info(
-        "search_feedback_promoted",
-        kb_name=request.kb_name,
-        status="promoted",
-        count=len(preview.cases),
-    )
-    return preview.to_dict()
+    return api_feedback.promote_search_feedback(request, api_key, settings)
 
 
 @app.get("/rebuild/{task_id}")
@@ -1609,49 +813,7 @@ def list_manuals(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    state = app_state.get_current(kb_name)
-    manuals: dict[str, dict[str, object]] = {}
-    facets: dict[str, set[str]] = {
-        "brand": set(),
-        "product_category": set(),
-        "product_model": set(),
-        "language": set(),
-        "tags": set(),
-    }
-    for _, node in state.graph.nodes(data=True):
-        metadata = metadata_from_node(node)
-        manual_id = str(metadata.get("manual_id", "")).strip()
-        if not manual_id:
-            continue
-        entry = manuals.setdefault(
-            manual_id,
-            {
-                "manual_id": manual_id,
-                "title": str(metadata.get("title", "")),
-                "source_file": str(metadata.get("source_file", "")),
-                "brand": str(metadata.get("brand", "")),
-                "product_category": str(metadata.get("product_category", "")),
-                "product_name": str(metadata.get("product_name", "")),
-                "product_model": str(metadata.get("product_model", "")),
-                "language": str(metadata.get("language", "")),
-                "version": str(metadata.get("version", "")),
-                "tags": public_tags_from_metadata(metadata),
-                "chunk_count": 0,
-            },
-        )
-        entry["chunk_count"] = int(entry["chunk_count"]) + 1
-        for field in ("brand", "product_category", "product_model", "language"):
-            value = str(metadata.get(field, "")).strip()
-            if value:
-                facets[field].add(value)
-        facets["tags"].update(tag for tag in public_tags_from_metadata(metadata) if tag.strip())
-    return {
-        "kb_name": state.kb_name,
-        "build_id": state.build_id,
-        "manuals": sorted(manuals.values(), key=lambda item: str(item["manual_id"])),
-        "facets": {key: sorted(values) for key, values in facets.items()},
-    }
+    return api_manual_routes.list_manuals(kb_name, api_key, settings, app_state)
 
 
 @app.post("/manuals/validate")
@@ -1660,18 +822,7 @@ def validate_manual_metadata(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    if request.mode not in {"create", "update", "upsert"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create, update, or upsert.", {"mode": request.mode})
-    result = validate_metadata(
-        request.kb_name,
-        dict(request.metadata),
-        settings,
-        mode=request.mode,  # type: ignore[arg-type]
-        current_manual_id=request.current_manual_id,
-        tag_policy=load_tag_policy(request.kb_name, settings),
-    )
-    return result.to_dict()
+    return api_manual_routes.validate_manual_metadata(request, api_key, settings)
 
 
 @app.post("/manuals/tags/suggest")
@@ -1680,23 +831,7 @@ def suggest_manual_tags(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    graph_state = app_state.kbs.get(request.kb_name)
-    records = list_records(request.kb_name, settings, graph_state=graph_state)
-    policy = load_tag_policy(request.kb_name, settings)
-    suggestions, existing_tags = suggest_tags(
-        dict(request.metadata),
-        records=records,
-        graph_state=graph_state,
-        text_sample=request.text_sample,
-        limit=request.limit,
-        tag_policy=policy,
-    )
-    return {
-        "kb_name": request.kb_name,
-        "suggestions": [suggestion.to_dict() for suggestion in suggestions],
-        "existing_tags": existing_tags,
-    }
+    return api_manual_routes.suggest_manual_tags(request, api_key, settings, app_state)
 
 
 @app.post("/manuals")
@@ -1709,13 +844,18 @@ async def upload_manual(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    metadata_obj = _parse_metadata_form(metadata)
-    content = await file.read()
-    record = upsert_manual(kb_name, metadata_obj, content, settings, overwrite=overwrite or settings.manual_library.allow_overwrite)
-    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="upload") if trigger_rebuild else {}
-    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=record.manual_id, action="upsert", status=record.status)
-    return {"record": record.to_dict(), "rebuild_required": True, **rebuild_payload}
+    return await api_manual_routes.upload_manual(
+        kb_name=kb_name,
+        metadata=metadata,
+        overwrite=overwrite,
+        trigger_rebuild=trigger_rebuild,
+        file=file,
+        api_key=api_key,
+        settings=settings,
+        app_state=app_state,
+        embedder=embedder,
+        get_rebuild_queue=_get_rebuild_queue,
+    )
 
 
 @app.post("/manual-library/bulk/preview")
@@ -1730,28 +870,17 @@ async def preview_manual_bulk_import(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
-    uploaded = await _bulk_uploaded_files(files)
-    preview = preview_bulk_import(
-        kb_name,
-        metadata_text,
-        metadata_format,
-        uploaded,
-        settings,
-        mode=_parse_bulk_mode(mode),
-        overwrite=overwrite,
-    )
-    structlog.get_logger().info(
-        "manual_bulk_preview",
+    return await api_manual_routes.preview_manual_bulk_import(
         kb_name=kb_name,
-        row_count=len(preview.candidates),
-        error_count=preview.error_count,
-        warning_count=preview.warning_count,
-        create_count=preview.create_count,
-        update_count=preview.update_count,
+        metadata_format=metadata_format,
+        metadata=metadata,
+        mode=mode,
+        overwrite=overwrite,
+        metadata_file=metadata_file,
+        files=files,
+        api_key=api_key,
+        settings=settings,
     )
-    return preview.to_dict()
 
 
 @app.post("/manual-library/bulk/import")
@@ -1768,32 +897,22 @@ async def import_manual_bulk(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    metadata_text = await _metadata_text_from_bulk_form(metadata, metadata_file)
-    uploaded = await _bulk_uploaded_files(files)
-    result = commit_bulk_import(
-        kb_name,
-        metadata_text,
-        metadata_format,
-        uploaded,
-        settings,
-        mode=_parse_bulk_mode(mode),
-        overwrite=overwrite,
-        selected_rows=_parse_selected_rows(selected_rows),
-    )
-    rebuild_payload = _request_library_rebuild(kb_name, mode="auto", allow_fallback=True, trigger="bulk_import") if trigger_rebuild and result.imported_count else {}
-    structlog.get_logger().info(
-        "manual_bulk_import",
+    return await api_manual_routes.import_manual_bulk(
         kb_name=kb_name,
-        row_count=len(result.preview.candidates) if result.preview else 0,
-        imported_count=result.imported_count,
-        failed_count=result.failed_count,
-        skipped_count=result.skipped_count,
+        metadata_format=metadata_format,
+        metadata=metadata,
+        mode=mode,
+        overwrite=overwrite,
+        selected_rows=selected_rows,
+        trigger_rebuild=trigger_rebuild,
+        metadata_file=metadata_file,
+        files=files,
+        api_key=api_key,
+        settings=settings,
+        app_state=app_state,
+        embedder=embedder,
+        get_rebuild_queue=_get_rebuild_queue,
     )
-    body = result.to_dict()
-    body["rebuild_required"] = result.pending_rebuild
-    body.update(rebuild_payload or {"rebuild_task": None})
-    return body
 
 
 @app.patch("/manuals/{manual_id}/metadata")
@@ -1803,16 +922,7 @@ def patch_manual_metadata(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    record = update_manual_metadata(request.kb_name, manual_id, dict(request.metadata), settings)
-    structlog.get_logger().info(
-        "manual_library_mutation",
-        kb_name=request.kb_name,
-        manual_id=manual_id,
-        action="metadata_update",
-        status=record.status,
-    )
-    return {"record": record.to_dict(), "rebuild_required": True}
+    return api_manual_routes.patch_manual_metadata(manual_id, request, api_key, settings)
 
 
 @app.put("/manuals/{manual_id}/file")
@@ -1823,10 +933,7 @@ async def put_manual_file(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    record = replace_manual_file(kb_name, manual_id, await file.read(), settings)
-    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="file_replace", status=record.status)
-    return {"record": record.to_dict(), "rebuild_required": True}
+    return await api_manual_routes.put_manual_file(manual_id, kb_name, file, api_key, settings)
 
 
 @app.delete("/manuals/{manual_id}")
@@ -1837,16 +944,7 @@ def remove_manual(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    if hard and not api_key.has_scope("admin"):
-        raise ServiceError(ErrorCode.FORBIDDEN, "Hard delete requires admin scope.", {"manual_id": manual_id})
-    if hard:
-        result = delete_manual(kb_name, manual_id, settings)
-        structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="hard_delete", status="deleted")
-        return result
-    record = disable_manual(kb_name, manual_id, settings)
-    structlog.get_logger().info("manual_library_mutation", kb_name=kb_name, manual_id=manual_id, action="disable", status=record.status)
-    return {"record": record.to_dict(), "rebuild_required": True}
+    return api_manual_routes.remove_manual(manual_id, kb_name, hard, api_key, settings)
 
 
 @app.get("/manual-library")
@@ -1856,22 +954,7 @@ def list_manual_library(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    graph_state = app_state.kbs.get(kb_name)
-    records = list_records(kb_name, settings, graph_state=graph_state)
-    manifest = load_manifest(kb_name, settings)
-    if manual_id is not None:
-        records = [record for record in records if record.manual_id == manual_id]
-        if not records:
-            raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
-    return {
-        "kb_name": kb_name,
-        "library_root": str(library_root(kb_name, settings)),
-        "pending_changes": manifest.pending_changes,
-        "dirty_manual_count": len(manifest.dirty_manuals),
-        "dirty_manuals": [dirty.to_dict() for dirty in manifest.dirty_manuals.values()],
-        "manuals": [record.to_dict() for record in records],
-    }
+    return api_manual_routes.list_manual_library(kb_name, manual_id, api_key, settings, app_state)
 
 
 @app.get("/manual-library/dirty")
@@ -1881,19 +964,7 @@ def get_manual_library_dirty(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    if format not in {"json", "csv"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "format must be json or csv.", {"format": format})
-    report = build_dirty_state_report(kb_name, settings, graph_state=app_state.kbs.get(kb_name))
-    rows = report["dirty_manuals"]
-    if format == "csv":
-        output = StringIO()
-        fieldnames = ["manual_id", "source_file", "operation", "updated_at", "checksum", "status", "searchable", "exists"]
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-        return Response(output.getvalue(), media_type="text/csv")
-    return report
+    return api_manual_routes.manual_library_dirty(kb_name, format, api_key, settings, app_state)
 
 
 @app.get("/manual-library/diagnostics")
@@ -1905,13 +976,15 @@ def get_manual_library_diagnostics(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    return _manual_library_diagnostics(
+    return api_manual_routes.diagnostics(
         kb_name,
         verify_blobs=verify_blobs,
         include_jobs=include_jobs,
         job_status=job_status,
         api_key=api_key,
+        settings=settings,
+        app_state=app_state,
+        get_rebuild_queue=_get_rebuild_queue,
     )
 
 
@@ -1923,31 +996,7 @@ def get_manual_library_registry_audit(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    safe_limit = max(1, min(int(limit), 200))
-    if not registry_enabled(settings):
-        return {"kb_name": kb_name, "enabled": False, "events": [], "limit": safe_limit}
-    events = create_registry(settings.manual_library.registry_path).audit_events(kb_name, manual_id=manual_id)
-    newest_first = list(reversed(events))[:safe_limit]
-    return {
-        "kb_name": kb_name,
-        "enabled": True,
-        "manual_id": manual_id,
-        "limit": safe_limit,
-        "events": [
-            {
-                "event_id": event.event_id,
-                "manual_id": event.manual_id,
-                "operation": event.operation,
-                "outcome": event.outcome,
-                "version": event.version,
-                "actor_id": event.actor_id,
-                "created_at": event.created_at,
-                "detail": _safe_audit_detail(event.detail),
-            }
-            for event in newest_first
-        ],
-    }
+    return api_manual_routes.registry_audit(kb_name, manual_id, limit, api_key, settings)
 
 
 @app.get("/manual-library/tags")
@@ -1956,9 +1005,7 @@ def get_manual_library_tags(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, kb_name)
-    graph_state = app_state.kbs.get(kb_name)
-    return tag_usage_report(kb_name, settings, graph_state=graph_state)
+    return api_manual_routes.get_tags(kb_name, api_key, settings, app_state)
 
 
 @app.put("/manual-library/tags/policy")
@@ -1967,16 +1014,7 @@ def put_manual_library_tag_policy(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    policy = save_tag_policy(request.kb_name, settings, request.policy)
-    structlog.get_logger().info(
-        "tag_governance_policy_update",
-        kb_name=request.kb_name,
-        canonical_count=len(policy.canonical_tags),
-        synonym_count=len(policy.synonyms),
-        deprecated_count=len(policy.deprecated_tags),
-    )
-    return {"kb_name": request.kb_name, "policy": policy.to_dict()}
+    return api_manual_routes.put_tag_policy(request, api_key, settings)
 
 
 @app.post("/manual-library/tags/rewrite/preview")
@@ -1985,16 +1023,7 @@ def preview_manual_library_tag_rewrite(
     api_key: ApiKey = Depends(require_scope("search")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    mode = _parse_rewrite_mode(request.mode)
-    preview = preview_tag_rewrite(
-        request.kb_name,
-        settings,
-        source_tags=request.source_tags,
-        target_tag=request.target_tag,
-        mode=mode,
-    )
-    return preview.to_dict()
+    return api_manual_routes.preview_tag_rewrite(request, api_key, settings)
 
 
 @app.post("/manual-library/tags/rewrite")
@@ -2003,26 +1032,7 @@ def commit_manual_library_tag_rewrite(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    mode = _parse_rewrite_mode(request.mode)
-    alias_mode = _parse_alias_mode(request.policy_alias_mode)
-    result = commit_tag_rewrite(
-        request.kb_name,
-        settings,
-        source_tags=request.source_tags,
-        target_tag=request.target_tag,
-        mode=mode,
-        update_policy=request.update_policy,
-        policy_alias_mode=alias_mode,
-    )
-    structlog.get_logger().info(
-        "tag_governance_rewrite",
-        kb_name=request.kb_name,
-        operation=mode,
-        updated_count=result.updated_count,
-        failed_count=len(result.failures),
-    )
-    return result.to_dict()
+    return api_manual_routes.commit_tag_rewrite_route(request, api_key, settings)
 
 
 @app.post("/manual-library/rebuild", status_code=202)
@@ -2031,16 +1041,7 @@ def rebuild_manual_library(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    ensure_kb_access(api_key, request.kb_name)
-    if request.mode not in {"full", "incremental", "auto"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "rebuild mode must be full, incremental, or auto.", {"mode": request.mode})
-    return _request_library_rebuild(
-        request.kb_name,
-        mode=request.mode,
-        allow_fallback=request.allow_fallback,
-        trigger="api",
-        top_level=True,
-    )
+    return api_manual_routes.rebuild_library(request, api_key, settings, app_state, embedder, _get_rebuild_queue)
 
 
 @app.get("/manual-library/rebuild-jobs")
@@ -2050,15 +1051,7 @@ def list_rebuild_jobs(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    if kb_name is not None:
-        ensure_kb_access(api_key, kb_name)
-    queue = _require_rebuild_queue()
-    jobs = [
-        job
-        for job in queue.list_jobs(kb_name=kb_name, status=status)
-        if api_key.allows_kb(str(job.get("kb_name") or ""))
-    ]
-    return {"jobs": jobs}
+    return api_manual_routes.list_rebuild_jobs(kb_name, status, api_key, settings, _get_rebuild_queue)
 
 
 @app.get("/manual-library/rebuild-jobs/{job_id}")
@@ -2067,10 +1060,7 @@ def inspect_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
-    job = queue.inspect(job_id)
-    ensure_kb_access(api_key, str(job["kb_name"]))
-    return job
+    return api_manual_routes.inspect_rebuild_job(job_id, api_key, settings, _get_rebuild_queue)
 
 
 @app.post("/manual-library/rebuild-jobs/{job_id}/cancel")
@@ -2079,11 +1069,7 @@ def cancel_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
-    job = queue.get(job_id)
-    ensure_kb_access(api_key, job.kb_name)
-    cancelled = queue.cancel(job_id)
-    return cancelled.to_dict()
+    return api_manual_routes.cancel_rebuild_job(job_id, api_key, settings, _get_rebuild_queue)
 
 
 @app.post("/manual-library/rebuild-jobs/{job_id}/retry")
@@ -2092,11 +1078,7 @@ def retry_rebuild_job(
     api_key: ApiKey = Depends(require_scope("rebuild")),
     _: None = Depends(rate_limit_dep),
 ):
-    queue = _require_rebuild_queue()
-    job = queue.get(job_id)
-    ensure_kb_access(api_key, job.kb_name)
-    retried = queue.retry(job_id)
-    return retried.to_dict()
+    return api_manual_routes.retry_rebuild_job(job_id, api_key, settings, _get_rebuild_queue)
 
 
 @app.get("/kb")
@@ -2121,30 +1103,11 @@ def list_kbs(api_key: ApiKey = Depends(require_scope("search")), _: None = Depen
 
 @app.post("/admin/cache/clear")
 def clear_cache(request: CacheClearRequest, _api_key: ApiKey = Depends(require_scope("admin"))):
-    with start_span("tagmemorag.cache.clear", **{"tagmemorag.kb_name": request.kb_name or "all"}):
-        if app_state.query_cache is None:
-            get_metrics().record_cache_operation(operation="clear", outcome="disabled")
-            return {"cleared_count": 0}
-        cleared = app_state.query_cache.clear(request.kb_name)
-        get_metrics().record_cache_operation(operation="clear", outcome="success")
-        get_metrics().set_cache_entries(len(app_state.query_cache))
-        structlog.get_logger().info("cache_cleared", kb_name=request.kb_name, cleared_count=cleared)
-        return {"cleared_count": cleared}
+    return api_admin.clear_cache(request, settings, app_state)
 
 
 def _resolve_indexgen_target_versions(req: IndexGenBuildShadowRequest) -> dict[str, object]:
-    diff: dict[str, object] = {}
-    if req.embedding_model_id is not None:
-        diff["embedding_model_id"] = req.embedding_model_id
-    if req.embedding_model_version is not None:
-        diff["embedding_model_version"] = req.embedding_model_version
-    if req.parser_version is not None:
-        diff["parser_version"] = req.parser_version
-    if req.chunker_version is not None:
-        diff["chunker_version"] = req.chunker_version
-    if req.index_schema_version is not None:
-        diff["index_schema_version"] = req.index_schema_version
-    return diff
+    return api_admin.resolve_indexgen_target_versions(req)
 
 
 @app.post("/admin/generation/build-shadow")
@@ -2152,28 +1115,7 @@ def admin_build_shadow(
     request: IndexGenBuildShadowRequest,
     _api_key: ApiKey = Depends(require_scope("admin")),
 ):
-    target_versions = _resolve_indexgen_target_versions(request)
-    if not target_versions:
-        raise ServiceError(
-            ErrorCode.INDEXGEN_NO_VERSION_DIFF,
-            "build-shadow requires at least one version field different from active.",
-            {"kb_name": request.kb_name},
-        )
-    docs_dir = request.docs_dir or settings.manual_library.root_dir
-    task = app_state.start_shadow_rebuild(
-        docs_dir,
-        request.kb_name,
-        settings,
-        target_versions=target_versions,
-        embedder=embedder,
-    )
-    meta = app_state.get_generation_meta(request.kb_name)
-    return {
-        "kb_name": request.kb_name,
-        "shadow_generation": meta.shadow_generation if meta else None,
-        "task_id": task.task_id,
-        "status": task.status,
-    }
+    return api_admin.build_shadow(request, settings, app_state, embedder)
 
 
 @app.post("/admin/generation/cancel-shadow")
@@ -2181,7 +1123,7 @@ def admin_cancel_shadow(
     request: IndexGenCancelShadowRequest,
     _api_key: ApiKey = Depends(require_scope("admin")),
 ):
-    return app_state.cancel_shadow_rebuild(request.kb_name, settings)
+    return api_admin.cancel_shadow(request, settings, app_state)
 
 
 @app.post("/admin/generation/swap")
@@ -2189,7 +1131,7 @@ def admin_swap_generation(
     request: IndexGenSwapRequest,
     _api_key: ApiKey = Depends(require_scope("admin")),
 ):
-    return app_state.swap_generation(request.kb_name, settings)
+    return api_admin.swap_generation(request, settings, app_state)
 
 
 @app.post("/admin/generation/retire")
@@ -2197,9 +1139,7 @@ def admin_retire_generation(
     request: IndexGenRetireRequest,
     _api_key: ApiKey = Depends(require_scope("admin")),
 ):
-    return app_state.retire_generation(
-        request.kb_name, request.generation, settings, force=request.force
-    )
+    return api_admin.retire_generation(request, settings, app_state)
 
 
 @app.get("/admin/generation/status")
@@ -2207,235 +1147,7 @@ def admin_generation_status(
     kb_name: str = "default",
     _api_key: ApiKey = Depends(require_scope("admin")),
 ):
-    from .indexgen import read_meta
-
-    kb_root = Path(settings.storage.data_dir) / kb_name
-    meta = app_state.get_generation_meta(kb_name) or read_meta(kb_root)
-    if meta is None:
-        raise ServiceError(
-            ErrorCode.INDEXGEN_NO_SUCH_KB,
-            "KB has no index.json.",
-            {"kb_name": kb_name},
-        )
-    return meta.to_dict()
-
-
-def _parse_metadata_form(metadata: str) -> dict[str, object]:
-    try:
-        parsed = json.loads(metadata)
-    except json.JSONDecodeError as exc:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be valid JSON.", {"error": str(exc)}) from exc
-    if not isinstance(parsed, dict):
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata must be a JSON object.")
-    return parsed
-
-
-def _parse_rewrite_mode(value: str):
-    mode = value.strip().lower()
-    if mode not in {"merge", "rename"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be merge or rename.", {"mode": value})
-    return mode
-
-
-def _parse_alias_mode(value: str | None):
-    if value is None or not str(value).strip():
-        return None
-    mode = str(value).strip().lower()
-    if mode not in {"synonym", "deprecated"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "policy_alias_mode must be synonym or deprecated.", {"policy_alias_mode": value})
-    return mode
-
-
-def _governed_filter_dict(kb_name: str, filters: SearchFilters | None) -> dict[str, object]:
-    filter_dict = filters.to_filter_dict() if filters else {}
-    tags = filter_dict.get("tags")
-    if isinstance(tags, list) and tags:
-        policy = load_tag_policy(kb_name, settings)
-        filter_dict["tags"] = resolve_tags_for_search([str(tag) for tag in tags], policy)
-    return filter_dict
-
-
-def _resolved_filter_dict(request: SearchRequest, state: GraphState) -> tuple[dict[str, object], NarrowingDecision]:
-    explicit_filters = _governed_filter_dict(request.kb_name, request.filters)
-    narrowing = infer_metadata_narrowing(
-        query_text=request.question,
-        graph=state.graph,
-        explicit_filters=explicit_filters,
-        enabled=settings.search.metadata_narrowing_enabled,
-        category_policy=settings.search.metadata_narrowing_category_policy,
-        brand_policy=settings.search.metadata_narrowing_brand_policy,
-        min_candidates=settings.search.metadata_narrowing_min_candidates,
-    )
-    return merge_inferred_filters(explicit_filters, narrowing), narrowing
-
-
-async def _metadata_text_from_bulk_form(metadata: str, metadata_file: UploadFile | None) -> str:
-    if metadata_file is not None:
-        content = await metadata_file.read()
-        try:
-            return content.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ServiceError(ErrorCode.INVALID_INPUT, "metadata_file must be UTF-8 text.", {"error": str(exc)}) from exc
-    if not metadata.strip():
-        raise ServiceError(ErrorCode.INVALID_INPUT, "metadata or metadata_file is required.")
-    return metadata
-
-
-async def _bulk_uploaded_files(files: list[UploadFile] | None) -> list[BulkUploadedFile]:
-    uploaded: list[BulkUploadedFile] = []
-    for file in files or []:
-        if not file.filename:
-            continue
-        uploaded.append(BulkUploadedFile(filename=file.filename, content=await file.read()))
-    return uploaded
-
-
-def _parse_selected_rows(selected_rows: str) -> set[int] | None:
-    if not selected_rows.strip():
-        return None
-    try:
-        parsed = json.loads(selected_rows)
-    except json.JSONDecodeError as exc:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.", {"error": str(exc)}) from exc
-    if not isinstance(parsed, list):
-        raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must be a JSON array of row numbers.")
-    rows: set[int] = set()
-    for item in parsed:
-        try:
-            rows.add(int(item))
-        except (TypeError, ValueError) as exc:
-            raise ServiceError(ErrorCode.INVALID_INPUT, "selected_rows must contain only row numbers.", {"value": item}) from exc
-    return rows
-
-
-def _parse_bulk_mode(mode: str) -> BulkImportMode:
-    if mode not in {"create_only", "upsert", "dry_run"}:
-        raise ServiceError(ErrorCode.INVALID_INPUT, "mode must be create_only, upsert, or dry_run.", {"mode": mode})
-    return cast(BulkImportMode, mode)
-
-
-def _request_library_rebuild(
-    kb_name: str,
-    *,
-    mode: str,
-    allow_fallback: bool,
-    trigger: str,
-    top_level: bool = False,
-) -> dict[str, object]:
-    if settings.manual_library.rebuild_queue_enabled:
-        queue = _get_rebuild_queue()
-        job, coalesced = queue.enqueue(kb_name, mode=mode, allow_fallback=allow_fallback, trigger=trigger)
-        payload = job.to_dict(coalesced=coalesced)
-        return payload if top_level else {"rebuild_task": None, "rebuild_job": payload}
-    task = start_library_rebuild(
-        app_state,
-        kb_name,
-        settings,
-        embedder=embedder,
-        mode=mode,
-        allow_fallback=allow_fallback,
-    )
-    payload = task.to_dict()
-    return payload if top_level else {"rebuild_task": payload}
-
-
-def _manual_library_diagnostics(
-    kb_name: str,
-    *,
-    verify_blobs: bool,
-    include_jobs: bool,
-    job_status: str | None,
-    api_key: ApiKey,
-) -> dict[str, object]:
-    graph_state = app_state.kbs.get(kb_name)
-    registry = registry_inspect(kb_name, settings)
-    dirty_report = build_dirty_state_report(kb_name, settings, graph_state=graph_state)
-    blob_health: dict[str, object] = {
-        "checked": False,
-        "checked_count": 0,
-        "missing_count": 0,
-        "missing": [],
-        "blob_backend": settings.manual_library.blob_backend,
-    }
-    if registry.get("enabled") and verify_blobs:
-        verified = verify_registry_blobs(kb_name, settings)
-        blob_health.update(
-            {
-                "checked": True,
-                "checked_count": int(verified.get("checked_count") or 0),
-                "missing_count": int(verified.get("missing_count") or 0),
-                "missing": verified.get("missing") or [],
-            }
-        )
-    elif registry.get("enabled"):
-        blob_health["status"] = "unchecked"
-    else:
-        blob_health["status"] = "registry_disabled"
-
-    jobs: list[dict[str, object]] = []
-    if settings.manual_library.rebuild_queue_enabled and include_jobs:
-        queue = _get_rebuild_queue()
-        jobs = [
-            job
-            for job in queue.list_jobs(kb_name=kb_name, status=job_status)
-            if api_key.allows_kb(str(job.get("kb_name") or ""))
-        ]
-    queue_payload = {"enabled": settings.manual_library.rebuild_queue_enabled, "jobs": jobs}
-    operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
-    return {
-        "kb_name": kb_name,
-        "registry": registry,
-        "blob_health": blob_health,
-        "dirty": {
-            "pending_changes": bool(dirty_report.get("pending_changes")),
-            "dirty_manual_count": int(dirty_report.get("dirty_manual_count") or 0),
-            "dirty_manuals": dirty_report.get("dirty_manuals") or [],
-            "recovery_actions": dirty_report.get("recovery_actions") or [],
-            "operations_summary": operations,
-        },
-        "rebuild_queue": queue_payload,
-        "last_rebuild": {
-            "current_build_id": dirty_report.get("current_build_id") or "",
-            "last_successful_build_id": dirty_report.get("last_successful_build_id") or "",
-            "last_impact_summary": dirty_report.get("last_impact_summary"),
-            "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
-        },
-        "recommendations": _diagnostic_recommendations(registry, blob_health, dirty_report, jobs),
-    }
-
-
-def _diagnostic_recommendations(
-    registry: dict[str, object],
-    blob_health: dict[str, object],
-    dirty_report: dict[str, object],
-    jobs: list[dict[str, object]],
-) -> list[dict[str, str]]:
-    recommendations: list[dict[str, str]] = []
-    if registry.get("enabled") and not blob_health.get("checked"):
-        recommendations.append({"code": "verify_blobs", "label": "Verify registry blobs", "severity": "info"})
-    if int(blob_health.get("missing_count") or 0) > 0:
-        recommendations.append({"code": "restore_object_store", "label": "Restore missing blob objects before rebuild", "severity": "warning"})
-    if dirty_report.get("pending_changes"):
-        recommendations.append({"code": "inspect_dirty", "label": "Inspect dirty manuals", "severity": "warning"})
-    if any(str(job.get("status")) == "failed" for job in jobs):
-        recommendations.append({"code": "retry_rebuild", "label": "Retry failed queued rebuild", "severity": "warning"})
-    if any(str(job.get("status")) in {"queued", "retrying"} for job in jobs):
-        recommendations.append({"code": "inspect_queue", "label": "Inspect queued rebuild work", "severity": "info"})
-    qdrant_sync = dirty_report.get("last_qdrant_sync")
-    if isinstance(qdrant_sync, dict) and qdrant_sync.get("fallback_reason"):
-        recommendations.append({"code": "force_full_rebuild", "label": "Force a full rebuild after Qdrant fallback", "severity": "warning"})
-    if not registry.get("enabled"):
-        recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
-    return recommendations
-
-
-def _safe_audit_detail(detail: dict[str, object]) -> dict[str, object]:
-    allowed = {"source_file", "status", "checksum", "blob_backend", "size_bytes", "content_type"}
-    return {
-        key: value
-        for key, value in detail.items()
-        if key in allowed and (isinstance(value, (str, int, float, bool)) or value is None)
-    }
+    return api_admin.generation_status(kb_name, settings, app_state)
 
 
 def _get_rebuild_queue() -> RebuildQueue:
@@ -2443,9 +1155,3 @@ def _get_rebuild_queue() -> RebuildQueue:
     if rebuild_queue is None or rebuild_queue.app_state is not app_state or rebuild_queue.cfg is not settings:
         rebuild_queue = RebuildQueue(app_state, settings, embedder=embedder)
     return rebuild_queue
-
-
-def _require_rebuild_queue() -> RebuildQueue:
-    if not settings.manual_library.rebuild_queue_enabled:
-        raise ServiceError(ErrorCode.INVALID_REQUEST, "Rebuild queue is not enabled.", {})
-    return _get_rebuild_queue()

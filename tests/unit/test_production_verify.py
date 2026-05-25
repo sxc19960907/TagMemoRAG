@@ -23,10 +23,12 @@ def test_production_verify_default_local_report_is_sanitized(tmp_path):
     assert steps["provider_probe"]["status"] == "skipped"
     assert steps["readiness_smoke"]["status"] == "passed"
     assert steps["pilot_run"]["status"] == "warning"
+    assert steps["pilot_run"]["detail"]["stages"]["passed"] >= 4
 
     serialized = json.dumps(body, ensure_ascii=False)
     assert "Authorization" not in serialized
     assert "蒸汽很小怎么办" not in serialized
+    assert "pump must be replaced immediately" not in serialized
     assert "actual_top_k" not in serialized
 
 
@@ -69,3 +71,63 @@ def test_production_verify_explicit_probe_selection(monkeypatch, tmp_path):
     assert seen["selected"] == ["embedding", "qdrant"]
     assert step.status == "skipped"
     assert step.detail["selected"] == ["embedding", "qdrant"]
+
+
+def test_production_verify_forwards_answer_quality_options(monkeypatch, tmp_path):
+    seen = {}
+
+    def _fake_pilot(**kwargs):
+        seen.update(kwargs)
+        from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+        return ProductionPilotReport(
+            status="passed",
+            config_path=str(kwargs["config_path"]),
+            suite_path=str(kwargs["suite_path"]),
+            docs_path=str(kwargs["docs_path"]),
+            workdir=str(kwargs["workdir"]),
+            stages=[PilotStage("eval", "passed", {})],
+            next_steps=[],
+        )
+
+    monkeypatch.setattr(pv, "run_production_pilot", _fake_pilot)
+
+    report = pv.run_verification(
+        workdir=tmp_path / "verify",
+        answer_quality_suite_path="custom-answer-quality.jsonl",
+        skip_answer_quality=True,
+    )
+
+    assert report.status == "passed"
+    assert seen["answer_quality_suite_path"] == "custom-answer-quality.jsonl"
+    assert seen["skip_answer_quality"] is True
+
+
+def test_production_verify_cli_accepts_answer_quality_flags(monkeypatch, tmp_path):
+    seen = {}
+
+    def _fake_run_verification(**kwargs):
+        seen.update(kwargs)
+        return pv.VerificationReport(
+            status="passed",
+            config_path=str(kwargs["config_path"]),
+            workdir=str(kwargs["workdir"]),
+            steps=[pv.VerificationStep("pilot_run", "passed", {})],
+            next_steps=[],
+        )
+
+    monkeypatch.setattr(pv, "run_verification", _fake_run_verification)
+
+    exit_code = pv.main(
+        [
+            "--workdir",
+            str(tmp_path / "verify"),
+            "--answer-quality-suite",
+            "custom-answer-quality.jsonl",
+            "--skip-answer-quality",
+        ]
+    )
+
+    assert exit_code == 0
+    assert seen["answer_quality_suite_path"] == "custom-answer-quality.jsonl"
+    assert seen["skip_answer_quality"] is True

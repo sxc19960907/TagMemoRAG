@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG Q&A</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="qa-page-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell qa-shell">
+      <main class="qa-three-pane">
+        <aside class="qa-left-rail" aria-label="Question answering context">
+          <div class="brand qa-brand">
+            <span class="eyebrow">TagMemoRAG</span>
+            <h1>Manual Q&A</h1>
+          </div>
+
+          <section class="qa-context-card">
+            <span class="eyebrow">Assistant</span>
+            <strong>Product manual support</strong>
+            <p id="qa-context-note">Ask a question and get an answer grounded in the available manuals.</p>
+          </section>
+
+          <section class="qa-context-card qa-suggestion-card" aria-label="Suggested questions">
+            <span class="eyebrow">Try asking</span>
+            <div id="qa-suggestions" class="qa-suggestion-list"></div>
+          </section>
+
+          <section class="qa-context-card qa-history-card" aria-label="Conversation history">
+            <div class="qa-history-head">
+              <span class="eyebrow">Conversation</span>
+              <button id="qa-clear-history" class="ghost small" type="button" disabled>Clear</button>
+            </div>
+            <div id="qa-history" class="qa-history-list empty-state">No questions yet.</div>
+          </section>
+
+          {% if auth_enabled %}
+          <label class="token-field qa-token-field">
+            <span>API token</span>
+            <input id="qa-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+          </label>
+          {% endif %}
+
+          <section class="status-strip qa-status" id="qa-status" role="status" aria-live="polite"></section>
+        </aside>
+
+        <section class="qa-center-pane" aria-label="Answer workspace">
+          <header class="qa-center-header">
+            <div>
+              <span class="eyebrow">Product Manual Assistant</span>
+              <h2>Ask a manual question</h2>
+            </div>
+            <div class="qa-answer-actions">
+              <p id="qa-answer-meta">No answer yet</p>
+              <button id="qa-copy-answer" class="ghost small" type="button" disabled>Copy answer</button>
+            </div>
+          </header>
+
+          <div class="qa-answer-scroll">
+            <div id="qa-answer" class="qa-answer-message empty-state">
+              <strong>Ask about a symptom, task, or error.</strong>
+              <p>Good questions include weak steam, no coffee output, descaling, or nozzle cleaning.</p>
+            </div>
+            <section id="qa-followups" class="qa-followups" aria-label="Follow-up questions" hidden></section>
+            <section id="qa-feedback" class="qa-feedback" aria-label="Answer feedback" hidden>
+              <div>
+                <span class="eyebrow">Feedback</span>
+                <strong>Was this useful?</strong>
+              </div>
+              <div class="qa-feedback-actions">
+                <button type="button" class="ghost small" data-feedback="helpful">Helpful</button>
+                <button type="button" class="ghost small" data-feedback="not-helpful">Not helpful</button>
+              </div>
+              <p id="qa-feedback-note" aria-live="polite"></p>
+            </section>
+          </div>
+
+          <form id="qa-question-form" class="qa-composer">
+            <label>
+              <span>Question</span>
+              <textarea id="qa-question" rows="3" placeholder="Ask a product-manual question"></textarea>
+            </label>
+            <div class="qa-composer-actions">
+              <button id="qa-submit-new" class="ghost small" type="button" disabled>Ask as new</button>
+              <button id="qa-submit" class="primary" type="submit">Ask</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="qa-right-rail" aria-label="Sources">
+          <header class="qa-sources-header">
+            <div>
+              <span class="eyebrow">Grounding</span>
+              <h2>Sources</h2>
+            </div>
+            <p id="qa-source-meta">Cited source snippets will appear here.</p>
+          </header>
+          <div id="qa-sources" class="qa-source-list empty-state">No sources yet.</div>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="{{ url_for('manual-library-static', path='qa_page.js') }}"></script>
+  </body>
+</html>

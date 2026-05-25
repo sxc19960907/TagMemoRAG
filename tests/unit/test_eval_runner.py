@@ -7,7 +7,9 @@ from tagmemorag.config import ManualLibraryConfig, ModelConfig, SearchConfig, Se
 from tagmemorag.eval.dataset import EvalThresholds
 from tagmemorag.eval.runner import run_eval
 from tagmemorag.manual_library import library_root, mark_pending, upsert_manual
+from tagmemorag.search_runtime import SearchExecution
 from tagmemorag.state import AppState, build_kb, save_kb, start_library_rebuild
+from tagmemorag.types import Result
 from tests.unit.test_storage_state import FakeQdrantClient
 
 
@@ -34,6 +36,7 @@ def test_run_eval_uses_isolated_storage_by_default(tmp_path, test_config):
     assert report.summary.passed
     assert (eval_data_dir / "default" / "meta.json").exists()
     assert not (Path(test_config.storage.data_dir) / "default").exists()
+    assert report.config_snapshot["build_ids"]["default"]
 
 
 def test_run_eval_product_manual_suite_is_reproducible(tmp_path, test_config):
@@ -104,7 +107,87 @@ def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):
         "metadata_narrowing_brand_policy": "boost_if_not_unique",
         "metadata_narrowing_category_policy": "hard_filter_product_manual",
         "metadata_narrowing_min_candidates": 1,
+        "same_page_ordering_enabled": True,
+        "same_page_ordering_min_group_size": 2,
     }
+
+
+def test_run_eval_same_page_ordering_explicit_false_preserves_pressure_order(monkeypatch, tmp_path, test_config):
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+    test_config.search.same_page_ordering_enabled = False
+    docs = _write_same_page_eval_docs(tmp_path)
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"repo","query":"what is a github repository README",'
+        '"relevant":[{"source_file":"github.md","text_contains":["repository is a folder"]}],'
+        '"top_k_override":2}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tagmemorag.eval.runner.execute_search", _fixed_same_page_search)
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=suite,
+        docs_path=docs,
+        eval_data_dir=tmp_path / "eval-data",
+        thresholds=EvalThresholds(min_recall_at_k=0.0, min_mrr=0.0, min_hit_at_k=0.0),
+    )
+
+    assert report.summary.passed
+    assert report.cases[0].metrics.mrr == 0.5
+    assert report.cases[0].actual_top_k[0]["matched_expected_indexes"] == []
+    assert report.config_snapshot["search"]["same_page_ordering_enabled"] is False
+
+
+def test_run_eval_same_page_ordering_enabled_promotes_pressure_result(monkeypatch, tmp_path, test_config):
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+    test_config.search.same_page_ordering_enabled = True
+    docs = _write_same_page_eval_docs(tmp_path)
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"repo","query":"what is a github repository README",'
+        '"relevant":[{"source_file":"github.md","text_contains":["repository is a folder"]}],'
+        '"top_k_override":2}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tagmemorag.eval.runner.execute_search", _fixed_same_page_search)
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=suite,
+        docs_path=docs,
+        eval_data_dir=tmp_path / "eval-data",
+        thresholds=EvalThresholds(min_recall_at_k=0.0, min_mrr=0.0, min_hit_at_k=0.0),
+    )
+
+    assert report.summary.passed
+    assert report.cases[0].metrics.mrr == 1.0
+    assert report.cases[0].actual_top_k[0]["matched_expected_indexes"] == [0]
+    assert report.config_snapshot["search"]["same_page_ordering_enabled"] is True
+
+
+def test_run_eval_records_force_mode(tmp_path, test_config):
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Steam\nSteam pressure drops when scale blocks the nozzle.\n", encoding="utf-8")
+    suite = tmp_path / "suite.jsonl"
+    suite.write_text(
+        '{"id":"steam","query":"steam pressure nozzle scale","relevant":[{"source_file":"manual.md","header":"Steam","text_contains":["scale blocks"]}]}\n',
+        encoding="utf-8",
+    )
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=suite,
+        docs_path=docs,
+        force_mode="agentic",
+        eval_data_dir=tmp_path / "eval-data",
+        thresholds=EvalThresholds(min_recall_at_k=0.0, min_mrr=0.0, min_hit_at_k=0.0),
+    )
+
+    assert report.summary.passed
+    assert report.config_snapshot["agentic"] == {"force_mode": "agentic", "mode": "agentic"}
 
 
 def test_run_eval_uses_ann_preselection_with_fake_qdrant(monkeypatch, tmp_path, test_config):
@@ -200,6 +283,52 @@ def _write_incremental_suite(tmp_path: Path, expected_text: str) -> Path:
         encoding="utf-8",
     )
     return suite
+
+
+def _write_same_page_eval_docs(tmp_path: Path) -> Path:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "github.md").write_text(
+        "\n\n".join(
+            [
+                "# Hello World\nCreate a branch and open a pull request.",
+                "# Hello World\nA repository is a folder that contains README files.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return docs
+
+
+def _fixed_same_page_search(**_kwargs) -> SearchExecution:
+    return SearchExecution(
+        results=[
+            Result(
+                node_id=1,
+                score=3.2,
+                text="Create a branch and open a pull request.",
+                header="Hello World",
+                path=["Hello World"],
+                source_file="github.md",
+                start_line=1,
+                anchor_key="top",
+                metadata={"chunk_id": "top"},
+            ),
+            Result(
+                node_id=2,
+                score=3.1,
+                text="A repository is a folder that contains README files.",
+                header="Hello World",
+                path=["Hello World"],
+                source_file="github.md",
+                start_line=2,
+                anchor_key="matched",
+                metadata={"chunk_id": "matched"},
+            ),
+        ],
+        eligible_node_ids={1, 2},
+        strategy="exact_local",
+    )
 
 
 def _wait_for_task(task) -> None:

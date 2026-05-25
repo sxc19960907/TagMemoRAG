@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Final backend checklist review."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Validate audit conclusions against the living architecture."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Ensure no code implementation slipped into audit-only parent."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Review cross-layer and code reuse reasoning coverage."}
+{"file": "docs/eval-baseline-workflow.md", "reason": "Eval gate expectations for recommended child tasks."}

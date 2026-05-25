@@ -12,7 +12,7 @@ from tagmemorag.manual_bulk_import import (
     parse_metadata,
     preview_bulk_import,
 )
-from tagmemorag.manual_library import library_root, list_records, load_manifest, upsert_manual
+from tagmemorag.manual_library import find_record_by_manual_id, library_root, list_records, load_manifest, upsert_manual
 
 
 @pytest.fixture
@@ -134,6 +134,28 @@ def test_preview_reports_existing_library_conflicts_and_upsert_overwrite_policy(
     assert ready[0].action == "update"
 
 
+def test_preview_maps_metadata_info_hint_without_blocking_row(library_config):
+    metadata = {**_row("multi", "coffee/multi.md"), "tags": ["fault-code", "diagnostics", "washer"]}
+
+    preview = preview_bulk_import(
+        "default",
+        json.dumps([metadata]),
+        "json",
+        [BulkUploadedFile("multi.md", b"# Multi\n")],
+        library_config,
+    )
+
+    hints = [row for row in preview.rows if row.code == "TAG_ORDERING_HINT"]
+    assert len(hints) == 1
+    assert hints[0].severity == "info"
+    assert hints[0].action == "skip"
+    ready = [row for row in preview.rows if row.code == "READY"]
+    assert len(ready) == 1
+    assert ready[0].action == "create"
+    assert preview.valid_count == 1
+    assert preview.error_count == 0
+
+
 def test_commit_creates_valid_manuals_and_marks_pending(library_config):
     result = commit_bulk_import(
         "default",
@@ -149,6 +171,25 @@ def test_commit_creates_valid_manuals_and_marks_pending(library_config):
     root = library_root("default", library_config)
     assert (root / "coffee" / "cm1.md").exists()
     assert {record.manual_id for record in list_records("default", library_config)} == {"cm1", "cm2"}
+
+
+def test_commit_allows_selected_row_with_metadata_info_hint(library_config):
+    metadata = {**_row("multi", "coffee/multi.md"), "tags": ["fault-code", "diagnostics", "washer"]}
+
+    result = commit_bulk_import(
+        "default",
+        json.dumps([metadata]),
+        "json",
+        [BulkUploadedFile("multi.md", b"# Multi\n")],
+        library_config,
+        selected_rows={1},
+    )
+
+    assert result.imported_count == 1
+    assert result.failed_count == 0
+    assert result.preview is not None
+    assert result.preview.error_count == 0
+    assert find_record_by_manual_id("default", "multi", library_config) is not None
 
 
 def test_commit_rejects_selected_rows_with_errors(library_config):

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check focused unit coverage, privacy omissions, and adjacent gate stability."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Verify the diagnostic remains offline and eval-driven without runtime ranking changes."}

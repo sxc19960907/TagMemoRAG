@@ -1,0 +1,42 @@
+{
+  "id": "agentic-rag-mode-toggle",
+  "name": "agentic-rag-mode-toggle",
+  "title": "Agentic RAG Mode Toggle",
+  "description": "Add a flag-driven toggle so the RAG pipeline can run in classic mode (current behavior, byte-equivalent) or agentic mode (multi-step decision loop). Parent task; children will be split during brainstorm.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "suixingchen",
+  "assignee": "suixingchen",
+  "createdAt": "2026-05-21",
+  "completedAt": "2026-05-21",
+  "branch": "agentic-rag-mode-toggle",
+  "base_branch": "codex/live-pilot-provider-verification",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-21-agent-loop-driver",
+    "05-21-agentic-adaptive-router",
+    "05-21-agentic-iterative-multihop",
+    "05-21-agentic-crag-grader",
+    "05-21-agentic-budget-and-fallback",
+    "05-21-agentic-surface-and-provider-verify"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "child_commits": {
+      "agent-loop-driver": "2340ca4c51c59e4935db1a0fc1bf49e176553bea",
+      "agentic-adaptive-router": "d3b1e53a3d13e3335bc8d26ac0ba6e2921ff496e",
+      "agentic-iterative-multihop": "0270af9c144d9be47430276552eb644e3f4e05c8",
+      "agentic-crag-grader": "3ea8eafb33e6241d9fea42d3363f7a523c98315a",
+      "agentic-budget-and-fallback": "7ddff0b7f6a9bd522d4e4bf3f5a736722964ce56",
+      "agentic-surface-and-provider-verify": "e9cb01232a7bd4a7baa6edaeeaf96d90b079e706"
+    }
+  }
+}

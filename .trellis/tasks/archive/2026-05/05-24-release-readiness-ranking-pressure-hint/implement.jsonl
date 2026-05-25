@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Defines release-readiness baseline and non-blocking GitHub ranking pressure."}
+{"file": ".trellis/tasks/archive/2026-05/05-24-general-web-ranking-pressure-diagnostic/validation-notes.md", "reason": "Records retained ranking-pressure report metrics and intended non-blocking semantics."}

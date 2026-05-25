@@ -39,7 +39,7 @@ from ..errors import RebuildFailedError
 from ..graph_builder import build_graph
 from ..manual_library import is_active_status
 from ..manuals import load_manual_metadata
-from ..parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document
+from ..parser_provider import parse_chunks_for_config, supported_document_suffixes
 from ..storage.json_anchor import JsonAnchorStore
 from ..storage.json_graph import JsonGraphStore
 from ..storage.npz_vector import NpzVectorStore
@@ -170,9 +170,8 @@ def build_shadow_kb(
         load_asset_manifest(kb_name, cfg) if cfg.assets.enabled else AssetManifest(kb_name=kb_name)
     )
     asset_summary = AssetExtractionSummary()
-    document_paths: Iterable[Path] = (
-        p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
-    )
+    supported_suffixes = supported_document_suffixes(cfg.parser)
+    document_paths: Iterable[Path] = (p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in supported_suffixes)
     seen_manual_ids: set[str] = set()
 
     paths.ensure_generation_root()
@@ -185,15 +184,11 @@ def build_shadow_kb(
         if not is_active_status(metadata.status):
             continue
         chunks.extend(
-            parse_document(
+            parse_chunks_for_config(
                 path,
-                cfg.parser.max_chars,
-                cfg.parser.min_chars,
-                overlap_chars=cfg.parser.overlap_chars,
+                cfg.parser,
                 root_dir=docs_root,
                 metadata=manual_node_attrs(metadata),
-                pdf_profile=cfg.parser.pdf_profile,
-                pdf_heading_hints=cfg.parser.pdf_heading_hints,
             )
         )
         if cfg.assets.enabled:

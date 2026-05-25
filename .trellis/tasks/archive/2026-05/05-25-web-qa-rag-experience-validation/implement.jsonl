@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend and web/API boundary checklist for QA flow validation."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Authoritative RAG answer/retrieve contract and user-facing endpoint surface."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "API, CLI, and web static/template module boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and privacy expectations for answer/evidence outputs."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared cross-layer and reuse thinking guide routing."}

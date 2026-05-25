@@ -44,6 +44,25 @@ Manual metadata can live next to each source file as `<manual>.metadata.json`:
 If no sidecar exists, TagMemoRAG creates fallback metadata from the relative path, filename, parent directory, and `language="unknown"`.
 During build, manual metadata is also mirrored into a generic document contract (`doc_id`, `domain`, `doc_type`, `attributes`) plus internal identity tags such as `brand:gorenje`, `model:nrk6192`, `category:fridge`, `doc:gorenje-nrk6192-zh-cn-v1`, and `manual:gorenje-nrk6192-zh-cn-v1`. These internal tags help retrieval narrow or boost by document identity; `/manuals` and search results continue to expose only the original user-facing metadata tags.
 
+Public web pages can be sampled into Markdown for general-knowledge RAG validation without committing fetched third-party content:
+
+```bash
+python -m tagmemorag knowledge sample-web \
+  --url https://docs.python.org/3/tutorial/index.html \
+  --output-dir .tmp/general-web-samples \
+  --kb general_web \
+  --domain software_docs \
+  --doc-type documentation \
+  --tag python
+
+python -m tagmemorag build \
+  --docs .tmp/general-web-samples/general_web \
+  --kb general_web \
+  --config config.yaml
+```
+
+Use `--preview` to fetch and parse pages without writing Markdown files. The sampler writes `.md` files plus sidecar metadata with `remote_id`, `url`, `domain`, and `doc_type` fields so public samples can feed the existing build and eval pipeline while remaining attributable.
+
 ### 2. Search from CLI
 
 ```bash
@@ -52,6 +71,38 @@ python -m tagmemorag search "蒸汽很小" --kb default --top-k 5
 
 Use `--debug-search` to add low-cardinality operator diagnostics to the JSON output without changing default CLI responses.
 When a query contains a known exact model, category alias, or brand, search can infer metadata narrowing before ranking. For example, `NRK6192 温度怎么调` hard-filters to chunks from the matching model when that model exists in the loaded KB. Explicit CLI/API filters always win over inferred filters, and empty inferred candidate sets fall back safely.
+
+### 2.5. Try a local RAG answer demo
+
+The offline demo uses the coffee-machine fixture, hashing embeddings, NPZ vector storage, and the noop answer provider. It does not require API keys, Qdrant, S3, or a running server.
+
+```bash
+bash scripts/seed_qa_demo.sh
+
+python -m tagmemorag demo qa "蒸汽很小怎么办？" \
+  --config examples/config/qa-demo.yaml \
+  --output .tmp/tagmemorag-qa-demo/qa-response.json
+```
+
+The JSON response includes the answer text, citation count, evidence count, bounded source metadata, `build_id`, `plan_id`, and warnings. The demo defaults to the top 2 evidence items for a cleaner first answer; pass `--top-k` to inspect more sources. The same payload is written to `--output` when provided.
+
+To verify the managed-manual path that a normal user exercises, run the local library-to-QA smoke:
+
+```bash
+python -m tagmemorag demo library-qa \
+  --config examples/config/qa-demo.yaml \
+  --output .tmp/tagmemorag-qa-demo/library-qa-response.json
+```
+
+That command uploads the demo service manual into the managed library, performs an incremental rebuild, confirms the manual is searchable, then asks `服务模式怎么进入？`. A passing report has `status: "passed"`, `manual.searchable: true`, `manual.chunk_count` greater than zero, and a cited source ending in `demo/demo-service-manual.md`.
+
+To try the same state through the browser:
+
+```bash
+python -m tagmemorag serve --config examples/config/qa-demo.yaml
+```
+
+Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with two chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `服务模式怎么进入？`, and confirm the answer mentions holding the clean and hot-water buttons for three seconds with `demo-service-manual.md` in the source list.
 
 Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
@@ -506,6 +557,49 @@ Safe recovery flows:
 
 The JSON APIs above remain the canonical backend contract. If API key auth is enabled, paste a Bearer token into the page token field; the browser stores it only in `sessionStorage` for the current session.
 
+### User Q&A page
+
+Open the user-facing manual question-answer page at:
+
+```text
+http://127.0.0.1:8000/qa
+```
+
+The page calls `POST /qa/answer` with the user's question only. The backend
+routes the question to an accessible loaded KB when it can, asks for
+clarification when multiple manual contexts are plausible, and returns a
+user-readable not-ready state when no KB is loaded. The page shows only the
+answer, clarification/error states, and cited source snippets. It hides
+debugging details such as plan ids, build ids, raw retrieval results, and
+answerability internals; use the RAG workbench below when you need those.
+
+For a fully local demo with deterministic offline answering:
+
+```bash
+scripts/seed_qa_demo.sh
+python -m tagmemorag serve --config examples/config/qa-demo.yaml
+```
+
+Then open `/qa` and ask `蒸汽很小怎么办？`. The demo builds the `default` KB
+from `tests/fixtures/coffee_machine.md` into `.tmp/tagmemorag-qa-demo/data`
+and enables the deterministic extractive noop answer provider, so the page
+returns an evidence-backed answer with cited source snippets without network
+access or provider keys.
+
+### RAG workbench
+
+Open the question-answer workbench at:
+
+```text
+http://127.0.0.1:8000/admin/rag-workbench
+```
+
+Use `?kb_name=product-a` to preselect another KB. The workbench calls
+`POST /answer` with `include_retrieve=true`, then shows the generated answer,
+citations, warnings, plan/build ids, answerability, cited evidence, and top
+retrieval results. Links in the top bar open the manual library and retrieval
+quality pages for the same KB.
+
 ### Retrieval quality feedback
 
 Search responses include `trace_id` and `search_id` so clients can attach bounded feedback to a specific retrieval interaction. Feedback is stored per KB at `storage.data_dir/{kb_name}/feedback/search-feedback.jsonl`; review state lives in `search-feedback-reviews.json`.
@@ -763,7 +857,7 @@ Use the checks for different questions:
 | `config validate` | Is this config coherent and locally satisfiable? |
 | `provider probe` | Do explicitly selected remote providers respond with the configured credentials/endpoints? |
 | `readiness smoke` | Do the deterministic MVP build/retrieve/answer/queryplan/bundle paths compose in this checkout? |
-| `pilot run` | Do the local config/probe/readiness/eval pilot checks compose into one retained rollout report? |
+| `pilot run` | Do the local config/probe/readiness/answer-quality/eval pilot checks compose into one retained rollout report? |
 | `/ready` | Is this running process ready to serve its loaded KB? |
 
 For a bounded pre-pilot gate and retained JSON/Markdown report, see [Production Pilot Runbook](docs/production-pilot-runbook.md):
@@ -773,6 +867,7 @@ python -m tagmemorag pilot run \
   --config examples/config/local-hashing-npz.yaml \
   --suite tests/fixtures/eval/coffee.jsonl \
   --docs tests/fixtures \
+  --answer-quality-suite tests/fixtures/answer_quality/basic.jsonl \
   --hashing-baseline tests/fixtures/eval/baselines/hashing.json \
   --production-baseline tests/fixtures/eval/baselines/siliconflow.json \
   --workdir .tmp/production-pilot \
@@ -986,6 +1081,117 @@ uv run python -m tagmemorag eval run \
   --output .tmp/eval/m25-reports/product-post.json \
   --min-recall-at-k 0 --min-mrr 0 --min-hit-at-k 0
 ```
+
+Use the general web suite to validate non-manual public documentation. It is not
+part of the default fixture-only CI gate because the corpus is seeded from live
+public URLs into `.tmp`:
+
+```bash
+scripts/seed_general_web_eval.sh
+
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --docs .tmp/general-web-eval/general_web \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 8 \
+  --min-recall-at-k 0.75 \
+  --min-mrr 0.4 \
+  --min-hit-at-k 0.75
+```
+
+Pair it with the generic documentation answer-quality diagnostic:
+
+```bash
+.venv/bin/python -m tagmemorag eval answer-quality \
+  --suite tests/fixtures/answer_quality/general_web.jsonl
+```
+
+To run the live seeded retrieval output through the local extractive answer
+generator and answer-quality checks:
+
+```bash
+.venv/bin/python scripts/diag_general_web_answer_eval.py \
+  --docs .tmp/general-web-eval/general_web \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web
+```
+
+The general web baseline covers real public pages across multiple domains:
+Python and GitHub software documentation (`domain=software_docs`), MDN HTTP
+caching documentation (`domain=web_platform_docs`), and USAGov/IRS public
+service help articles (`domain=public_service`). The GitHub repository case
+models multi-evidence retrieval explicitly: the repository/folder definition and
+the README/Markdown explanation may be returned as separate chunks. The MDN and
+IRS cases likewise include complementary evidence so answer-quality checks see
+more than a single easy snippet.
+
+Before shipping a reranking or evidence-usefulness change, compare baseline and
+candidate retained reports with the offline reranking evaluation gate:
+
+```bash
+.venv/bin/python scripts/reranking_eval_gate.py \
+  --baseline-readiness .tmp/eval/release-readiness-with-ranking-pressure.json \
+  --candidate-readiness .tmp/eval/rerank-batch-release-readiness.json \
+  --baseline-ranking-pressure .tmp/eval/general-web-ranking-pressure.json \
+  --candidate-ranking-pressure .tmp/eval/rerank-batch-ranking-pressure.json \
+  --format markdown
+```
+
+The gate fails if release readiness is no longer `passed`, if general-web
+hit/recall/MRR regresses, if ranking pressure gets worse, or if tracked GitHub
+pressure cases move later. Its output is bounded to metrics and checked-in case
+ids; do not commit generated `.tmp` reports.
+
+Use the multi-format real-knowledge suite to validate format diversity with
+real public sources. It materializes HTML-derived Markdown, a text-based public
+PDF, and DOCX-derived Markdown under `.tmp` before running the normal build and
+eval pipeline:
+
+```bash
+.venv/bin/python scripts/seed_multiformat_real_knowledge.py \
+  --output-dir .tmp/multiformat-real-knowledge \
+  --kb multiformat_real
+
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8 \
+  --min-recall-at-k 0.0 \
+  --min-mrr 0.0 \
+  --min-hit-at-k 0.0
+
+.venv/bin/python scripts/diag_multiformat_answer_eval.py \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+```
+
+The committed suite stores source URLs and expected evidence only. Downloaded
+PDF/DOCX files and converted Markdown remain runtime artifacts.
+
+Use the mixed-domain diagnostic to validate that real manuals and public docs
+can coexist in one shared KB without obvious top-ranked cross-domain pollution:
+
+```bash
+scripts/seed_general_web_eval.sh
+
+.venv/bin/python scripts/diag_mixed_domain_eval.py \
+  --stage-from-defaults \
+  --suite tests/fixtures/eval/mixed_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb mixed_knowledge
+```
+
+`--stage-from-defaults` copies real PDFs from `product_manuals/` and seeded
+public docs from `.tmp/general-web-eval/general_web` into a temporary mixed
+corpus. The suite uses one shared `kb_name` plus positive and negative
+expectations, so it catches both missed evidence and wrong-domain top results.
 
 For retrieval tuning, compare one bounded parameter change at a time and keep the JSON reports. `eval run` accepts search-parameter overrides for experiments without editing `config.yaml`:
 

@@ -4,7 +4,7 @@ import numpy as np
 
 from tagmemorag.config import GraphConfig, SearchConfig, Settings
 from tagmemorag.graph_builder import build_graph
-from tagmemorag.lexical_search import extract_lexical_tokens, lexical_search
+from tagmemorag.lexical_search import extract_lexical_tokens, lexical_evidence_score, lexical_search
 from tagmemorag.search_runtime import execute_search
 from tagmemorag.types import Chunk
 from tagmemorag.wave_searcher import wave_search
@@ -18,6 +18,7 @@ def test_extract_lexical_tokens_classifies_code_model_and_cjk_variants():
     assert "f07" in tokens["exact_code"]
     assert "07" not in tokens["ordinary"]
     assert "排水泵" in tokens["cjk"]
+    assert {"排水", "水泵"} <= tokens["cjk"]
     assert "and" not in tokens["ordinary"]
 
 
@@ -37,6 +38,204 @@ def test_lexical_search_matches_punctuation_and_cjk_terms():
     assert code_matches[0].node_id == 0
     assert code_matches[0].mode == "exact_code"
     assert cjk_matches[0].node_id == 0
+
+
+def test_lexical_search_uses_cjk_ngrams_for_partial_manual_terms():
+    graph = build_graph(
+        [
+            Chunk("將洗衣精倒入洗劑粉盒的前區。", "洗衣粉", ("洗衣粉",), 2, 1, "washer.md"),
+            Chunk("洗衣機門打開時，無法啟動機器。", "洗衣機門", ("洗衣機門",), 2, 2, "washer.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "洗劑粉盒怎麼用", candidate_k=5)
+
+    assert matches[0].node_id == 0
+    assert len(matches) == 1
+
+
+def test_lexical_search_rewards_multiple_ordinary_term_hits():
+    graph = build_graph(
+        [
+            Chunk("Ionizer system dries laundry by addition of ions.", "IONIZER SYSTEM", ("IONIZER SYSTEM",), 2, 1, "dryer.md"),
+            Chunk("General technical information.", "Technical information", ("Technical information",), 2, 2, "dryer.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "dryer ionizer system", candidate_k=5)
+
+    single_term_score = lexical_search(graph, "dryer ionizer", candidate_k=5)[0].score
+
+    assert matches[0].node_id == 0
+    assert matches[0].score > single_term_score
+
+
+def test_lexical_search_prioritizes_specific_multi_term_manual_body():
+    graph = build_graph(
+        [
+            Chunk("Step 2: Choosing the Cooking System", "Step 2: Choosing the Cooking System", ("Step 2",), 2, 1, "oven.md"),
+            Chunk(
+                "The bottom heater, the round heater, and the hot air fan operate.",
+                "HOT AIR AND BOTTOM HEATER 200",
+                ("Cooking systems",),
+                2,
+                2,
+                "oven.md",
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "oven cooking system hot air bottom heater", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_prioritizes_dense_body_hits_over_broad_page_chrome():
+    graph = build_graph(
+        [
+            Chunk(
+                "GitHub Docs navigation repository README Markdown project search menu.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "A repository is a folder that contains related items. README files are written in Markdown.",
+                "About repositories and README files",
+                ("Hello World - GitHub Docs", "About repositories"),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub repository README Markdown project folder", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_prioritizes_body_phrase_over_repeated_page_title_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The Python Tutorial documentation source modules index navigation.",
+                "The Python Tutorial — Python documentation",
+                ("The Python Tutorial",),
+                2,
+                1,
+                "public_web/python.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "The Python interpreter and the extensive standard library are freely available in source or binary form.",
+                "The Python Tutorial — Python documentation",
+                ("The Python Tutorial",),
+                2,
+                2,
+                "public_web/python.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "Python standard library source binary modules documentation", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_rewards_compact_body_evidence_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The overview mentions pull requests in the GitHub workflow. "
+                "Branches and commits are covered later. Review and merge steps appear near the end.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "Pull requests are the heart of collaboration on GitHub. "
+                "When you open a pull request, you are requesting that someone review and pull in your contribution.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub pull request workflow branches commits review merge contribution", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_normalizes_simple_english_plural_terms():
+    graph = build_graph(
+        [
+            Chunk(
+                "The overview mentions repositories and files in broad navigation.",
+                "Hello World - GitHub Docs",
+                ("Hello World - GitHub Docs",),
+                2,
+                1,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+            Chunk(
+                "You can think of a repository as a folder that contains related items. "
+                "Repository files include README files written in Markdown.",
+                "About repositories",
+                ("Hello World - GitHub Docs", "About repositories"),
+                2,
+                2,
+                "public_web/github.md",
+                metadata={"product_category": "software_docs", "domain": "software_docs"},
+            ),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "GitHub repositories README files Markdown project folders", candidate_k=5)
+
+    assert matches[0].node_id == 1
+
+
+def test_lexical_search_does_not_reward_source_file_category_as_topic_hit():
+    graph = build_graph(
+        [
+            Chunk("Display controls set the fridge and freezer temperature.", "Display controls", ("Display controls",), 2, 1, "refrigerator/manual.md"),
+            Chunk("Installing Your New Appliance.", "Installing Your New Appliance", ("Installing Your New Appliance",), 2, 2, "refrigerator/manual.md"),
+        ],
+        np.array([[1, 0], [0, 1]], dtype=np.float32),
+        GraphConfig(sim_threshold=0.0),
+    )
+
+    matches = lexical_search(graph, "refrigerator display controls", candidate_k=5)
+
+    assert [match.node_id for match in matches] == [0]
 
 
 def test_wave_search_lexical_seed_recovers_short_exact_term():
@@ -62,6 +261,54 @@ def test_wave_search_lexical_seed_recovers_short_exact_term():
 
     assert without_lexical[0].node_id == 0
     assert with_lexical[0].node_id == 1
+
+
+def test_wave_search_prefers_dense_query_evidence_for_exact_score_ties():
+    chunks = [
+        Chunk(
+            "Generic GitHub workflow overview with repository and pull requests.",
+            "Hello World - GitHub Docs",
+            ("Hello World - GitHub Docs",),
+            2,
+            1,
+            "public_web/github.md",
+            metadata={"domain": "software_docs"},
+        ),
+        Chunk(
+            "A repository is a folder that contains related items. "
+            "README files are written in Markdown for project notes.",
+            "Hello World - GitHub Docs",
+            ("Hello World - GitHub Docs",),
+            2,
+            2,
+            "public_web/github.md",
+            metadata={"domain": "software_docs"},
+        ),
+    ]
+    vectors = np.array([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32)
+    graph = build_graph(chunks, vectors, GraphConfig(sim_threshold=0.0))
+
+    results = wave_search(
+        np.array([1.0, 0.0], dtype=np.float32),
+        graph,
+        vectors,
+        top_k=2,
+        source_k=2,
+        steps=0,
+        query_text="GitHub repository README Markdown project folder",
+    )
+
+    assert [result.node_id for result in results] == [1, 0]
+
+
+def test_lexical_evidence_score_penalizes_short_english_heading_fragments():
+    dense = {"header": "STEAM CLEAN", "text": "Use this function to remove stains and food residues from the oven."}
+    fragment = {"header": "STEAM CLEAN", "text": "USING THE STEAM CLEAN FUNCTION TO"}
+
+    assert lexical_evidence_score("oven steam clean function remove stains", dense) > lexical_evidence_score(
+        "oven steam clean function remove stains",
+        fragment,
+    )
 
 
 def test_execute_search_lexical_respects_filters():

@@ -35,7 +35,7 @@ from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
 from .ocr import OCRSummary, create_ocr_provider
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES, parse_document, parse_document_with_ocr_summary
+from .parser_provider import parse_chunks_for_config, parse_document_for_config, supported_document_suffixes
 from .rebuild_impact import ManualImpact, RebuildImpactReport, impact_path, make_impact_report, save_rebuild_impact
 from .storage.atomic import atomic_write
 from .storage.json_anchor import JsonAnchorStore
@@ -1141,9 +1141,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         asset_summary = AssetExtractionSummary()
         ocr_provider = create_ocr_provider(cfg)
         ocr_summary = OCRSummary()
-        document_paths = (
-            p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_DOCUMENT_SUFFIXES
-        )
+        supported_suffixes = supported_document_suffixes(cfg.parser)
+        document_paths = (p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in supported_suffixes)
         seen_manual_ids: set[str] = set()
         for path in sorted(document_paths):
             metadata = load_manual_metadata(path, docs_root, seen_manual_ids=seen_manual_ids)
@@ -1152,15 +1151,11 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                     asset_manifest = remove_document_assets(asset_manifest, metadata.manual_id, mark_deleted=True)
                 continue
             manual_tags_by_id[metadata.manual_id] = metadata.tags
-            parsed = parse_document_with_ocr_summary(
+            parsed = parse_document_for_config(
                 path,
-                cfg.parser.max_chars,
-                cfg.parser.min_chars,
-                overlap_chars=cfg.parser.overlap_chars,
+                cfg.parser,
                 root_dir=docs_root,
                 metadata=manual_node_attrs(metadata),
-                pdf_profile=cfg.parser.pdf_profile,
-                pdf_heading_hints=cfg.parser.pdf_heading_hints,
                 ocr_provider=ocr_provider,
                 ocr_enabled=cfg.ocr.enabled,
                 ocr_strict=cfg.ocr.strict_extraction,
@@ -1451,15 +1446,11 @@ def _estimate_dirty_chunks(docs_dir: str | Path, kb_name: str, cfg: Settings, ma
         if not is_active_status(metadata.status):
             continue
         total += len(
-            parse_document(
+            parse_chunks_for_config(
                 path,
-                cfg.parser.max_chars,
-                cfg.parser.min_chars,
-                overlap_chars=cfg.parser.overlap_chars,
+                cfg.parser,
                 root_dir=docs_root,
                 metadata=manual_node_attrs(metadata),
-                pdf_profile=cfg.parser.pdf_profile,
-                pdf_heading_hints=cfg.parser.pdf_heading_hints,
             )
         )
     return total

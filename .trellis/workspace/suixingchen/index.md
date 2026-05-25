@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-1.md`
-- **Total Sessions**: 43
-- **Last Active**: 2026-05-21
+- **Active File**: `journal-3.md`
+- **Total Sessions**: 110
+- **Last Active**: 2026-05-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,9 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1663 | Active |
+| `journal-3.md` | ~604 | Active |
+| `journal-2.md` | ~1975 | Archived |
+| `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +31,73 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 110 | 2026-05-25 | Fix PR quality CI failures | `a89a71b` | `codex/agent-loop-driver` |
+| 109 | 2026-05-25 | Manual Library QA navigation | `8979f8a` | `codex/agent-loop-driver` |
+| 108 | 2026-05-25 | Browser QA followup context | `d55d01b` | `codex/agent-loop-driver` |
+| 107 | 2026-05-25 | Browser QA evidence limits | `f132104` | `codex/agent-loop-driver` |
+| 106 | 2026-05-25 | Browser RAG failure states | `81a44ff` | `codex/agent-loop-driver` |
+| 105 | 2026-05-25 | Browser upload QA smoke | `928ee6d` | `codex/agent-loop-driver` |
+| 104 | 2026-05-25 | Document browser RAG user flow | `3548529` | `codex/agent-loop-driver` |
+| 103 | 2026-05-25 | Manual library to QA smoke | `8b75b08` | `codex/agent-loop-driver` |
+| 102 | 2026-05-25 | Web QA RAG validation | `6a2511c` | `codex/agent-loop-driver` |
+| 101 | 2026-05-25 | Local QA demo path | `13848a9` | `codex/agent-loop-driver` |
+| 100 | 2026-05-25 | Complete general RAG stability program | `d1c479a`, `bcffa6c`, `b77af8c`, `60dc36b`, `fe7a9fb`, `713c748` | `codex/agent-loop-driver` |
+| 99 | 2026-05-24 | Document reranking evaluation gate | `c7efc9f` | `codex/agent-loop-driver` |
+| 98 | 2026-05-24 | Reranking evaluation gate runner | `f6168a5` | `codex/agent-loop-driver` |
+| 97 | 2026-05-24 | Reranking evaluation gate plan | `422c42e` | `codex/agent-loop-driver` |
+| 96 | 2026-05-24 | GitHub ranking pressure root cause | `08acf40` | `codex/agent-loop-driver` |
+| 95 | 2026-05-24 | Release readiness ranking pressure hint | `1c3015a` | `codex/agent-loop-driver` |
+| 94 | 2026-05-24 | General-web ranking pressure diagnostic | `9b62b40` | `codex/agent-loop-driver` |
+| 93 | 2026-05-24 | Journal rollover | - | `codex/agent-loop-driver` |
+| 92 | 2026-05-24 | Release readiness baseline | `5be08ee` | `codex/agent-loop-driver` |
+| 91 | 2026-05-24 | General-web evidence labels | `4d6a6d2` | `codex/agent-loop-driver` |
+| 90 | 2026-05-24 | General-web MRR diagnostic | `e6a5bf0` | `codex/agent-loop-driver` |
+| 89 | 2026-05-24 | General RAG release warning hardening | `19f9f69`, `2a29fa2` | `codex/agent-loop-driver` |
+| 88 | 2026-05-24 | Long-horizon RAG quality completion | `9266c7c`, `0f07064`, `dc4304c`, `655e8e5`, `2e7fa85`, `91fba71`, `3b71a10`, `20101eb` | `codex/agent-loop-driver` |
+| 87 | 2026-05-23 | Complete API entrypoint split | `3a8582a` | `codex/agent-loop-driver` |
+| 86 | 2026-05-23 | Slim API entrypoint | `da9f6a4` | `codex/agent-loop-driver` |
+| 85 | 2026-05-23 | Complete CLI entrypoint split | `b801c2d` | `codex/agent-loop-driver` |
+| 84 | 2026-05-23 | CLI provider command extraction | `085d059` | `codex/agent-loop-driver` |
+| 83 | 2026-05-23 | CLI source import command extraction | `c2e5575` | `codex/agent-loop-driver` |
+| 82 | 2026-05-23 | CLI feedback command extraction | `b0225c3` | `codex/agent-loop-driver` |
+| 81 | 2026-05-23 | API CLI entrypoint slimming | `8a50ac2` | `codex/agent-loop-driver` |
+| 80 | 2026-05-23 | Answer intent classification | `219253d` | `codex/agent-loop-driver` |
+| 79 | 2026-05-23 | Live general web answer diagnostic | `239c3ea` | `codex/agent-loop-driver` |
+| 78 | 2026-05-23 | General web answer quality suite | `20b38e6` | `codex/agent-loop-driver` |
+| 77 | 2026-05-23 | Aggregate generic multi-evidence answers | `7953eb3` | `codex/agent-loop-driver` |
+| 76 | 2026-05-22 | General web multi-evidence eval | `27a4b8e` | `codex/agent-loop-driver` |
+| 75 | 2026-05-22 | General web eval suite | `7a1d37f` | `codex/agent-loop-driver` |
+| 74 | 2026-05-22 | Generic document metadata | `e95a188` | `codex/agent-loop-driver` |
+| 73 | 2026-05-22 | Public web knowledge sampler | `f98dcef` | `codex/agent-loop-driver` |
+| 72 | 2026-05-22 | General RAG robustness direction | `109d771` | `codex/agent-loop-driver` |
+| 71 | 2026-05-22 | ManualsLib real sample quality slice | `c2b5da7` | `codex/agent-loop-driver` |
+| 70 | 2026-05-22 | ManualsLib OpenCLI batch import | `22380f3` | `codex/agent-loop-driver` |
+| 69 | 2026-05-22 | Manualslib real manual validation | `71dbed4` | `codex/agent-loop-driver` |
+| 68 | 2026-05-22 | Manual evidence ranking quality | `7d67050` | `codex/agent-loop-driver` |
+| 67 | 2026-05-22 | Real manual retrieval quality | `3066b98` | `codex/agent-loop-driver` |
+| 66 | 2026-05-22 | QA answer generator quality | `3c0723b` | `codex/agent-loop-driver` |
+| 65 | 2026-05-22 | QA answer quality eval | - | `codex/agent-loop-driver` |
+| 64 | 2026-05-22 | QA context transparency | - | `codex/agent-loop-driver` |
+| 63 | 2026-05-22 | QA session memory | - | `codex/agent-loop-driver` |
+| 62 | 2026-05-22 | QA follow-up context | - | `codex/agent-loop-driver` |
+| 61 | 2026-05-22 | QA local conversation UX | - | `codex/agent-loop-driver` |
+| 60 | 2026-05-22 | QA answer polish UX | - | `codex/agent-loop-driver` |
+| 59 | 2026-05-22 | QA quick starts and copy | `2047ecd` | `codex/agent-loop-driver` |
+| 58 | 2026-05-22 | Stepwise QA answer UX | `033844c` | `codex/agent-loop-driver` |
+| 57 | 2026-05-22 | Clickable QA citations | `a07b788` | `codex/agent-loop-driver` |
+| 56 | 2026-05-22 | Multi evidence extractive answers | `34fd658` | `codex/agent-loop-driver` |
+| 55 | 2026-05-22 | Extractive noop demo answers | `16a544f` | `codex/agent-loop-driver` |
+| 54 | 2026-05-22 | QA demo seed smoke | `0c0ebfd` | `codex/agent-loop-driver` |
+| 53 | 2026-05-22 | Journal rollover | - | `codex/agent-loop-driver` |
+| 52 | 2026-05-22 | Question routing QA MVP | `03de5e6` | `codex/agent-loop-driver` |
+| 51 | 2026-05-22 | Hide QA KB selector | `2e83530` | `codex/agent-loop-driver` |
+| 50 | 2026-05-22 | QA three-pane layout | `f77f9f9` | `codex/agent-loop-driver` |
+| 49 | 2026-05-22 | User-facing QA page MVP | `97e603a` | `codex/agent-loop-driver` |
+| 48 | 2026-05-22 | RAG Workbench MVP | `7949354` | `codex/agent-loop-driver` |
+| 47 | 2026-05-22 | Production pilot verification v2 | `f82a15f` | `codex/agent-loop-driver` |
+| 46 | 2026-05-22 | Align bulk import severity | `6ba5a7d` | `codex/agent-loop-driver` |
+| 45 | 2026-05-22 | Complete RAG capability roadmap | `b4b5569`, `680c284`, `1170ac9`, `7850297`, `03eaccf`, `8dae5c7`, `68e1ad1` | `codex/agent-loop-driver` |
+| 44 | 2026-05-21 | Agentic RAG mode toggle MVP | `2340ca4`, `d3b1e53`, `0270af9`, `3ea8eaf`, `7ddff0b`, `e9cb012`, `f579488` | `codex/agent-loop-driver` |
 | 43 | 2026-05-21 | Record live provider pilot verification | `877d0f8` | `codex/live-pilot-provider-verification` |
 | 42 | 2026-05-20 | Harden verify Docker diagnostics | `1ac772b` | `codex/verify-docker-diagnostics-hardening` |
 | 41 | 2026-05-20 | Clean environment delivery verification | `20eaab9` | `codex/clean-env-delivery-verification` |

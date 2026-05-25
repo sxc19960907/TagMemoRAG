@@ -32,6 +32,7 @@ from .plan import QueryPlan
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..config import Settings
+    from ..agentic.state import StepRecord
 
 
 PLAN_LOG_FILENAME = "query_plans.db"
@@ -64,6 +65,26 @@ CREATE INDEX idx_plans_kb_generation ON plans(kb_name, served_by_generation);
 CREATE INDEX idx_plans_kb_intent ON plans(kb_name, intent);
 """
 
+_CREATE_STEPS_SQL = """
+CREATE TABLE IF NOT EXISTS plan_steps (
+    plan_id TEXT NOT NULL,
+    step_idx INTEGER NOT NULL,
+    tool TEXT NOT NULL,
+    args_json TEXT NOT NULL,
+    observation_json TEXT NOT NULL,
+    signal TEXT NOT NULL,
+    decision_source TEXT NOT NULL,
+    top1_score REAL,
+    margin REAL,
+    depth INTEGER,
+    rationale TEXT,
+    tokens INTEGER,
+    latency_ms INTEGER,
+    ts TEXT NOT NULL,
+    PRIMARY KEY (plan_id, step_idx)
+)
+"""
+
 _INSERT_BASIC_SQL = """
 INSERT INTO plans (
     plan_id, schema_version, kb_name, query_hash,
@@ -88,6 +109,18 @@ UPDATE plans SET
 WHERE plan_id = :plan_id
 """
 
+_INSERT_STEP_SQL = """
+INSERT OR REPLACE INTO plan_steps (
+    plan_id, step_idx, tool, args_json, observation_json,
+    signal, decision_source, top1_score, margin, depth,
+    rationale, tokens, latency_ms, ts
+) VALUES (
+    :plan_id, :step_idx, :tool, :args_json, :observation_json,
+    :signal, :decision_source, :top1_score, :margin, :depth,
+    :rationale, :tokens, :latency_ms, :ts
+)
+"""
+
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """Run migration on first connect.
@@ -100,10 +133,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     user_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
     if user_version == 0:
         conn.executescript(_SCHEMA_V1_SQL)
+        conn.execute(_CREATE_STEPS_SQL)
         conn.execute(f"PRAGMA user_version = {PLAN_LOG_SCHEMA_VERSION}")
         conn.commit()
         return
     if user_version == PLAN_LOG_SCHEMA_VERSION:
+        conn.execute(_CREATE_STEPS_SQL)
+        conn.commit()
         return
     raise ServiceError(
         ErrorCode.STORAGE_SCHEMA_MISMATCH,
@@ -122,14 +158,23 @@ class BackgroundWriter:
     """
 
     def __init__(self, max_queue: int = 1024):
-        self._queue: queue.Queue[tuple[str, str, dict, str]] = queue.Queue(maxsize=max_queue)
+        self._queue: queue.Queue[tuple[str, str, dict, str, str]] = queue.Queue(maxsize=max_queue)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True, name="queryplan-writer")
         self._thread.start()
 
     def enqueue(self, kb_name: str, db_path: str, plan_id: str, result: dict) -> None:
+        self.enqueue_update(kb_name, db_path, plan_id, result)
+
+    def enqueue_update(self, kb_name: str, db_path: str, plan_id: str, result: dict) -> None:
         try:
-            self._queue.put_nowait((kb_name, db_path, result, plan_id))
+            self._queue.put_nowait(("update", kb_name, db_path, result, plan_id))
+        except queue.Full:
+            get_metrics().record_plan_log_event(kb_name=kb_name, event="queue_overflow")
+
+    def enqueue_step(self, kb_name: str, db_path: str, plan_id: str, row: dict) -> None:
+        try:
+            self._queue.put_nowait(("step", kb_name, db_path, row, plan_id))
         except queue.Full:
             get_metrics().record_plan_log_event(kb_name=kb_name, event="queue_overflow")
 
@@ -142,7 +187,7 @@ class BackgroundWriter:
 
         # Push a sentinel; when worker processes it, end is set.
         try:
-            self._queue.put_nowait(("__sentinel__", "", {"__sentinel__": _sentinel}, ""))
+            self._queue.put_nowait(("sentinel", "__sentinel__", "", {"__sentinel__": _sentinel}, ""))
         except queue.Full:
             return
         end.wait(timeout=timeout)
@@ -150,11 +195,16 @@ class BackgroundWriter:
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                kb_name, db_path, result, plan_id = self._queue.get(timeout=0.5)
+                item = self._queue.get(timeout=0.5)
             except queue.Empty:
                 continue
+            if len(item) == 4:
+                kb_name, db_path, result, plan_id = item
+                kind = "update"
+            else:
+                kind, kb_name, db_path, result, plan_id = item
             # Sentinel handling for tests
-            if kb_name == "__sentinel__":
+            if kind == "sentinel" or kb_name == "__sentinel__":
                 fn = result.get("__sentinel__")
                 if callable(fn):
                     try:
@@ -163,11 +213,16 @@ class BackgroundWriter:
                         pass
                 continue
             try:
-                _do_update(db_path, plan_id, result)
+                if kind == "step":
+                    _do_insert_step(db_path, result)
+                else:
+                    _do_update(db_path, plan_id, result)
             except Exception as exc:  # noqa: BLE001
-                get_metrics().record_plan_log_event(kb_name=kb_name, event="update_failed")
+                event = "step_insert_failed" if kind == "step" else "update_failed"
+                get_metrics().record_plan_log_event(kb_name=kb_name, event=event)
                 _LOGGER.warning(
-                    "plan_log_update_failed",
+                    "plan_log_write_failed",
+                    write_kind=kind,
                     kb_name=kb_name,
                     plan_id=plan_id,
                     error_type=type(exc).__name__,
@@ -218,6 +273,18 @@ def _do_update(db_path: str, plan_id: str, result: dict) -> None:
             "warnings_json": result.get("warnings_json"),
         }
         conn.execute(_UPDATE_RESULT_SQL, params)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _do_insert_step(db_path: str, row: dict) -> None:
+    if not db_path:
+        return
+    conn = sqlite3.connect(db_path, timeout=2.0)
+    try:
+        _ensure_schema(conn)
+        conn.execute(_INSERT_STEP_SQL, row)
         conn.commit()
     finally:
         conn.close()
@@ -288,6 +355,29 @@ class PlanLog:
                 normalized[k] = v
         self._writer.enqueue(self.kb_name, self._db_path, plan_id, normalized)
 
+    def append_step_async(self, plan_id: str, record: "StepRecord") -> None:
+        """Queue a plan_steps insert. Non-blocking. Drops on overflow."""
+        row = _step_record_row(plan_id, record)
+        self._writer.enqueue_step(self.kb_name, self._db_path, plan_id, row)
+
+    def load_steps(self, plan_id: str) -> list["StepRecord"]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT step_idx, tool, args_json, observation_json, signal, "
+            "decision_source, top1_score, margin, depth, rationale, tokens, "
+            "latency_ms, ts FROM plan_steps WHERE plan_id = ? ORDER BY step_idx ASC",
+            (plan_id,),
+        ).fetchall()
+        return [_row_to_step_record(row) for row in rows]
+
+    def has_steps(self, plan_id: str) -> bool:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM plan_steps WHERE plan_id = ? LIMIT 1",
+            (plan_id,),
+        ).fetchone()
+        return row is not None
+
     def close(self) -> None:
         if self._conn is not None:
             try:
@@ -324,6 +414,63 @@ def prune_expired(kb_name: str, settings: "Settings") -> int:
         return deleted
     finally:
         conn.close()
+
+
+def _step_record_row(plan_id: str, record: "StepRecord") -> dict[str, Any]:
+    grade = record.grade
+    return {
+        "plan_id": plan_id,
+        "step_idx": int(record.step_idx),
+        "tool": record.tool,
+        "args_json": json.dumps(record.args, ensure_ascii=False, sort_keys=True),
+        "observation_json": json.dumps(record.observation.to_dict(), ensure_ascii=False, sort_keys=True),
+        "signal": grade.signal if grade is not None else "no_signal",
+        "decision_source": record.decision_source,
+        "top1_score": grade.top1_score if grade is not None else None,
+        "margin": grade.margin if grade is not None else None,
+        "depth": grade.depth if grade is not None else None,
+        "rationale": record.rationale,
+        "tokens": int(record.observation.tokens_consumed),
+        "latency_ms": int(record.observation.latency_ms),
+        "ts": record.ts,
+    }
+
+
+def _row_to_step_record(row: sqlite3.Row | tuple[Any, ...]) -> "StepRecord":
+    from ..agentic.state import GradeOutcome, StepRecord, ToolObservation
+
+    (
+        step_idx,
+        tool,
+        args_json,
+        observation_json,
+        signal,
+        decision_source,
+        top1_score,
+        margin,
+        depth,
+        rationale,
+        _tokens,
+        _latency_ms,
+        ts,
+    ) = row
+    grade = GradeOutcome(
+        top1_score=float(top1_score or 0.0),
+        margin=float(margin or 0.0),
+        depth=int(depth or 0),
+        signal=str(signal or "no_signal"),  # type: ignore[arg-type]
+        reason=str(rationale or ""),
+    )
+    return StepRecord(
+        step_idx=int(step_idx),
+        tool=str(tool),
+        args=json.loads(str(args_json or "{}")),
+        observation=ToolObservation.from_dict(json.loads(str(observation_json or "{}"))),
+        grade=grade,
+        decision_source=str(decision_source or "rule"),  # type: ignore[arg-type]
+        rationale=str(rationale or ""),
+        ts=str(ts or ""),
+    )
 
 
 __all__ = [

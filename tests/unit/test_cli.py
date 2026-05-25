@@ -5,7 +5,14 @@ import subprocess
 import sys
 
 from tagmemorag import cli
+from tagmemorag import cli_basic
+from tagmemorag import cli_eval
+from tagmemorag import cli_provider
+from tagmemorag import cli_source_import
+from tagmemorag.demo import summarize_demo_qa_response
 from tagmemorag import readiness
+from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
+from tagmemorag.public_web_import import PublicWebDocument, PublicWebImportReport
 
 
 def test_cli_build_and_search_with_hashing_embedder(tmp_path):
@@ -99,6 +106,151 @@ manual_library:
     assert "TMR_ABSENT_FOR_CLI_TEST" in json.dumps(body)
 
 
+def test_cli_demo_qa_wires_arguments_and_outputs_summary(tmp_path, monkeypatch, capsys):
+    captured = {}
+
+    def fake_run_demo_qa(options):
+        captured["options"] = options
+        return {
+            "schema_version": "demo_qa.v1",
+            "status": "passed",
+            "question": options.question,
+            "kb_name": options.kb_name,
+            "answer": {"kind": "answer"},
+            "retrieve": {"evidence_count": 1},
+        }
+
+    monkeypatch.setattr(cli_basic, "run_demo_qa", fake_run_demo_qa)
+
+    exit_code = cli.main(
+        [
+            "demo",
+            "qa",
+            "蒸汽很小怎么办？",
+            "--config",
+            "examples/config/qa-demo.yaml",
+            "--kb",
+            "default",
+            "--top-k",
+            "3",
+            "--source-k",
+            "5",
+            "--token-budget",
+            "1024",
+            "--output",
+            str(tmp_path / "qa.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert options.question == "蒸汽很小怎么办？"
+    assert options.config_path == "examples/config/qa-demo.yaml"
+    assert options.kb_name == "default"
+    assert options.top_k == 3
+    assert options.source_k == 5
+    assert options.token_budget == 1024
+    assert options.output_path == str(tmp_path / "qa.json")
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "demo_qa.v1"
+    assert body["status"] == "passed"
+
+
+def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monkeypatch, capsys):
+    captured = {}
+
+    def fake_run_demo_library_qa(options):
+        captured["options"] = options
+        return {
+            "schema_version": "demo_library_qa.v1",
+            "status": "passed",
+            "kb_name": options.kb_name,
+            "manual_id": options.manual_id,
+            "qa": {"answer_kind": "answer"},
+        }
+
+    monkeypatch.setattr(cli_basic, "run_demo_library_qa", fake_run_demo_library_qa)
+
+    exit_code = cli.main(
+        [
+            "demo",
+            "library-qa",
+            "--config",
+            "examples/config/qa-demo.yaml",
+            "--kb",
+            "default",
+            "--manual-id",
+            "demo-service-manual",
+            "--question",
+            "服务模式怎么进入？",
+            "--output",
+            str(tmp_path / "library-qa.json"),
+            "--no-overwrite",
+        ]
+    )
+
+    assert exit_code == 0
+    options = captured["options"]
+    assert options.config_path == "examples/config/qa-demo.yaml"
+    assert options.kb_name == "default"
+    assert options.manual_id == "demo-service-manual"
+    assert options.question == "服务模式怎么进入？"
+    assert options.output_path == str(tmp_path / "library-qa.json")
+    assert options.overwrite is False
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "demo_library_qa.v1"
+    assert body["status"] == "passed"
+
+
+def test_demo_qa_summary_is_bounded_and_user_visible():
+    payload = summarize_demo_qa_response(
+        "蒸汽很小怎么办？",
+        {
+            "kb_name": "default",
+            "build_id": "build-1",
+            "plan_id": "plan-1",
+            "answer": {
+                "kind": "answer",
+                "text": "建议清洗喷嘴 [cit_001]",
+                "citations": [{"citation_id": "cit_001"}],
+                "confidence": 0.9,
+                "model_id": "noop",
+                "prompt_version": "answer_prompt.v1",
+            },
+            "retrieve": {
+                "answerability": {"answerable": True},
+                "evidence": [
+                    {
+                        "evidence_id": "ev_001",
+                        "citation_id": "cit_001",
+                        "source_file": "coffee_machine.md",
+                        "section_path": ["维护与清洁", "喷嘴清洗"],
+                        "score": 0.7,
+                        "text": "喷嘴堵塞会造成蒸汽变小",
+                    }
+                ],
+                "citations": [{"citation_id": "cit_001"}],
+            },
+            "warnings": ["answer_noop_provider"],
+        },
+    )
+
+    assert payload["status"] == "passed"
+    assert payload["answer"]["kind"] == "answer"
+    assert payload["answer"]["text"] == "建议清洗喷嘴 [cit_001]"
+    assert payload["retrieve"]["evidence_count"] == 1
+    assert payload["retrieve"]["sources"] == [
+        {
+            "evidence_id": "ev_001",
+            "citation_id": "cit_001",
+            "source_file": "coffee_machine.md",
+            "section_path": ["维护与清洁", "喷嘴清洗"],
+            "score": 0.7,
+        }
+    ]
+    assert "喷嘴堵塞会造成蒸汽变小" not in json.dumps(payload, ensure_ascii=False)
+
+
 def test_cli_provider_probe_all_skipped_for_local_profile(capsys):
     exit_code = cli.main(["provider", "probe", "--config", "examples/config/local-hashing-npz.yaml", "--all"])
 
@@ -139,6 +291,68 @@ answer:
     assert body["probes"][0]["detail"]["env"] == "TMR_ABSENT_PROVIDER_PROBE_KEY"
 
 
+def test_cli_knowledge_sample_web_wires_arguments(monkeypatch, tmp_path, capsys):
+    captured = {}
+
+    def fake_import_public_web(urls, **kwargs):
+        captured["urls"] = urls
+        captured.update(kwargs)
+        return PublicWebImportReport(
+            status="preview",
+            preview=True,
+            kb_name=kwargs["kb_name"],
+            output_dir=kwargs["output_dir"],
+            documents=(
+                PublicWebDocument(
+                    url=urls[0],
+                    title="Python Tutorial",
+                    markdown="# Python Tutorial\n",
+                    source_file="public_web/python.md",
+                    domain=kwargs["domain"],
+                    doc_type=kwargs["doc_type"],
+                    tags=kwargs["tags"],
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(cli_source_import, "import_public_web", fake_import_public_web)
+
+    exit_code = cli.main(
+        [
+            "knowledge",
+            "sample-web",
+            "--url",
+            "https://docs.python.org/3/tutorial/index.html",
+            "--output-dir",
+            str(tmp_path),
+            "--kb",
+            "general",
+            "--domain",
+            "software_docs",
+            "--doc-type",
+            "tutorial",
+            "--tag",
+            "python",
+            "--preview",
+            "--timeout-seconds",
+            "3",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["urls"] == ("https://docs.python.org/3/tutorial/index.html",)
+    assert captured["output_dir"] == str(tmp_path)
+    assert captured["kb_name"] == "general"
+    assert captured["domain"] == "software_docs"
+    assert captured["doc_type"] == "tutorial"
+    assert captured["tags"] == ("python",)
+    assert captured["preview"] is True
+    assert captured["timeout_seconds"] == 3.0
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "public_web_import.v1"
+    assert body["status"] == "preview"
+
+
 def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, capsys):
     output = tmp_path / "smoke.json"
     captured = {}
@@ -159,8 +373,8 @@ def test_cli_production_provider_smoke_wires_arguments(tmp_path, monkeypatch, ca
     def fake_write(report, path, *, fmt):
         captured["written"] = (report.status, path, fmt)
 
-    monkeypatch.setattr(cli, "run_production_provider_smoke", fake_run)
-    monkeypatch.setattr(cli, "write_provider_smoke_report", fake_write)
+    monkeypatch.setattr(cli_provider, "run_production_provider_smoke", fake_run)
+    monkeypatch.setattr(cli_provider, "write_provider_smoke_report", fake_write)
 
     exit_code = cli.main(
         [
@@ -243,7 +457,7 @@ def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
             workdir="/tmp/tagmemorag-readiness-test",
         )
 
-    monkeypatch.setattr(cli, "run_readiness_smoke", _failed_smoke)
+    monkeypatch.setattr(cli_eval, "run_readiness_smoke", _failed_smoke)
 
     exit_code = cli.main(["readiness", "smoke"])
 
@@ -270,7 +484,7 @@ def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):
             next_steps=["Retain the pilot report."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
     output = tmp_path / "pilot.json"
 
     exit_code = cli.main(["pilot", "run", "--output", str(output)])
@@ -299,7 +513,7 @@ def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
             next_steps=["Review warning stages."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
 
     exit_code = cli.main([
         "pilot",
@@ -335,7 +549,7 @@ def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
             next_steps=["Investigate failed stage(s): eval."],
         )
 
-    monkeypatch.setattr(cli, "run_production_pilot", _fake_pilot)
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
 
     exit_code = cli.main(["pilot", "run", "--format", "markdown"])
 
@@ -658,6 +872,8 @@ storage:
                 "0.08",
                 "--tag-boost",
                 "0.05",
+                "--force-mode",
+                "agentic",
                 "--eval-data-dir",
                 str(tmp_path / "eval-data"),
                 "--min-recall-at-k",
@@ -676,6 +892,7 @@ storage:
     assert report["config_snapshot"]["search"]["source_k"] == 4
     assert report["config_snapshot"]["search"]["aggregate"] == "sum"
     assert report["config_snapshot"]["search"]["metadata_field_boost"] == 0.08
+    assert report["config_snapshot"]["agentic"]["force_mode"] == "agentic"
 
 
 def test_cli_qdrant_inspect_outputs_safe_report(tmp_path, capsys, monkeypatch, fake_embedder):
@@ -734,7 +951,7 @@ server:
         called["app"] = app
         called["kwargs"] = kwargs
 
-    monkeypatch.setattr(cli.uvicorn, "run", fake_run)
+    monkeypatch.setattr(cli_basic.uvicorn, "run", fake_run)
 
     assert cli.main(["serve", "--config", str(config)]) == 0
     assert called["kwargs"]["host"] == "127.0.0.9"
@@ -798,6 +1015,70 @@ manual_library:
     )
     result = json.loads(capsys.readouterr().out)
     assert result["imported_count"] == 1
+
+
+def test_cli_manualslib_import_opencli_preview_wires_arguments(monkeypatch, capsys):
+    captured = {}
+
+    class FakeReport:
+        status = "preview"
+
+        def to_dict(self):
+            return {
+                "schema_version": "manualslib_opencli_import.v1",
+                "status": self.status,
+                "counts": {"discovered": 1, "imported": 0, "skipped": 0, "failed": 0},
+            }
+
+    def fake_import_from_opencli(**kwargs):
+        captured.update(kwargs)
+        return FakeReport()
+
+    monkeypatch.setattr(cli_source_import, "import_from_opencli", fake_import_from_opencli)
+
+    exit_code = cli.main(
+        [
+            "manualslib",
+            "import-opencli",
+            "--brand",
+            "hisense",
+            "--category",
+            "Dryer",
+            "--limit",
+            "3",
+            "--preview",
+            "--max-pages",
+            "2",
+            "--timeout-seconds",
+            "4",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured == {
+        "brand": "hisense",
+        "category": "Dryer",
+        "limit": 3,
+        "output_dir": None,
+        "preview": True,
+        "max_pages": 2,
+        "timeout_seconds": 4.0,
+    }
+    assert json.loads(capsys.readouterr().out)["status"] == "preview"
+
+
+def test_cli_manualslib_import_opencli_failure_returns_two(monkeypatch, capsys):
+    def fake_import_from_opencli(**kwargs):
+        raise ManualslibOpenCLIError("opencli returned exit code 66", command=["opencli"], stderr="missing")
+
+    monkeypatch.setattr(cli_source_import, "import_from_opencli", fake_import_from_opencli)
+
+    exit_code = cli.main(["manualslib", "import-opencli", "--preview"])
+
+    assert exit_code == 2
+    err = json.loads(capsys.readouterr().err)
+    assert err["status"] == "failed"
+    assert err["error"]["stderr"] == "missing"
 
 
 def test_cli_manual_library_registry_commands(tmp_path, capsys):

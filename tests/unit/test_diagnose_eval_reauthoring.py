@@ -189,7 +189,7 @@ def test_committed_baselines_diagnose_without_network():
     assert body["summary"]["highest_severity"] == 3
     statuses = {suite["suite"]: suite["status"] for suite in body["suites"]}
     assert statuses["fault_codes.jsonl"] == "investigate"
-    assert statuses["tag_rerank_edge.jsonl"] == "monitor"
+    assert statuses["tag_rerank_edge.jsonl"] == "ok"
 
 
 def _write_baseline(path: Path, embedder: str, suites: dict[str, dict[str, float]]) -> None:

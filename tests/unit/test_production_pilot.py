@@ -4,6 +4,7 @@ import json
 
 from tagmemorag.eval.dataset import EvalThresholds
 from tagmemorag.production_pilot import (
+    DEFAULT_ANSWER_QUALITY_SUITE,
     DEFAULT_PILOT_THRESHOLDS,
     PILOT_SCHEMA_VERSION,
     PilotStage,
@@ -52,8 +53,14 @@ def test_production_pilot_runs_local_profile_and_sanitizes_eval(tmp_path):
         "config_validate",
         "provider_probe",
         "readiness_smoke",
+        "answer_quality",
         "eval",
     ]
+    answer_quality = next(stage for stage in body["stages"] if stage["name"] == "answer_quality")
+    assert answer_quality["status"] == "passed"
+    assert answer_quality["detail"]["suite"] == "basic.jsonl"
+    assert answer_quality["detail"]["cases"] == 5
+    assert answer_quality["detail"]["failed"] == 0
     eval_stage = next(stage for stage in body["stages"] if stage["name"] == "eval")
     assert eval_stage["detail"]["cases"] == 7
     assert eval_stage["detail"]["metrics"]["recall_at_k"] >= 0.75
@@ -61,8 +68,70 @@ def test_production_pilot_runs_local_profile_and_sanitizes_eval(tmp_path):
     serialized = json.dumps(body, ensure_ascii=False)
     assert "蒸汽很小怎么办" not in serialized
     assert "喷嘴堵塞会造成蒸汽变小" not in serialized
+    assert "pump must be replaced immediately" not in serialized
+    assert "scale in the steam nozzle" not in serialized
     assert "actual_top_k" not in serialized
     assert "Authorization" not in serialized
+
+
+def test_production_pilot_can_skip_answer_quality_stage(tmp_path):
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        skip_answer_quality=True,
+    )
+
+    assert report.status == "passed"
+    assert "answer_quality" not in [stage.name for stage in report.stages]
+
+
+def test_production_pilot_answer_quality_suite_can_be_overridden(tmp_path):
+    suite = tmp_path / "answer-quality.jsonl"
+    suite.write_text(
+        '{"id":"local-pass","question":"What color is the reset button?",'
+        '"contexts":[{"citation_id":"cit_001","text":"The reset button is red."}],'
+        '"answer":"The reset button is red [cit_001]. {{support:reset button is red}}",'
+        '"expected":{"grounded":true,"relevant":true,"citation_supported":true}}'
+        "\n",
+        encoding="utf-8",
+    )
+
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        answer_quality_suite_path=suite,
+    )
+
+    stage = next(stage for stage in report.stages if stage.name == "answer_quality")
+    assert stage.status == "passed"
+    assert stage.detail["suite"] == "answer-quality.jsonl"
+    assert stage.detail["cases"] == 1
+
+
+def test_production_pilot_answer_quality_invalid_suite_fails(tmp_path):
+    missing = tmp_path / "missing.jsonl"
+
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        answer_quality_suite_path=missing,
+    )
+
+    assert report.status == "failed"
+    stage = next(stage for stage in report.stages if stage.name == "answer_quality")
+    assert stage.status == "failed"
+    assert stage.error is not None
+    assert stage.error["type"] == "EvalSuiteError"
+    assert stage.detail["suite"] == "missing.jsonl"
 
 
 def test_production_pilot_includes_eval_reauthoring_warning_stage(tmp_path):
@@ -175,3 +244,7 @@ def test_production_pilot_markdown_and_writer(tmp_path):
     output = tmp_path / "pilot.md"
     write_pilot_report(report, output, fmt="markdown")
     assert output.read_text(encoding="utf-8") == markdown
+
+
+def test_default_answer_quality_suite_points_to_checked_in_fixture():
+    assert DEFAULT_ANSWER_QUALITY_SUITE == "tests/fixtures/answer_quality/basic.jsonl"

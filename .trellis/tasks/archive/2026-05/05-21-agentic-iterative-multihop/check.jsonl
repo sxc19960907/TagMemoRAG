@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-21-agentic-iterative-multihop/prd.md", "reason": "C3 acceptance criteria for quality review."}
+{"file": ".trellis/tasks/05-21-agentic-iterative-multihop/design.md", "reason": "Expected low-signal loop, rewrite, budget, and replay behavior."}
+{"file": ".trellis/tasks/05-21-agentic-iterative-multihop/implement.md", "reason": "Validation commands and no-surface-diff gate."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agent-loop-driver/implement.md", "reason": "C1 regression baseline."}
+{"file": ".trellis/tasks/archive/2026-05/05-21-agentic-adaptive-router/implement.md", "reason": "C2 regression baseline."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec checklist entrypoint."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test coverage and forbidden-pattern checklist."}

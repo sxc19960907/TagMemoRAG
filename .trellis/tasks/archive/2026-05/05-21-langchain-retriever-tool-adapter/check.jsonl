@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/05-21-rag-capability-review-and-optimization/research/child-roadmap.md", "reason": "Adapter gates and rollback."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Classic output and dependency checks."}
+{"file": ".codebase-memory/adr.md", "reason": "Ensure adapter does not replace PlanLog ownership."}

@@ -1669,3 +1669,312 @@ Ran the unified live production-provider pilot path with local Qdrant/MinIO, Sil
 ### Next Steps
 
 - Inspect or reauthor SiliconFlow `coffee.jsonl` eval expectations, or choose a pilot owner-approved suite/threshold policy.
+
+
+## Session 44: Agentic RAG mode toggle MVP
+
+**Date**: 2026-05-21
+**Task**: Agentic RAG mode toggle MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Completed and archived the default-off agentic RAG mode toggle parent task across C1-C6: loop driver, router, iterative loop, CRAG-lite grader, budget fallback, public mode surface, provider verify decision check, final validation, architecture update, and ADR.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2340ca4` | (see git log) |
+| `d3b1e53` | (see git log) |
+| `0270af9` | (see git log) |
+| `3ea8eaf` | (see git log) |
+| `7ddff0b` | (see git log) |
+| `e9cb012` | (see git log) |
+| `f579488` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 45: Complete RAG capability roadmap
+
+**Date**: 2026-05-22
+**Task**: Complete RAG capability roadmap
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Completed the approved RAG capability child roadmap: optional LangChain ingestion/retriever adapters, answer-quality diagnostics, production agentic tool wiring, prompt/context quality gates, and parent task completion records.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b4b5569` | (see git log) |
+| `680c284` | (see git log) |
+| `1170ac9` | (see git log) |
+| `7850297` | (see git log) |
+| `03eaccf` | (see git log) |
+| `8dae5c7` | (see git log) |
+| `68e1ad1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 46: Align bulk import severity
+
+**Date**: 2026-05-22
+**Task**: Align bulk import severity
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Fixed bulk import preview severity so metadata validation info and warning messages remain non-blocking, including TAG_ORDERING_HINT from the production pilot follow-up.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ba5a7d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 47: Production pilot verification v2
+
+**Date**: 2026-05-22
+**Task**: Production pilot verification v2
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added an offline answer-quality diagnostics stage to production pilot reports, with CLI and production verification forwarding, sanitized report coverage, docs, and full-suite validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f82a15f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 48: RAG Workbench MVP
+
+**Date**: 2026-05-22
+**Task**: RAG Workbench MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Shifted from verification to product experience by adding an admin RAG workbench for asking questions, rendering answers/citations/evidence, and linking to manual library and retrieval quality tools.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7949354` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 49: User-facing QA page MVP
+
+**Date**: 2026-05-22
+**Task**: User-facing QA page MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added a clean /qa page for normal users, reusing /answer while hiding RAG diagnostics; documented the route contract, verified UI behavior in browser, and passed focused plus full unit/e2e regression.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97e603a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 50: QA three-pane layout
+
+**Date**: 2026-05-22
+**Task**: QA three-pane layout
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Refined the user-facing /qa page into a Codex-like three-pane layout with a left KB context rail, center answer workspace, and right sources rail. Verified focused UI and answer API tests plus browser visual layout.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f77f9f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 51: Hide QA KB selector
+
+**Date**: 2026-05-22
+**Task**: Hide QA KB selector
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Removed visible knowledge-base selection from the user-facing /qa page while preserving internal kb_name routing for tenant/KB isolation. Focused UI and answer API tests pass, and browser visual check confirms the user no longer sees KB internals.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e83530` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 52: Question routing QA MVP
+
+**Date**: 2026-05-22
+**Task**: Question routing QA MVP
+**Branch**: `codex/agent-loop-driver`
+
+### Summary
+
+Added /qa/answer so the user-facing QA page sends only a question. Backend routes to an accessible loaded KB, asks clarification for ambiguous multi-KB cases, or returns a not-ready user response. Updated UI, docs, architecture spec, and tests; full unit/e2e suite passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `03de5e6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

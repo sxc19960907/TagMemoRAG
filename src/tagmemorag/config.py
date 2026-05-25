@@ -60,9 +60,12 @@ class SearchConfig(BaseModel):
     metadata_narrowing_brand_policy: Literal["boost_if_not_unique", "hard_filter", "boost"] = "boost_if_not_unique"
     metadata_narrowing_category_policy: Literal["hard_filter_product_manual", "hard_filter", "boost"] = "hard_filter_product_manual"
     metadata_narrowing_min_candidates: int = Field(default=1, ge=1)
+    same_page_ordering_enabled: bool = True
+    same_page_ordering_min_group_size: int = Field(default=2, ge=2)
 
 
 class ParserConfig(BaseModel):
+    provider: Literal["native", "langchain"] = "native"
     max_chars: int = 500
     min_chars: int = 50
     overlap_chars: int = Field(default=0, ge=0)
@@ -232,6 +235,30 @@ class AnswerConfig(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0.0)
     max_output_tokens: int = Field(default=512, ge=1)
     temperature: float = Field(default=0.0, ge=0.0)
+
+
+class AgenticDecisionConfig(BaseModel):
+    """Config for optional agentic decision LLM calls."""
+
+    enabled: bool = False
+    provider: Literal["noop", "openai_compatible"] = "noop"
+    model_id: str = ""
+    model_version: str = "v1"
+    base_url: str = ""
+    chat_completions_url: str | None = None
+    api_key_env: str = ""
+    timeout_seconds: float = Field(default=15.0, gt=0.0)
+    max_output_tokens: int = Field(default=256, ge=1)
+    temperature: float = Field(default=0.0, ge=0.0)
+    tool_schema_mode: Literal["openai_tools", "json_object"] = "openai_tools"
+    json_strict: bool = True
+
+
+class AgenticConfig(BaseModel):
+    """Default-off agentic mode surface."""
+
+    mode: Literal["classic", "agentic"] = "classic"
+    decision: AgenticDecisionConfig = Field(default_factory=AgenticDecisionConfig)
 
 
 class OCRConfig(BaseModel):
@@ -423,6 +450,7 @@ class Settings(BaseSettings):
     queryplan: QueryPlanConfig = Field(default_factory=QueryPlanConfig)
     reranker: RerankerConfig = Field(default_factory=RerankerConfig)
     answer: AnswerConfig = Field(default_factory=AnswerConfig)
+    agentic: AgenticConfig = Field(default_factory=AgenticConfig)
     ocr: OCRConfig = Field(default_factory=OCRConfig)
     visual_retrieval: VisualRetrievalConfig = Field(default_factory=VisualRetrievalConfig)
     connectors: ConnectorsConfig = Field(default_factory=ConnectorsConfig)

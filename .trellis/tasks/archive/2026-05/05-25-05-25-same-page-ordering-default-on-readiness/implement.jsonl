@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/05-24-general-rag-stability-program/program-log.md", "reason": "Source evidence from all completed stability-program children."}
+{"file": ".trellis/tasks/archive/2026-05/05-25-same-page-ordering-rc-summary/release-candidate-summary.md", "reason": "Operator-facing release candidate summary to review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Privacy and bounded diagnostic rules for committed artifacts."}

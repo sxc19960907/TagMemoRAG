@@ -19,7 +19,7 @@ from .manual_library import (
     validate_metadata,
 )
 from .manuals import MANUAL_METADATA_FIELDS, ManualMetadata, normalize_tag
-from .parser import SUPPORTED_DOCUMENT_SUFFIXES
+from .parser_provider import supported_document_suffixes
 from .tag_governance import TagPolicy, load_tag_policy
 
 BulkImportMode = Literal["create_only", "upsert", "dry_run"]
@@ -445,7 +445,7 @@ def _append_file_issues(
         issues.append(_issue_from_message(candidate, ValidationMessage("source_file", exc.code.value, exc.message, exc.detail)))
         return
     suffix = Path(candidate.source_file).suffix.lower()
-    if suffix not in SUPPORTED_DOCUMENT_SUFFIXES:
+    if suffix not in supported_document_suffixes(cfg.parser):
         issues.append(
             BulkPreviewIssue(
                 row=candidate.row,
@@ -650,7 +650,7 @@ def _preview_from_rows(
 
 
 def _issue_from_message(candidate: BulkImportCandidate, message: ValidationMessage) -> BulkPreviewIssue:
-    severity: BulkPreviewSeverity = "warning" if message.code == "UNKNOWN_COLUMN" else "error"
+    severity = _severity_from_message(message)
     return BulkPreviewIssue(
         row=candidate.row,
         manual_id=candidate.manual_id,
@@ -662,6 +662,19 @@ def _issue_from_message(candidate: BulkImportCandidate, message: ValidationMessa
         code=message.code,
         message=message.message,
     )
+
+
+def _severity_from_message(message: ValidationMessage) -> BulkPreviewSeverity:
+    detail_severity = str(message.detail.get("severity") or "").lower()
+    if detail_severity == "info":
+        return "info"
+    if detail_severity == "warning":
+        return "warning"
+    if detail_severity == "error":
+        return "error"
+    if message.code == "UNKNOWN_COLUMN":
+        return "warning"
+    return "error"
 
 
 def _uploaded_for_candidate(

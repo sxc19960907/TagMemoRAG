@@ -1,0 +1,2 @@
+{"path":".trellis/spec/backend/quality-guidelines.md","reason":"Privacy, deterministic tests, and bounded diagnostics constraints."}
+{"path":".trellis/spec/backend/architecture.md","reason":"Reranking and release-readiness architectural boundaries."}

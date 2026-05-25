@@ -1,0 +1,19 @@
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: .tmp/tagmemorag-qa-demo/data
+vector_store:
+  provider: npz
+manual_library:
+  root_dir: .tmp/tagmemorag-qa-demo/manuals
+  registry_backend: file
+  blob_backend: local
+  blob_root_dir: .tmp/tagmemorag-qa-demo/blobs
+answer:
+  enabled: true
+  provider: noop
+logging:
+  level: INFO
+  format: json

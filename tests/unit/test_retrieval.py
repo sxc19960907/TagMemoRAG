@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from tagmemorag.document_assets import AssetManifest, DocumentAsset
-from tagmemorag.retrieval import VisualEvidenceResolver, VisualRetrievalResolver, build_retrieve_response, detect_visual_intent, retrieve_inspect_payload
+from tagmemorag.retrieval import (
+    VisualEvidenceResolver,
+    VisualRetrievalResolver,
+    build_retrieve_response,
+    context_evidence_diagnostics,
+    detect_visual_intent,
+    retrieve_inspect_payload,
+)
+from tagmemorag.same_page_ordering import SamePageOrderingOptions
 from tagmemorag.visual_retrieval.provider import DeterministicVisualCandidateProvider, NoopVisualReranker
 from tagmemorag.types import Result
 
@@ -26,6 +34,51 @@ def _result(**metadata):
         },
         manual_id="manual-1",
     )
+
+
+def _text_result(node_id: int, score: float, text: str, chunk_id: str, section: str = ""):
+    return Result(
+        node_id=node_id,
+        score=score,
+        text=text,
+        header=section or "Evidence",
+        path=[section] if section else [],
+        source_file="docs.md",
+        start_line=node_id,
+        anchor_key=f"chunk-{node_id}",
+        metadata={
+            "doc_id": "doc-1",
+            "chunk_id": chunk_id,
+            "section_path": [section] if section else [],
+        },
+        manual_id="doc-1",
+    )
+
+
+def _same_page_result(node_id: int, score: float, text: str, chunk_id: str):
+    return Result(
+        node_id=node_id,
+        score=score,
+        text=text,
+        header="Hello World - GitHub Docs",
+        path=["Hello World - GitHub Docs"],
+        source_file="public_web/docs.github.com-en-get-started-start-your-journey-hello-world.md",
+        start_line=node_id,
+        anchor_key=f"chunk-{node_id}",
+        metadata={
+            "doc_id": "github",
+            "chunk_id": chunk_id,
+            "section_path": ["Hello World - GitHub Docs"],
+        },
+        manual_id="github",
+    )
+
+
+def _page_result(node_id: int, score: float, text: str, chunk_id: str, *, page: int, section: str = ""):
+    result = _text_result(node_id, score, text, chunk_id, section)
+    result.metadata["page_start"] = page
+    result.metadata["page_end"] = page
+    return result
 
 
 def _asset(
@@ -94,6 +147,64 @@ def test_build_retrieve_response_shapes_text_evidence_and_context():
     assert item["asset_refs"] == []
 
 
+def test_build_retrieve_response_expands_sparse_pdf_heading_with_adjacent_body():
+    heading = Result(
+        node_id=10,
+        score=0.95,
+        text="USING THE STEAM CLEAN FUNCTION TO",
+        header="USING THE STEAM CLEAN FUNCTION TO",
+        path=["USING THE STEAM CLEAN FUNCTION TO"],
+        source_file="oven.pdf",
+        start_line=45,
+        anchor_key="heading",
+        metadata={
+            "doc_id": "oven",
+            "chunk_id": "heading",
+            "page_start": 45,
+            "page_end": 45,
+            "section_path": ["USING THE STEAM CLEAN FUNCTION TO"],
+            "pdf_parser_profile": "product_manual",
+            "pdf_header_source": "detected",
+        },
+        manual_id="oven",
+    )
+    body = Result(
+        node_id=11,
+        score=0.80,
+        text="Turn the COOKING SYSTEM SELECTOR and TEMPERATURE KNOB to 70 C. Pour 0.6 l of water into a glass dish.",
+        header="Turn the COOKING SYSTEM SELECTOR",
+        path=["Turn the COOKING SYSTEM SELECTOR"],
+        source_file="oven.pdf",
+        start_line=45,
+        anchor_key="body",
+        metadata={
+            "doc_id": "oven",
+            "chunk_id": "body",
+            "page_start": 45,
+            "page_end": 45,
+            "section_path": ["Turn the COOKING SYSTEM SELECTOR"],
+            "pdf_parser_profile": "product_manual",
+            "pdf_header_source": "detected",
+        },
+        manual_id="oven",
+    )
+
+    payload = build_retrieve_response(
+        results=[heading, body],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=200,
+    )
+
+    first_evidence = payload["evidence"][0]["text"]
+    assert "USING THE STEAM CLEAN FUNCTION TO" in first_evidence
+    assert "Pour 0.6 l of water into a glass dish" in first_evidence
+    assert payload["context_pack"]["items"][0]["content"] == first_evidence
+
+
 def test_build_retrieve_response_no_results_is_insufficient_evidence():
     payload = build_retrieve_response(
         results=[],
@@ -133,6 +244,274 @@ def test_build_retrieve_response_context_budget_exhausted():
         "warnings": ["context_budget_exhausted"],
         "fallback_reason": "context_budget_exhausted",
     }
+
+
+def test_same_page_ordering_disabled_preserves_result_order():
+    first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
+    matched = _same_page_result(2, 3.1, "A repository is a folder that contains README files.", "matched")
+
+    payload = build_retrieve_response(
+        results=[first, matched],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=False),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["top", "matched"]
+    assert [item["chunk_id"] for item in payload["evidence"]] == ["top", "matched"]
+
+
+def test_same_page_ordering_enabled_promotes_pressure_result():
+    first = _same_page_result(1, 3.2, "Create a branch and open a pull request.", "top")
+    matched = _same_page_result(2, 3.1, "A repository is a folder that contains README files.", "matched")
+
+    payload = build_retrieve_response(
+        results=[first, matched],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["matched", "top"]
+    assert [item["chunk_id"] for item in payload["evidence"]] == ["matched", "top"]
+    assert payload["citations"][0]["evidence_id"] == "ev_001"
+
+
+def test_same_page_ordering_enabled_preserves_rank_one_useful_result():
+    matched = _same_page_result(1, 3.2, "A repository is a folder that contains README files.", "matched")
+    later = _same_page_result(2, 2.8, "Create a branch and open a pull request.", "later")
+
+    payload = build_retrieve_response(
+        results=[matched, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="what is a github repository README",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["matched", "later"]
+
+
+def test_same_page_ordering_enabled_preserves_rank_one_good_enough_result():
+    first = _same_page_result(1, 3.2, "A private cache is a cache tied to a specific client and can store personalized responses.", "first")
+    later = _same_page_result(2, 2.8, "A private cache is a cache tied to a specific client and should revalidate responses.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="MDN HTTP caching no-cache private personalized response shared cache",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
+def test_same_page_ordering_enabled_preserves_large_rank_one_score_lead():
+    first = _same_page_result(1, 3.2, "Standard deduction filing status table.", "first")
+    later = _same_page_result(2, 3.0, "A deduction is available when the worksheet applies.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="IRS standard deduction table filing status",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
+def test_same_page_ordering_enabled_preserves_equivalent_score_peer():
+    first = _same_page_result(1, 3.2, "Hot air bottom heater cooking system.", "first")
+    later = _same_page_result(2, 3.2, "Bottom heater fan cooking system.", "later")
+
+    payload = build_retrieve_response(
+        results=[first, later],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        same_page_ordering=SamePageOrderingOptions(enabled=True),
+        query_text="oven cooking system hot air bottom heater",
+    )
+
+    assert [item["metadata"]["chunk_id"] for item in payload["results"]] == ["first", "later"]
+
+
+def test_context_pack_prefers_complementary_evidence_under_budget():
+    duplicate = "A repository is a folder with related project files."
+    near_duplicate = "A repository folder stores related project files."
+    complementary = "README files are written in Markdown."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, duplicate, "chunk-repo-1", "Repository"),
+            _text_result(2, 0.98, near_duplicate, "chunk-repo-2", "Repository"),
+            _text_result(3, 0.80, complementary, "chunk-readme", "README"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=25,
+    )
+
+    refs = [item["evidence_refs"][0] for item in payload["context_pack"]["items"]]
+
+    assert refs == ["ev_001", "ev_003"]
+
+
+def test_context_pack_prefers_answer_bearing_evidence_for_first_slot():
+    overview = "This tutorial teaches GitHub essentials like repositories, branches, commits, and pull requests."
+    answer = "You can think of a repository as a folder that contains related items."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, overview, "chunk-overview", "Overview"),
+            _text_result(2, 0.80, answer, "chunk-answer", "Repository"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="GitHub repository folder",
+    )
+
+    assert [item["evidence_refs"][0] for item in payload["context_pack"]["items"]] == ["ev_002"]
+    assert payload["context_pack"]["items"][0]["content"] == answer
+
+
+def test_context_pack_keeps_high_rank_relevant_evidence_under_tight_budget():
+    top_relevant = "Force revalidation uses the no-cache directive to validate cached responses."
+    lower_definition = "No-cache means reuse requires revalidation."
+    lower_related = "No-store blocks storing responses."
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, top_relevant, "chunk-top", "Force Revalidation"),
+            _text_result(2, 0.80, lower_definition, "chunk-definition", "No-cache"),
+            _text_result(3, 0.78, lower_related, "chunk-related", "No-store"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="no-cache directive validation revalidation",
+    )
+
+    assert [item["evidence_refs"][0] for item in payload["context_pack"]["items"]] == ["ev_002", "ev_001"]
+
+
+def test_context_pack_compacts_long_context_to_query_relevant_sentences():
+    long_evidence = (
+        "HTTP caching overview explains browser and proxy caches. "
+        "Force revalidation uses the no-cache directive to validate cached responses before reuse. "
+        "Images and stylesheets may be cached for a long time. "
+        "Private responses should not be shared with other users."
+    )
+    payload = build_retrieve_response(
+        results=[_text_result(1, 0.99, long_evidence, "chunk-cache", "Caching")],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=120,
+        query_text="no-cache directive validate cached responses reuse",
+    )
+
+    content = payload["context_pack"]["items"][0]["content"]
+
+    assert "Force revalidation uses the no-cache directive" in content
+    assert "Images and stylesheets" not in content
+    assert payload["context_pack"]["token_count_estimate"] < (len(long_evidence) + 3) // 4
+
+
+def test_context_pack_merges_adjacent_supporting_evidence_under_budget():
+    primary = "No-cache requires revalidation before reuse."
+    adjacent = "No-cache permits storing responses."
+    unrelated = "Images and stylesheets may be cached for a long time."
+    payload = build_retrieve_response(
+        results=[
+            _page_result(10, 0.99, primary, "chunk-primary", page=4, section="HTTP caching"),
+            _page_result(11, 0.70, adjacent, "chunk-adjacent", page=4, section="HTTP caching"),
+            _page_result(20, 0.69, unrelated, "chunk-unrelated", page=9, section="HTTP caching"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=21,
+        query_text="no-cache directive storing responses revalidation reuse",
+    )
+
+    item = payload["context_pack"]["items"][0]
+
+    assert item["evidence_refs"] == ["ev_001", "ev_002"]
+    assert item["citation_ids"] == ["cit_001", "cit_002"]
+    assert "permits storing responses" in item["content"]
+    assert "Images and stylesheets" not in item["content"]
+
+
+def test_context_pack_compacts_lower_rank_adjacent_support_to_fit_budget():
+    primary = (
+        "max-age=0 and must-revalidate are older cache-control workarounds for validation. "
+        "They are related to no-cache but not the clearest explanation."
+    )
+    adjacent = (
+        "The no-store directive prevents storing a response. "
+        "A no-cache directive still forces validation before reuse."
+    )
+    lower_rank_expected = (
+        "The no-cache directive does not prevent the storing of responses. "
+        "Instead, it prevents the reuse of responses without revalidation. "
+        "Unrelated browser history and image cache details follow in this long paragraph."
+    )
+    payload = build_retrieve_response(
+        results=[
+            _page_result(10, 0.99, primary, "chunk-primary", page=4, section="HTTP caching"),
+            _page_result(11, 0.90, adjacent, "chunk-adjacent", page=4, section="HTTP caching"),
+            _page_result(12, 0.80, lower_rank_expected, "chunk-expected", page=4, section="HTTP caching"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=85,
+        query_text="no-cache directive validation revalidation storing responses",
+    )
+
+    item = payload["context_pack"]["items"][0]
+
+    assert item["evidence_refs"] == ["ev_001", "ev_002", "ev_003"]
+    assert item["citation_ids"] == ["cit_001", "cit_002", "cit_003"]
+    assert "max-age=0" in item["content"]
+    assert "forces validation before reuse" in item["content"]
+    assert "does not prevent the storing of responses" in item["content"]
+    assert "Unrelated browser history" not in item["content"]
 
 
 def test_retrieve_inspect_payload_is_safe_and_bounded():
@@ -179,6 +558,30 @@ def test_retrieve_inspect_payload_is_safe_and_bounded():
     }
     assert "content" not in str(inspect)
     assert "Open the service panel" not in str(inspect)
+
+
+def test_context_evidence_diagnostics_explains_selected_context_without_snippets():
+    payload = build_retrieve_response(
+        results=[
+            _text_result(1, 0.99, "Repository overview covers branches and commits.", "chunk-overview"),
+            _text_result(2, 0.80, "A repository is a folder that contains related project items.", "chunk-answer"),
+        ],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=30,
+        query_text="repository folder",
+    )
+
+    diagnostics = context_evidence_diagnostics(payload, query_text="repository folder")
+
+    assert diagnostics[1]["selected"] is True
+    assert diagnostics[1]["context_rank"] == 1
+    assert diagnostics[1]["context_usefulness"] > diagnostics[0]["context_usefulness"]
+    assert "text" not in diagnostics[0]
+    assert "folder that contains" not in str(diagnostics)
 
 
 def test_build_retrieve_response_attaches_page_snapshot_by_lineage():

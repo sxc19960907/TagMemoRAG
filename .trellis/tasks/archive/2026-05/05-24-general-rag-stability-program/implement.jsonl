@@ -1,0 +1,3 @@
+{"path":".trellis/tasks/archive/2026-05/05-24-reranking-evaluation-gate-runner/validation-notes.md","reason":"Current reranking gate validation baseline."}
+{"path":".trellis/tasks/archive/2026-05/05-24-document-reranking-evaluation-gate/validation-notes.md","reason":"Current docs and gate command validation."}
+{"path":".trellis/spec/backend/architecture.md","reason":"Current general-web and release-readiness baseline contracts."}

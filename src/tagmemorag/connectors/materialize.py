@@ -51,14 +51,24 @@ def _materialize_one(record: ConnectorRecord, root: Path) -> None:
     if source_rel.suffix.lower() not in SUPPORTED_DOCUMENT_SUFFIXES:
         raise ValueError("unsupported_document_suffix")
     target = root / source_rel
-    metadata = _metadata_for_record(record, source_rel.as_posix())
+    metadata = _metadata_dict_for_record(record, source_rel.as_posix())
     if record.action != "delete":
         atomic_write(target, lambda tmp_path: tmp_path.write_bytes(record.document.content))
     sidecar = target.with_name(f"{target.stem}.metadata.json")
     atomic_write(
         sidecar,
-        lambda tmp_path: tmp_path.write_text(json.dumps(metadata.to_node_attrs(), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"),
+        lambda tmp_path: tmp_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"),
     )
+
+
+def _metadata_dict_for_record(record: ConnectorRecord, source_file: str) -> dict:
+    metadata = _metadata_for_record(record, source_file).to_node_attrs()
+    if record.remote_id:
+        metadata["remote_id"] = record.remote_id
+    for key, value in sorted(record.metadata.items()):
+        if key not in metadata and value:
+            metadata[key] = value
+    return metadata
 
 
 def _metadata_for_record(record: ConnectorRecord, source_file: str) -> ManualMetadata:

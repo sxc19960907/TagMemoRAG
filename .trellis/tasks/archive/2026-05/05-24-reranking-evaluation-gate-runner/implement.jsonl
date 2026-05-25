@@ -1,0 +1,3 @@
+{"path":".trellis/tasks/archive/2026-05/05-24-reranking-evaluation-batch-plan/evaluation-batch-plan.md","reason":"Gate rules and privacy constraints for this runner."}
+{"path":"src/tagmemorag/release_readiness.py","reason":"Release readiness report structure consumed by the gate."}
+{"path":"scripts/diag_general_web_ranking_pressure.py","reason":"Ranking-pressure report structure consumed by the gate."}

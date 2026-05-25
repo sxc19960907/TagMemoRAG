@@ -5,7 +5,7 @@
 ```yaml
 version: 2.0
 supersedes: .trellis/tasks/archive/2026-05/05-17-production-rag-architecture/design.md
-last_updated: 2026-05-17
+last_updated: 2026-05-21
 owner: suixingchen
 status: living
 related_tasks_archive: 05-17-architecture-v2
@@ -72,6 +72,7 @@ Every stage is governed by a per-request **Budget** (see A2) and produces struct
 | Chunker (structure + sentence + table + hierarchical) | ✅ | Phase 2 production chunker. |
 | Text / lexical / metadata / graph / asset indexes | ✅ | Phase 2.5 indexing strategy; Qdrant payload schema versioned. |
 | QueryPlan + Budget layer | ✅ | T2 shipped 2026-05-18; rule-based planner + per-KB SQLite plan log + early-exit Budget. |
+| Agentic loop driver foundation | ✅ | C1-C6 shipped 2026-05-21; isolated default-off `agentic/` package, `plan_steps` trajectory table, adaptive router, iterative loop, CRAG-lite grader, budget fallback/private-KB guard, public `Settings.agentic`/request/eval/replay surface, and provider verify decision check. |
 | Retrieval Executor | ✅ | Hybrid (vector + lexical + metadata + graph). |
 | Reranker Tier | ✅ | T3 shipped 2026-05-18; SF Qwen3-Reranker-0.6B Tier-1; fallback to noop. Dormant by default (Settings.reranker.enabled=False). |
 | Evidence Builder (text) | ✅ | Phase 3 text evidence with citations. |
@@ -399,7 +400,7 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 - Request: `AnswerRequest` extends `RetrieveRequest` with `answer_token_budget` and `include_retrieve`.
 - Response: `schema_version="answer.v1"`, stable `trace_id`/`plan_id`, top-level `warnings`, and an `answer` object with `kind`, `text`, `confidence`, `citations`, `refusal_reason`, `missing_evidence_hints`, `model_id`, `model_version`, `prompt_version`, and answer-local `warnings`.
 - Generation is disabled by default via `Settings.answer.enabled=False`.
-- Providers implement the vendor-neutral `AnswerGenerator` protocol. T6 ships a deterministic noop provider and an OpenAI-compatible chat-completions HTTP provider.
+- Providers implement the vendor-neutral `AnswerGenerator` protocol. T6 ships a deterministic noop provider and an OpenAI-compatible chat-completions HTTP provider. As of 2026-05-22, the noop provider is an offline extractive provider: it returns a bounded set of allowlisted retrieval context excerpts with exact citation ids, deduplicates repeated excerpts, formats product-manual troubleshooting evidence as concise steps, prioritizes safety evidence only when the user's question contains matching danger signals, gives insufficient-evidence framing for unsupported part-number/disassembly/replacement questions, and falls back to an insufficient-evidence message when no supported excerpt is available. Its relevance filtering is intentionally conservative, including stricter English token overlap, because real product-manual validation showed that broad one-token overlap can mix unrelated manual excerpts into generated answers.
 - Prompt-injection defense is role separation plus structured, quoted retrieval context. Retrieved manual text is always untrusted source data and may not override system instructions.
 - Citation validation drops generated citations that are not present in the retrieved citation set and adds `answer_dropped_invalid_citations`.
 - Production pilot note (2026-05-20): OpenAI-compatible providers must treat HTTP 200 responses with empty `message.content` as generation failures. Reasoning-style models may spend low output budgets on hidden/reasoning content; profile defaults should allocate enough `answer_token_budget` for non-empty final content.
@@ -407,6 +408,38 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 **Eval stance.** T6 uses deterministic unit/API contract tests and citation coverage checks. It deliberately does not use LLM-as-judge for regression gating.
 
 **Deferred.** Streaming, multi-turn state, generation cache, tool-calling, prompt/model rollout policy, and faithfulness metrics beyond deterministic citation checks remain follow-up work.
+
+### B6A. User-Facing Q&A Page  ✅ Shipped
+
+**Shipped 2026-05-22.** `GET /qa` serves the non-admin manual question-answer page. It is a thin server-rendered Jinja2 shell plus vanilla JavaScript with no frontend build step.
+
+**Contract.**
+
+- Route: `GET /qa` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing page config pattern. `kb_name` may still appear in the URL for compatibility, but the user page must not render it as an editable concept.
+- Client call: `qa_page.js` submits `POST /qa/answer` with only the question and display options. The browser does not choose a KB.
+- Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields. Numbered answer lines may be rendered as a step list, inline `[cit_###]` markers may become clickable citation chips that focus cited source cards, and source cards may show a concise summary with a local expand/collapse affordance.
+- Local UX affordances: the page may render non-persistent feedback controls, follow-up question suggestions, staged loading copy, local conversation history, and richer empty states as client-only UI. Conversation history may be kept in browser `sessionStorage` for tab-session refresh recovery, but this must stay bounded, sanitized, and free of debug identifiers. These affordances must reuse the same `/qa/answer` ask flow and must not imply durable backend feedback or conversation storage unless a backend persistence contract is added.
+- Auth: when API auth is enabled, the page can send a Bearer token. When auth is disabled, the token field is hidden.
+- Error UX: known readiness failures such as an unloaded KB are mapped to user-readable copy. The underlying structured API error remains unchanged.
+
+**Tests.** UI route/static tests assert the route renders the user shell, hides KB controls, calls `/qa/answer`, and keeps debugging identifiers absent from the user page asset.
+
+### B6B. User QA Question Routing  ✅ Shipped
+
+**Shipped 2026-05-22.** `POST /qa/answer` is the user-facing answer entry point for `/qa`. It lets the browser send only the user's question while the backend routes to an accessible loaded KB, answers with the existing `/answer` implementation, or asks for clarification when the route is ambiguous.
+
+**Contract.**
+
+- Request: `QaAnswerRequest` with `question`, `include_retrieve`, and optional bounded `conversation_context` turns (`question`, optional `answer`). The browser does not send `kb_name`, `top_k`, `source_k`, or mode controls.
+- Conversation context: `/qa/answer` may combine recent page-session context with the current question for routing and retrieval, but it returns the original user question separately and does not persist the raw context. Responses include a bounded non-debug `context` object with `applied` and prior-question `summary` fields so the user page can explain when prior context was used. This is a user-page convenience, not the durable multi-turn memory contract deferred from T6.
+- Context correction: the user page must provide a way to ask a short follow-up as a new question by sending an empty `conversation_context` for that request.
+- Routing scope: currently loaded KBs allowed by the API key. No loaded KBs returns `route.kind="not_ready"` with a user-readable answer payload.
+- Single-KB case: route directly with `route.kind="answered"` and `reason="single_kb"`.
+- Multi-KB MVP: use bounded lexical signals from KB name and node/header/source/manual metadata. Clear matches route with `reason="lexical_route"`; otherwise return `route.kind="clarification"` and candidate KB labels.
+- Answering path: routed requests call the same retrieve/answer implementation as `/answer` with `top_k=5`, `source_k=8`, and `mode="classic"`.
+- Admin/debug paths remain explicit: `/answer`, `/retrieve`, and `/admin/rag-workbench` still accept `kb_name`.
+
+**Tests.** API tests cover single-KB routing, ambiguous multi-KB clarification, and lexical multi-KB routing. UI asset tests assert `/qa` calls `/qa/answer` without sending `kb_name`.
 
 ### B7. Phase 7 — Visual Track  📋 Blueprint
 
@@ -500,6 +533,108 @@ trellis-rag-eval replay \
 The tool reads QueryPlans from SQLite, replays each against the chosen generation, computes metrics, and prints the deltas vs baseline.
 
 **T5 shipped 2026-05-19.** `scripts/trellis_rag_eval.py replay` implements the offline MVP: local generation replay from persisted QueryPlans, optional baseline deltas, JSON/Markdown output, plan filters, and historical rerank summary from `rerank_json`. It does not call external reranker vendors during replay and does not evaluate generated `/answer` output.
+
+**QA answer-quality slice.** As of 2026-05-22, `tests/fixtures/answer_quality/qa_product_manual.jsonl` is the first fixed generated-answer quality slice for `/qa`-style product manual answers. It covers weak steam troubleshooting, no-coffee checks, unsupported part-replacement claims, insufficient-evidence refusal, safety stop guidance, and missing citation detection. Run it with:
+
+```text
+python -m tagmemorag eval answer-quality --suite tests/fixtures/answer_quality/qa_product_manual.jsonl
+```
+
+The diagnostics are deterministic and offline. They use lexical support/citation/refusal checks, including CJK n-gram matching for Chinese manual questions; they are not an LLM-as-judge gate.
+
+**Real-manual retrieval slice.** As of 2026-05-22, `tests/fixtures/eval/realmanuals.jsonl` is the fixed retrieval-quality slice for the real PDFs in `product_manuals/`. Run it against a docs directory containing the real manual subdirectories (`washer/`, `dryer/`, `oven/`, `refrigerator/`) with the local hashing profile:
+
+```text
+python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/realmanuals.jsonl \
+  --docs <real-manual-docs> \
+  --config examples/config/qa-demo.yaml \
+  --min-recall-at-k 0.0 --min-mrr 0.0 --min-hit-at-k 0.0
+```
+
+The slice is deterministic and offline. It exercises PDF-derived product metadata, exact model/category narrowing, lexical retrieval, and evidence ranking. Real PDF validation showed that CJK lexical matching needs bi/tri-grams to recover phrases such as `排水馬達` or `洗劑粉盒`, but product-category and question-form n-grams (for example `洗衣機`, `怎麼`) must be filtered so generic manual sections do not outrank specific evidence. Lexical scoring must also keep identity fields (`source_file`, `manual_id`, `product_model`, category tags) separate from topic fields: identity fields may match exact model/code tokens for narrowing, but ordinary topic terms should be rewarded from headings/body text. Specific multi-term body matches (for example `hot air bottom heater`) need enough headroom to outrank broad table-of-contents headings like `Choosing the Cooking System`.
+
+As of 2026-05-24, lexical scoring gives a small bounded bonus for adjacent/near-adjacent ordinary query terms only in chunk body text. This is intended for long web documentation where repeated page titles and navigation text can tie with the actual evidence chunk (for example `standard library` and `source or binary`). Public-web chunks also receive a small bounded compact-window bonus when several ordinary query terms appear in the same short body window; this helps definition-style evidence such as pull-request explanations without enabling the same behavior on product-manual table-of-contents chunks. Do not apply these bonuses to identity metadata or page-title-only fields; those fields are useful for narrowing but should not look like evidence-bearing prose.
+
+**General-web real knowledge slice.** As of 2026-05-24, `scripts/seed_general_web_eval.sh` materializes a broader opt-in public-web corpus from live URLs into `.tmp/general-web-eval/general_web`. It covers Python and GitHub software docs (`domain=software_docs`), MDN HTTP caching docs (`domain=web_platform_docs`), and USAGov/IRS public service help articles (`domain=public_service`). The committed fixture stores only URLs and expected evidence strings; fetched third-party content remains out of git. Run retrieval and answer checks with:
+
+```text
+scripts/seed_general_web_eval.sh
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --docs .tmp/general-web-eval/general_web \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 8
+.venv/bin/python scripts/diag_general_web_answer_eval.py \
+  --docs .tmp/general-web-eval/general_web \
+  --suite tests/fixtures/eval/general_web.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb general_web \
+  --top-k 8
+```
+
+This slice should be run explicitly when parser behavior, public-web import, ranking, context packing, or answer generation changes. Keep sources stable and official; avoid news/current-event pages because wording churn turns the benchmark into a maintenance burden instead of a quality signal.
+
+Public-web HTML import should prefer the semantic article body over page chrome. When a page exposes a `<main>` element, extract readable blocks from that region; otherwise fall back to all visible blocks. Always ignore structural chrome such as `nav`, `header`, `footer`, and `aside`, plus script/style/media-only tags. A 2026-05-24 general-web diagnostic showed this removes navigation/sidebar noise from real docs and moved the MDN HTTP caching case from a top-k miss to `hit@k=1.0`; remaining low MRR cases are multi-evidence/ranking issues and should not be tuned by adding site-specific HTML filters.
+
+Release-readiness baseline as of 2026-05-24: after refining the MDN HTTP
+caching eval labels to count independently useful top-k evidence, the retained
+report `.tmp/eval/release-readiness-after-evidence-refinement.json` is
+`passed`. `general_web_retrieval` reports `hit@k=1.0`,
+`recall_at_k=0.971429`, and `MRR=0.773810`, clearing the release warning target
+without changing runtime retrieval scoring. The prior warning baseline was
+`hit@k=1.0`, `recall_at_k=0.928571`, and `MRR=0.651361`. Treat this as an
+eval-label correction, not a ranking improvement. The GitHub Hello World
+repository and pull-request cases still expose real ranking pressure where
+broad tutorial overview/action chunks can outrank definition-style evidence;
+future ranking work should address those cases directly instead of broadening
+their expected labels.
+
+**Multi-format real knowledge slice.** As of 2026-05-24, `scripts/seed_multiformat_real_knowledge.py` materializes an opt-in real-source corpus that covers HTML-derived Markdown, a text-based public PDF, and DOCX-derived Markdown. DOCX is handled as source materialization, not as a new native parser suffix: the script safely reads OpenXML text from the zipped `word/document.xml`, writes Markdown plus metadata, and then the normal `.md/.pdf` build path indexes the corpus. Metadata sidecars preserve `source_format` (`html`, `pdf`, `docx`) along with `domain`, `doc_type`, `remote_id`, and `url`, so eval cases can verify both content and format lineage. Run it with:
+
+```text
+.venv/bin/python scripts/seed_multiformat_real_knowledge.py \
+  --output-dir .tmp/multiformat-real-knowledge \
+  --kb multiformat_real
+.venv/bin/python -m tagmemorag eval run \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+.venv/bin/python scripts/diag_multiformat_answer_eval.py \
+  --docs .tmp/multiformat-real-knowledge/multiformat_real \
+  --suite tests/fixtures/eval/multiformat_real_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb multiformat_real \
+  --top-k 8
+```
+
+Use this slice before broad parser, source-ingestion, ranking, context-packing, or answer-synthesis changes. Do not commit downloaded third-party PDF/DOCX/HTML bodies; only scripts, source URLs, metadata contracts, and eval expectations belong in git.
+
+**Mixed-domain shared-KB slice.** As of 2026-05-23, `tests/fixtures/eval/mixed_knowledge.jsonl` validates that real product manuals and public web documentation can coexist in one shared KB without obvious top-ranked cross-domain pollution. Run it after seeding public web docs:
+
+```text
+scripts/seed_general_web_eval.sh
+.venv/bin/python scripts/diag_mixed_domain_eval.py \
+  --stage-from-defaults \
+  --suite tests/fixtures/eval/mixed_knowledge.jsonl \
+  --config examples/config/local-hashing-npz.yaml \
+  --kb mixed_knowledge
+```
+
+The diagnostic stages real PDFs from `product_manuals/` and seeded public docs from `.tmp/general-web-eval/general_web` into a temporary corpus, then runs the standard eval runner with a single `kb_name`. Cases use positive expectations and wrong-domain negatives. Because it depends on runtime/materialized docs, it is excluded from fixture-only baseline CI and should be run explicitly alongside `general_web.jsonl` and `realmanuals.jsonl` when retrieval ranking, metadata narrowing, parser behavior, or answer evidence selection changes.
+
+Multi-evidence questions should list every independently useful supporting chunk as a `relevant` entry instead of forcing one canonical chunk. For example, the GitHub repository/README query is supported by both the repository/folder definition and the README/Markdown explanation. Omitting one turns useful answer evidence into an artificial ranking miss and makes retrieval diagnostics less aligned with answer quality.
+
+For real long documents, each `relevant` entry should match evidence that can appear in a single chunk. Do not combine phrases from adjacent chunks into one expected result; that creates false negatives even when retrieval returns the right neighboring evidence. The 2026-05-24 multi-format DOCX case uses separate expectations for the waiver-certification section, Section 508/plain-language certification, and HTTPS/OMB certification chunks.
+
+**Context pack diversity.** As of 2026-05-24, context packing keeps the highest-ranked fitting evidence first, then prefers lower-overlap fitting evidence before near-duplicates when the token budget is tight. The full `evidence` list and citation ids remain in retrieval order; only `context_pack.items` selection changes. This is intentionally deterministic and local, and it prevents adjacent duplicate chunks from blocking shorter complementary evidence needed for multi-evidence answers.
+
+As of 2026-05-24, same-source context merging is fit-aware under tight budgets: if a merge-eligible supporting evidence item cannot fit as full text, the context packer may compact that candidate to the remaining token budget before rejecting it. This preserves `evidence_refs` and `citation_ids` while allowing short, query-relevant support sentences from lower-ranked adjacent evidence to ride along with the primary context item. The behavior is still local to `context_pack.items`; it must not reorder retrieval results, alter the full `evidence` list, or reshape parser chunks globally.
+
+**Third-party real manual samples.** ManualsLib-style browser pages can be used to expand local validation without committing third-party manual PDFs. Import tooling should accept explicit operator-supplied manual URLs, extract the visible OCR/text layer from page HTML into `.md` plus `<manual>.metadata.json`, preserve source attribution in metadata, and keep fetched samples under `.tmp/` or another runtime directory unless a later curation task explicitly decides to check in a derived fixture. Avoid broad brand-page crawling and do not bypass download/authentication gates; small, category-diverse samples are enough to expose ranking noise such as generic `drying` terms outranking `program`/`cycle selector` intent.
 
 #### T5 Replay CLI Implementation Contract
 

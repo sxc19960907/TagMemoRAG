@@ -64,9 +64,26 @@ Stateful layer:
 
 Entry points:
 
-- `api.py`: FastAPI request/response models, error handlers, and route wiring.
-- `cli.py`: argparse commands for build, search, and serve.
+- `api.py`: canonical FastAPI app, global runtime state, middleware, error handlers, and route wiring.
+- `api_admin.py`: API-layer health/ready/metrics/cache and index-generation admin execution helpers.
+- `api_feedback.py`: API-layer feedback submit/list/review/promote execution helpers.
+- `api_manual.py`: API-layer manual-library parsing, rebuild request, diagnostics, and audit helpers.
+- `api_manual_routes.py`: API-layer manual and manual-library route execution helpers.
+- `api_models.py`: FastAPI/Pydantic request models re-exported by `api.py` for compatibility.
+- `api_qa.py`: API-layer QA routing and clarification/not-ready response helpers.
+- `api_search.py`: API-layer search, retrieve, answer, cache-key, QueryPlan, and reranker execution helpers.
+- `cli.py`: thin package CLI entry point that builds the parser and dispatches parsed args.
 - `__main__.py`: forwards `python -m tagmemorag` to `cli.main`.
+- `cli_basic.py`: build/search/serve/config/langchain/retrain-residuals/auth CLI command execution.
+- `cli_dispatch.py`: top-level CLI command dispatch table.
+- `cli_eval.py`: eval, answer-quality, readiness, pilot, and epa CLI command execution.
+- `cli_feedback.py`: feedback CLI command execution.
+- `cli_helpers.py`: shared argparse/file helper functions used by CLI commands.
+- `cli_manual.py`: manual-bulk, manual-library, tag, and qdrant CLI command execution.
+- `cli_parser.py`: argparse parser construction and command flag registration.
+- `cli_provider.py`: provider probe and production-provider CLI command execution.
+- `cli_source_import.py`: ManualsLib and public-web source import CLI command execution.
+- `qa_context.py`: user QA short-context normalization and summary helpers.
 
 Shared contracts:
 

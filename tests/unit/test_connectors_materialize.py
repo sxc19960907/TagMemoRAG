@@ -27,6 +27,26 @@ def test_materialize_connector_record_writes_document_and_metadata(tmp_path):
     assert metadata["status"] == "active"
 
 
+def test_materialize_connector_record_preserves_remote_metadata(tmp_path):
+    record = ConnectorRecord(
+        record_id="web-1",
+        manual_id="web-1",
+        title="Web Page",
+        product_category="software_docs",
+        document=ConnectorDocument(source_file="web/page.md", content=b"# Web\n"),
+        remote_id="https://example.com/page",
+        metadata={"domain": "software_docs", "doc_type": "documentation", "url": "https://example.com/page"},
+    )
+
+    materialize_connector_records((record,), kb_name="default", root_dir=tmp_path, provider="fixture")
+
+    metadata = json.loads((tmp_path / "default" / "web" / "page.metadata.json").read_text(encoding="utf-8"))
+    assert metadata["remote_id"] == "https://example.com/page"
+    assert metadata["domain"] == "software_docs"
+    assert metadata["doc_type"] == "documentation"
+    assert metadata["url"] == "https://example.com/page"
+
+
 def test_materialize_connector_tombstone_writes_deleted_metadata(tmp_path):
     record = fixture_markdown_record(action="delete", source_file="fixture/deleted.md")
 

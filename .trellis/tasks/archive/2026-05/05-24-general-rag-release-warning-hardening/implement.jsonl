@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/architecture.md","reason":"General-web, multi-format, mixed-domain, context-pack, eval-as-driver, and release-gate contracts for general-purpose RAG hardening."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend quality gates, bounded local lexical retrieval rules, and forbidden logging/debug patterns."}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Module boundaries for keeping algorithm changes out of API/CLI layers unless needed."}
+{"file":".trellis/tasks/archive/2026-05/05-24-long-horizon-rag-quality/quality-program-notes.md","reason":"Previous baseline, rejected attempts, final release warnings, and validation matrix."}

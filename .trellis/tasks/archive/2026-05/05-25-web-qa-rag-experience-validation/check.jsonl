@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Confirm checks, bounded output, and no debug leakage."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify browser page to API to retrieval/answer contract."}

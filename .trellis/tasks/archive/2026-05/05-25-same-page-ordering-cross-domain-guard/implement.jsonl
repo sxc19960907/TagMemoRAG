@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist for this validation child."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Eval/report privacy and focused test requirements."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Forbidden raw query/snippet/vector/provider diagnostic markers."}
+{"file": ".trellis/tasks/05-24-general-rag-stability-program/design.md", "reason": "Parent stability policy and cross-slice candidate evaluation roadmap."}

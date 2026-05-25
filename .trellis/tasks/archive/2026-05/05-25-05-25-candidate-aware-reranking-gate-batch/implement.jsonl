@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development index and checklist for this child task."}
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Architecture constraints for eval, diagnostics, privacy, and stability gates."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module boundary guidance for moving diagnostic logic into package code."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and privacy constraints for backend diagnostics and reports."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Privacy rules for avoiding raw queries, snippets, vectors, and secrets in diagnostics."}

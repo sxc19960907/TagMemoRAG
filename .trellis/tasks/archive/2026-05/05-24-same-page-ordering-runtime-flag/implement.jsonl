@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Ranking, general-web eval, and default-off experimental feature constraints."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Default-off behavior, deterministic tests, and forbidden diagnostic payloads."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Placement for pure runtime ordering helper and config wiring."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Privacy constraints for runtime diagnostics/logging."}

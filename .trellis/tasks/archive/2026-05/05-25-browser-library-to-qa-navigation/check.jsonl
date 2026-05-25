@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and browser smoke review."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify UI navigation preserves KB context into QA."}

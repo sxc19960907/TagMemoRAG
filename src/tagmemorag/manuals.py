@@ -25,6 +25,7 @@ MANUAL_METADATA_FIELDS = (
     "checksum",
     "notes",
 )
+GENERIC_METADATA_FIELDS = ("domain", "doc_type", "remote_id", "url", "source_format")
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,18 @@ class ManualMetadata:
     uploaded_at: str = ""
     checksum: str = ""
     notes: str = ""
+    extra: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, source_file: str | None = None) -> "ManualMetadata":
         if not isinstance(data, dict):
             raise _invalid_metadata("metadata must be a JSON object")
         values = {key: data.get(key, "") for key in MANUAL_METADATA_FIELDS}
+        extra = {
+            key: str(data.get(key, "")).strip()
+            for key in GENERIC_METADATA_FIELDS
+            if str(data.get(key, "")).strip()
+        }
         if source_file is not None:
             values["source_file"] = source_file
         values["language"] = values["language"] or "unknown"
@@ -84,6 +91,7 @@ class ManualMetadata:
             uploaded_at=str(values.get("uploaded_at", "")).strip(),
             checksum=str(values.get("checksum", "")).strip(),
             notes=str(values.get("notes", "")).strip(),
+            extra=extra,
         )
 
     def to_node_attrs(self) -> dict[str, Any]:
@@ -102,6 +110,7 @@ class ManualMetadata:
             "uploaded_at": self.uploaded_at,
             "checksum": self.checksum,
             "notes": self.notes,
+            **dict(self.extra),
         }
 
 

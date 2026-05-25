@@ -169,6 +169,7 @@ def test_replay_cli_json_output(tmp_path, replay_settings):
         "--generation", "g2",
         "--baseline", "g1",
         "--config", str(cfg_path),
+        "--force-mode", "agentic",
         "--output-format", "json",
     )
 
@@ -177,6 +178,7 @@ def test_replay_cli_json_output(tmp_path, replay_settings):
     assert body["schema_version"] == "replay_report.v1"
     assert body["target"]["generation"] == 2
     assert body["baseline"]["generation"] == 1
+    assert body["forced_mode"] == "agentic"
     assert body["row_counts"]["selected"] == 1
     assert body["rerank_summary"]["fallback_count"] == 1
 
@@ -193,11 +195,13 @@ def test_replay_cli_markdown_output(tmp_path, replay_settings):
         "--kb", "kb-replay",
         "--generation", "active",
         "--config", str(cfg_path),
+        "--force-mode", "classic",
         "--output-format", "markdown",
     )
 
     assert rc == 0
     assert "# Replay Report: kb-replay" in stdout
+    assert "- Forced mode: classic" in stdout
     assert "Target Metrics" in stdout
 
 

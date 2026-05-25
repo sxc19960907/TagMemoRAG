@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "General-web eval slice, eval-as-driver constraints, and ranking pressure context."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing requirements and forbidden raw diagnostic payload patterns."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Placement for pure diagnostic modules and thin CLI scripts."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Low-sensitive bounded diagnostic output constraints."}
