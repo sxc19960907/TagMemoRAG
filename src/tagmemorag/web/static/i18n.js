@@ -431,6 +431,7 @@ const zh = {
   "Preview promotion to see export readiness.": "预览提升结果以查看导出准备情况。",
   "No promotion preview results.": "没有提升预览结果。",
   "Eval draft": "评测草稿",
+  "Report": "报告",
   "ready": "就绪",
   "skipped": "跳过",
   "Ready": "就绪",

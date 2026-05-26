@@ -379,9 +379,11 @@ function renderPromotionSummary(result) {
   const summaryCard = `
     <article class="quality-promotion-card summary">
       <span>${t("Eval draft")}</span>
-      <strong>${escapeHtml(summary.output_path || result?.output_path || "")}</strong>
+      <strong>${escapeHtml(summary.suite_path || summary.output_path || result?.output_path || "")}</strong>
+      ${summary.report_path ? `<small>${t("Report")}: ${escapeHtml(summary.report_path)}</small>` : ""}
       <small>${escapeHtml(summary.ready_count ?? cases.length)} ${t("ready")} / ${escapeHtml(summary.skipped_count ?? skipped.length)} ${t("skipped")}</small>
       ${summary.next_command ? `<code>${escapeHtml(summary.next_command)}</code>` : ""}
+      ${summary.command_note ? `<small>${escapeHtml(summary.command_note)}</small>` : ""}
     </article>
   `;
   const caseCards = cases.map((item) => `

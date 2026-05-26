@@ -120,17 +120,27 @@ class EvalPromotionPreview:
     output_path: str
 
     def to_dict(self) -> dict[str, Any]:
+        suite_path = self.output_path
+        report_path = _eval_report_path(suite_path)
         return {
             "kb_name": self.kb_name,
             "feedback_ids": list(self.feedback_ids),
             "cases": list(self.cases),
             "skipped": list(self.skipped),
-            "output_path": self.output_path,
+            "output_path": suite_path,
             "summary": {
                 "ready_count": len(self.cases),
                 "skipped_count": len(self.skipped),
-                "output_path": self.output_path,
-                "next_command": f"tagmemorag eval run --suite {self.output_path}",
+                "output_path": suite_path,
+                "suite_path": suite_path,
+                "report_path": report_path,
+                "next_command": (
+                    "tagmemorag eval run"
+                    f" --suite {_shell_quote(suite_path)}"
+                    " --reuse-built-kb"
+                    f" --output {_shell_quote(report_path)}"
+                ),
+                "command_note": "Runs the exported feedback eval cases against the currently built KB and writes a JSON report.",
             },
         }
 
@@ -322,6 +332,17 @@ def eval_draft_path(kb_name: str, settings: Settings, output_path: str | None = 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
         path = root / kb_name / f"feedback-{stamp}.jsonl"
     return _safe_child(root, path)
+
+
+def _eval_report_path(suite_path: str) -> str:
+    path = Path(suite_path)
+    return str(path.with_name(f"{path.stem}-report.json"))
+
+
+def _shell_quote(value: str) -> str:
+    if value and all(char.isalnum() or char in "@%_+=:,./-" for char in value):
+        return value
+    return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
 def _select_feedback(kb_name: str, feedback_ids: list[str], settings: Settings) -> list[SearchFeedback]:

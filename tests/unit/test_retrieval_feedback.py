@@ -175,7 +175,12 @@ def test_export_eval_promotion_requires_explicit_existing_file_mode_and_marks_pr
     assert exported["summary"]["ready_count"] == 1
     assert exported["summary"]["skipped_count"] == 0
     assert exported["summary"]["output_path"] == str(output)
-    assert exported["summary"]["next_command"] == f"tagmemorag eval run --suite {output}"
+    assert exported["summary"]["suite_path"] == str(output)
+    assert exported["summary"]["report_path"] == str(output.with_name("feedback-report.json"))
+    assert exported["summary"]["next_command"] == (
+        f"tagmemorag eval run --suite {output} --reuse-built-kb --output {output.with_name('feedback-report.json')}"
+    )
+    assert "currently built KB" in exported["summary"]["command_note"]
     rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
     assert rows[0]["id"] == "feedback-fb-1"
     cases = load_eval_suite(output)
@@ -187,3 +192,17 @@ def test_export_eval_promotion_requires_explicit_existing_file_mode_and_marks_pr
     with pytest.raises(ServiceError) as exists:
         export_eval_promotion("default", [feedback.feedback_id], cfg, output_path=str(output))
     assert exists.value.code == "INVALID_REQUEST"
+
+
+def test_promotion_summary_quotes_eval_command_paths(tmp_path):
+    cfg = _settings(tmp_path)
+    feedback = create_feedback("default", _payload(feedback_id="fb-1"), cfg)
+    output = tmp_path / "eval_drafts" / "default dir" / "feedback file.jsonl"
+
+    preview = preview_eval_promotion("default", [feedback.feedback_id], cfg, output_path=str(output)).to_dict()
+
+    assert preview["summary"]["report_path"] == str(output.with_name("feedback file-report.json"))
+    command = preview["summary"]["next_command"]
+    assert "--reuse-built-kb" in command
+    assert f"--suite '{output}'" in command
+    assert f"--output '{output.with_name('feedback file-report.json')}'" in command
