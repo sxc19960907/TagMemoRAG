@@ -1,4 +1,5 @@
 import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+import { initI18n, t, translatePage } from "./i18n.js";
 
 const config = JSON.parse(document.getElementById("retrieval-quality-config").textContent);
 
@@ -19,7 +20,7 @@ function apiPath(path) {
 
 function setStatus(message, kind = "") {
   const node = $("quality-status");
-  node.textContent = message;
+  node.textContent = message ? t(message) : "";
   node.className = `status-strip ${kind}`.trim();
 }
 
@@ -62,7 +63,7 @@ async function loadFeedback() {
     const value = $(id).value.trim();
     if (value) params.set(key, value);
   }
-  setStatus("Loading feedback...");
+  setStatus(t("Loading feedback..."));
   const body = await requestJson(`/search/feedback?${params.toString()}`, { method: "GET" });
   state.rows = body.feedback || [];
   state.selectedId = state.rows.some((row) => row.feedback_id === state.selectedId) ? state.selectedId : null;
@@ -96,12 +97,12 @@ function renderRows() {
     tbody.appendChild(tr);
   }
   $("quality-empty").style.display = state.rows.length ? "none" : "block";
-  $("quality-count").textContent = `${state.rows.length} records`;
+  $("quality-count").textContent = `${state.rows.length} ${t("records")}`;
 }
 
 function renderDetail() {
   const row = selectedRow();
-  $("quality-detail-subtitle").textContent = row ? row.feedback_id : "Select feedback";
+  $("quality-detail-subtitle").textContent = row ? row.feedback_id : t("Select feedback");
   $("quality-save-review").disabled = !row;
   $("quality-dismiss").disabled = !row;
   $("quality-preview").disabled = !row;
@@ -115,14 +116,14 @@ function renderDetail() {
   $("quality-review-status").value = row.status;
   $("quality-operator-note").value = row.operator_note || "";
   $("quality-detail-list").innerHTML = `
-    <dt>Query</dt><dd>${escapeHtml(row.query)}</dd>
-    <dt>Outcome</dt><dd>${escapeHtml(row.outcome)}</dd>
-    <dt>Trace</dt><dd>${escapeHtml(row.trace_id || "")}</dd>
-    <dt>Search</dt><dd>${escapeHtml(row.search_id || "")}</dd>
-    <dt>Build</dt><dd>${escapeHtml(row.build_id || "")}</dd>
-    <dt>Note</dt><dd>${escapeHtml(row.note || "")}</dd>
-    <dt>Selected</dt><dd><pre>${escapeHtml(JSON.stringify(row.selected_results || [], null, 2))}</pre></dd>
-    <dt>Expected</dt><dd><pre>${escapeHtml(JSON.stringify(row.expected || [], null, 2))}</pre></dd>
+    <dt>${t("Query")}</dt><dd>${escapeHtml(row.query)}</dd>
+    <dt>${t("Outcome")}</dt><dd>${escapeHtml(row.outcome)}</dd>
+    <dt>${t("Trace")}</dt><dd>${escapeHtml(row.trace_id || "")}</dd>
+    <dt>${t("Search")}</dt><dd>${escapeHtml(row.search_id || "")}</dd>
+    <dt>${t("Build")}</dt><dd>${escapeHtml(row.build_id || "")}</dd>
+    <dt>${t("Note")}</dt><dd>${escapeHtml(row.note || "")}</dd>
+    <dt>${t("Selected")}</dt><dd><pre>${escapeHtml(JSON.stringify(row.selected_results || [], null, 2))}</pre></dd>
+    <dt>${t("Expected")}</dt><dd><pre>${escapeHtml(JSON.stringify(row.expected || [], null, 2))}</pre></dd>
   `;
 }
 
@@ -141,7 +142,7 @@ async function saveReview(status = $("quality-review-status").value) {
   state.rows[index] = body.feedback;
   renderRows();
   renderDetail();
-  setStatus("Review saved.", "success");
+  setStatus(t("Review saved."), "success");
 }
 
 async function promotion(commit) {
@@ -201,5 +202,7 @@ $("quality-preview-selected").addEventListener("click", () => promotion(false).c
 $("quality-export").addEventListener("click", () => promotion(true).catch((error) => setStatus(error.message, "error")));
 
 bindSharedApiToken($("quality-api-token"));
+initI18n({ mount: ".top-actions" });
 updateLinks();
 loadFeedback().catch((error) => setStatus(error.message, "error"));
+translatePage();

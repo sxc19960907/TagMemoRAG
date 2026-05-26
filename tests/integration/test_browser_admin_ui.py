@@ -402,13 +402,20 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
-    page.locator("#qa-question").fill("服务模式怎么进入？")
-    page.locator("#qa-submit").click()
+    page.locator("#ui-language-switcher select").select_option("zh")
+    page.get_by_text("手册问答", exact=True).wait_for()
+    page.locator("#ui-language-switcher select").select_option("en")
+    page.get_by_role("textbox", name="Q&A question").fill("服务模式怎么进入？")
+    page.get_by_role("button", name="Ask question").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
+    assert "YOUR QUESTION" in answer_text
+    assert "MANUAL ANSWER" in answer_text
+    assert "服务模式怎么进入？" in answer_text
     assert "同时按住清洗键和热水键三秒" in answer_text
     sources_text = page.locator("#qa-sources").inner_text()
     assert "demo-service-manual.md" in sources_text
+    _assert_qa_layout(page)
 
 
 def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) -> None:
@@ -454,13 +461,44 @@ def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) ->
     page.locator("#manual-library-qa-link").click()
     page.get_by_role("heading", name="Manual Q&A").wait_for()
     assert page.url.endswith("/qa?kb_name=default")
-    page.locator("#qa-question").fill("浏览器上传的手册里，服务模式怎么进入？")
-    page.locator("#qa-submit").click()
+    page.get_by_role("textbox", name="Q&A question").fill("浏览器上传的手册里，服务模式怎么进入？")
+    page.get_by_role("button", name="Ask question").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
     assert "同时按住清洗键和热水键三秒" in answer_text
     sources_text = page.locator("#qa-sources").inner_text()
     assert "browser-upload-service-manual.md" in sources_text
+
+
+def _assert_qa_layout(page) -> None:
+    metrics = page.evaluate(
+        """
+        () => ({
+          scrollWidth: document.body.scrollWidth,
+          innerWidth: window.innerWidth,
+          bubbleCount: document.querySelectorAll(".qa-message-bubble").length,
+          centerTop: Math.round(document.querySelector(".qa-center-pane").getBoundingClientRect().top),
+        })
+        """,
+    )
+    assert metrics["scrollWidth"] <= metrics["innerWidth"]
+    assert metrics["bubbleCount"] >= 2
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.reload()
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    mobile_metrics = page.evaluate(
+        """
+        () => ({
+          scrollWidth: document.body.scrollWidth,
+          innerWidth: window.innerWidth,
+          centerTop: Math.round(document.querySelector(".qa-center-pane").getBoundingClientRect().top),
+        })
+        """,
+    )
+    assert mobile_metrics["scrollWidth"] <= mobile_metrics["innerWidth"]
+    assert mobile_metrics["centerTop"] == 0
+    page.set_viewport_size({"width": 1440, "height": 980})
 
 
 def _exercise_rag_failure_states(page, port: int, upload_path: Path) -> None:

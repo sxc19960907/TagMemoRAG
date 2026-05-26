@@ -1,4 +1,5 @@
 import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+import { initI18n, t, translatePage } from "./i18n.js";
 
 const configEl = document.getElementById("people-admin-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
@@ -61,7 +62,7 @@ function escapeHtml(value) {
 }
 
 function setStatus(message, kind = "") {
-  el.status.textContent = message || "";
+  el.status.textContent = message ? t(message) : "";
   el.status.className = kind ? `status-strip ${kind}` : "status-strip";
 }
 
@@ -76,7 +77,7 @@ function updateLinks() {
 }
 
 async function loadAccessSummary() {
-  setStatus("Loading access summary...");
+  setStatus(t("Loading access summary..."));
   el.refresh.disabled = true;
   try {
     const response = await fetch("/admin/people/access-summary", { headers: headers() });
@@ -85,10 +86,10 @@ async function loadAccessSummary() {
       throw new Error(body.message || `HTTP ${response.status}`);
     }
     renderSummary(body);
-    setStatus("Access summary loaded.", "success");
+    setStatus(t("Access summary loaded."), "success");
   } catch (error) {
     renderError(error);
-    setStatus(error.message || "Access summary failed.", "error");
+    setStatus(error.message || t("Access summary failed."), "error");
   } finally {
     el.refresh.disabled = false;
   }
@@ -98,7 +99,7 @@ async function generateAccessKey(event) {
   event.preventDefault();
   const keyId = el.newId.value.trim();
   if (!keyId) {
-    setStatus("Enter an ID for the new access key.", "error");
+    setStatus(t("Enter an ID for the new access key."), "error");
     return;
   }
   const payload = {
@@ -110,7 +111,7 @@ async function generateAccessKey(event) {
     prefix: el.newPrefix.value || "tmr_live_",
   };
   el.generateSubmit.disabled = true;
-  setStatus("Generating one-time key...");
+  setStatus(t("Generating one-time key..."));
   try {
     const response = await fetch("/admin/people/access-keys/generate", {
       method: "POST",
@@ -122,7 +123,7 @@ async function generateAccessKey(event) {
       throw new Error(body.message || `HTTP ${response.status}`);
     }
     renderGeneratedKey(body);
-    setStatus("One-time key generated. Copy it before leaving this page.", "success");
+    setStatus(t("One-time key generated. Copy it before leaving this page."), "success");
   } catch (error) {
     setStatus(error.message || "Key generation failed.", "error");
   } finally {
@@ -133,7 +134,7 @@ async function generateAccessKey(event) {
 function renderSummary(body) {
   const summary = body.summary || {};
   state.keys = Array.isArray(body.keys) ? body.keys : [];
-  el.authMode.textContent = body.auth_enabled ? "Enabled" : "Disabled";
+  el.authMode.textContent = body.auth_enabled ? t("Enabled") : t("Disabled");
   el.authBackend.textContent = `backend=${body.backend || "-"}`;
   el.activeCount.textContent = String(summary.active_keys ?? 0);
   el.totalCount.textContent = `${summary.total_keys ?? state.keys.length} total`;
@@ -149,7 +150,7 @@ function renderSummary(body) {
 function renderPublicPaths(paths) {
   if (!Array.isArray(paths) || paths.length === 0) {
     el.publicPaths.className = "people-chip-list empty-state";
-    el.publicPaths.textContent = "No public paths configured.";
+    el.publicPaths.textContent = t("No public paths configured.");
     return;
   }
   el.publicPaths.className = "people-chip-list";
@@ -158,7 +159,7 @@ function renderPublicPaths(paths) {
 
 function renderRows() {
   if (state.keys.length === 0) {
-    el.rows.innerHTML = '<tr><td colspan="6" class="empty-state">No API-key identities are configured.</td></tr>';
+    el.rows.innerHTML = `<tr><td colspan="6" class="empty-state">${t("No API-key identities are configured.")}</td></tr>`;
     return;
   }
   el.rows.innerHTML = state.keys.map(renderRow).join("");
@@ -197,7 +198,7 @@ function renderChips(values) {
 
 function renderKbAccess(values) {
   if (!Array.isArray(values) || values.length === 0 || values.includes("*")) {
-    return '<span class="badge ok">All KBs</span>';
+    return `<span class="badge ok">${t("All KBs")}</span>`;
   }
   return renderChips(values);
 }
@@ -205,22 +206,22 @@ function renderKbAccess(values) {
 function renderDetail(item) {
   if (!item) {
     state.selectedId = "";
-    el.detailSubtitle.textContent = "No access identity selected";
-    el.detailList.innerHTML = "<dt>Status</dt><dd class=\"muted\">No configured API keys.</dd>";
+    el.detailSubtitle.textContent = t("No access identity selected");
+    el.detailList.innerHTML = `<dt>${t("Status")}</dt><dd class="muted">${t("No configured API keys.")}</dd>`;
     renderLifecycle(null);
     return;
   }
   state.selectedId = item.id;
   el.detailSubtitle.textContent = item.label || item.id;
   el.detailList.innerHTML = `
-    <dt>ID</dt><dd>${escapeHtml(item.id)}</dd>
-    <dt>Label</dt><dd>${escapeHtml(item.label || "-")}</dd>
-    <dt>Status</dt><dd><span class="badge ${item.status === "active" ? "ok" : "off"}">${escapeHtml(item.status)}</span></dd>
-    <dt>Scopes</dt><dd>${renderChips(item.scopes)}</dd>
-    <dt>KB access</dt><dd>${renderKbAccess(item.kb_allowlist)}</dd>
-    <dt>Rate</dt><dd>${escapeHtml(item.rate_limit_per_minute == null ? "default" : `${item.rate_limit_per_minute}/min`)}</dd>
-    <dt>Created</dt><dd>${escapeHtml(formatDate(item.created_at))}</dd>
-    <dt>Last used</dt><dd>${escapeHtml(formatDate(item.last_used_at))}</dd>
+    <dt>${t("ID")}</dt><dd>${escapeHtml(item.id)}</dd>
+    <dt>${t("Label")}</dt><dd>${escapeHtml(item.label || "-")}</dd>
+    <dt>${t("Status")}</dt><dd><span class="badge ${item.status === "active" ? "ok" : "off"}">${escapeHtml(item.status)}</span></dd>
+    <dt>${t("Scopes")}</dt><dd>${renderChips(item.scopes)}</dd>
+    <dt>${t("KB access")}</dt><dd>${renderKbAccess(item.kb_allowlist)}</dd>
+    <dt>${t("Rate")}</dt><dd>${escapeHtml(item.rate_limit_per_minute == null ? "default" : `${item.rate_limit_per_minute}/min`)}</dd>
+    <dt>${t("Created")}</dt><dd>${escapeHtml(formatDate(item.created_at))}</dd>
+    <dt>${t("Last used")}</dt><dd>${escapeHtml(formatDate(item.last_used_at))}</dd>
   `;
   renderLifecycle(item);
 }
@@ -240,7 +241,7 @@ function renderGeneratedKey(body) {
 function renderLifecycle(item) {
   if (!item) {
     el.lifecycle.className = "people-lifecycle empty-state";
-    el.lifecycle.textContent = "Select an access identity to prepare revoke or rotation steps.";
+    el.lifecycle.textContent = t("Select an access identity to prepare revoke or rotation steps.");
     return;
   }
   const revokeEntry = safeLifecycleEntry(item, { revoked: true });
@@ -251,16 +252,16 @@ function renderLifecycle(item) {
   el.lifecycle.className = "people-lifecycle";
   el.lifecycle.innerHTML = `
     <div class="people-lifecycle-actions">
-      <button id="people-template-key" type="button">Use as template</button>
-      <button id="people-copy-revoke" type="button">Copy revoke config</button>
+      <button id="people-template-key" type="button">${t("Use as template")}</button>
+      <button id="people-copy-revoke" type="button">${t("Copy revoke config")}</button>
     </div>
     <div class="people-lifecycle-block">
-      <strong>Revoke config entry</strong>
-      <p class="muted">Set the old key to revoked in config. The original hash is intentionally not shown here.</p>
+      <strong>${t("Revoke config entry")}</strong>
+      <p class="muted">${t("Set the old key to revoked in config. The original hash is intentionally not shown here.")}</p>
       <textarea id="people-revoke-json" readonly rows="7">${escapeHtml(JSON.stringify(revokeEntry, null, 2))}</textarea>
     </div>
     <div class="people-lifecycle-block">
-      <strong>Rotate plan</strong>
+      <strong>${t("Rotate plan")}</strong>
       <ol class="people-rotate-plan">
         <li>Use this key as a template and generate <code>${escapeHtml(replacementId)}</code>.</li>
         <li>Keep scopes <code>${escapeHtml(scopes)}</code>, KB access <code>${escapeHtml(kbs)}</code>, and rate <code>${escapeHtml(rate)}</code>.</li>
@@ -340,5 +341,7 @@ el.generateForm.addEventListener("submit", generateAccessKey);
 el.copyPlaintext.addEventListener("click", () => copyValue(el.plaintextKey, "Plaintext key"));
 el.copyConfig.addEventListener("click", () => copyValue(el.configJson, "Config JSON"));
 bindSharedApiToken(el.token);
+initI18n({ mount: ".people-links" });
 updateLinks();
 loadAccessSummary();
+translatePage();

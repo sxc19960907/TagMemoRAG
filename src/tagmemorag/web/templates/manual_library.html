@@ -208,7 +208,7 @@
               </details>
               <div id="detail-messages" class="messages"></div>
               <div class="button-row">
-                <button type="button" id="validate-detail">Validate</button>
+                <button type="button" id="validate-detail" aria-label="Validate selected manual metadata">Validate</button>
                 <button type="submit" class="primary">Save</button>
               </div>
             </form>
@@ -263,7 +263,7 @@
       <form id="upload-form" class="upload-form">
         <div class="dialog-header">
           <h2>Upload Manual</h2>
-          <button type="button" id="close-upload" aria-label="Close">x</button>
+          <button type="button" id="close-upload" aria-label="Close upload dialog">x</button>
         </div>
         <label><span>File</span><input name="file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" required></label>
         <div class="field-grid">
@@ -293,7 +293,7 @@
         </div>
         <div id="upload-messages" class="messages"></div>
         <div class="button-row">
-          <button type="button" id="validate-upload">Validate</button>
+          <button type="button" id="validate-upload" aria-label="Validate upload metadata">Validate</button>
           <button type="submit" class="primary">Upload</button>
         </div>
       </form>
@@ -303,7 +303,7 @@
       <form id="bulk-form" class="upload-form">
         <div class="dialog-header">
           <h2>Bulk Import</h2>
-          <button type="button" id="close-bulk-import" aria-label="Close">x</button>
+          <button type="button" id="close-bulk-import" aria-label="Close bulk import dialog">x</button>
         </div>
         <div class="field-grid">
           <label><span>Metadata format</span>
@@ -381,7 +381,7 @@
       <form id="tag-form" class="upload-form">
         <div class="dialog-header">
           <h2>Tag Governance</h2>
-          <button type="button" id="close-tag-governance" aria-label="Close">x</button>
+          <button type="button" id="close-tag-governance" aria-label="Close tag governance dialog">x</button>
         </div>
         <div class="tag-summary" id="tag-summary">No tag report loaded.</div>
         <div class="tag-grid">

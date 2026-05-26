@@ -1,4 +1,5 @@
 import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+import { initI18n, t, translatePage } from "./i18n.js";
 
 const configEl = document.getElementById("rag-workbench-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
@@ -39,7 +40,7 @@ function headers() {
 }
 
 function setStatus(message, kind = "") {
-  el.status.textContent = message || "";
+  el.status.textContent = message ? t(message) : "";
   el.status.className = kind ? `status-strip ${kind}` : "status-strip";
 }
 
@@ -64,7 +65,7 @@ async function requestAnswer(event) {
   event.preventDefault();
   const question = el.question.value.trim();
   if (!question) {
-    setStatus("Enter a question first.", "error");
+    setStatus(t("Enter a question first."), "error");
     return;
   }
   state.kbName = el.kbName.value.trim() || "default";
@@ -79,7 +80,7 @@ async function requestAnswer(event) {
   };
   state.loading = true;
   el.submit.disabled = true;
-  setStatus("Asking...", "");
+  setStatus(t("Asking..."), "");
   renderPending();
   try {
     const response = await fetch("/answer", {
@@ -92,10 +93,10 @@ async function requestAnswer(event) {
       throw new Error(body.message || body.detail || `HTTP ${response.status}`);
     }
     renderAnswer(body);
-    setStatus("Answer loaded.", "success");
+    setStatus(t("Answer loaded."), "success");
   } catch (error) {
     renderError(error);
-    setStatus(error.message || "Answer request failed.", "error");
+    setStatus(error.message || t("Answer request failed."), "error");
   } finally {
     state.loading = false;
     el.submit.disabled = false;
@@ -104,27 +105,27 @@ async function requestAnswer(event) {
 
 function renderPending() {
   el.answer.className = "answer-body empty-state";
-  el.answer.textContent = "Waiting for answer...";
+  el.answer.textContent = t("Waiting for answer...");
   el.citations.innerHTML = "";
   el.evidence.className = "evidence-list empty-state";
-  el.evidence.textContent = "Waiting for evidence...";
+  el.evidence.textContent = t("Waiting for evidence...");
   el.results.className = "evidence-list empty-state";
-  el.results.textContent = "Waiting for results...";
+  el.results.textContent = t("Waiting for results...");
   el.warnings.innerHTML = "";
-  el.answerMeta.textContent = "Request in progress";
+  el.answerMeta.textContent = t("Request in progress");
   el.traceSummary.textContent = "";
   el.answerability.textContent = "";
 }
 
 function renderError(error) {
   el.answer.className = "answer-body error";
-  el.answer.textContent = error.message || "Request failed.";
-  el.answerMeta.textContent = "Request failed";
+  el.answer.textContent = error.message || t("Request failed");
+  el.answerMeta.textContent = t("Request failed");
   el.citations.innerHTML = "";
   el.evidence.className = "evidence-list empty-state";
-  el.evidence.textContent = "No evidence loaded.";
+  el.evidence.textContent = t("No evidence loaded.");
   el.results.className = "evidence-list empty-state";
-  el.results.textContent = "No results loaded.";
+  el.results.textContent = t("No results loaded.");
 }
 
 function renderAnswer(body) {
@@ -151,7 +152,7 @@ function renderAnswer(body) {
 
 function renderCitations(citations) {
   if (!Array.isArray(citations) || citations.length === 0) {
-    el.citations.innerHTML = '<span class="muted">No answer citations.</span>';
+    el.citations.innerHTML = `<span class="muted">${t("No answer citations.")}</span>`;
     return;
   }
   el.citations.innerHTML = citations
@@ -161,7 +162,7 @@ function renderCitations(citations) {
 
 function renderWarnings(warnings) {
   if (!Array.isArray(warnings) || warnings.length === 0) {
-    el.warnings.innerHTML = '<span class="muted">No warnings.</span>';
+    el.warnings.innerHTML = `<span class="muted">${t("No warnings.")}</span>`;
     return;
   }
   el.warnings.innerHTML = warnings.map((warning) => `<span class="badge warn">${escapeHtml(warning)}</span>`).join("");
@@ -178,7 +179,7 @@ function renderAnswerability(answerability) {
     el.answerability.textContent = "No answerability summary";
     return;
   }
-  const answerable = answerability.answerable === true ? "answerable" : "not answerable";
+  const answerable = answerability.answerable === true ? t("answerable") : t("not answerable");
   const reason = answerability.reason || "";
   el.answerability.textContent = `${answerable}${reason ? ` | ${reason}` : ""}`;
 }
@@ -186,7 +187,7 @@ function renderAnswerability(answerability) {
 function renderEvidence(evidence) {
   if (!Array.isArray(evidence) || evidence.length === 0) {
     el.evidence.className = "evidence-list empty-state";
-    el.evidence.textContent = "No evidence returned.";
+    el.evidence.textContent = t("No evidence returned.");
     return;
   }
   el.evidence.className = "evidence-list";
@@ -196,7 +197,7 @@ function renderEvidence(evidence) {
 function renderResults(results) {
   if (!Array.isArray(results) || results.length === 0) {
     el.results.className = "evidence-list empty-state";
-    el.results.textContent = "No results returned.";
+    el.results.textContent = t("No results returned.");
     return;
   }
   el.results.className = "evidence-list";
@@ -220,7 +221,7 @@ function renderEvidenceItem(item) {
 
 function renderResultItem(item) {
   const score = Number(item.score || 0).toFixed(3);
-  const title = item.header || item.path || item.source_file || "Result";
+  const title = item.header || item.path || item.source_file || t("Result");
   return `
     <article class="evidence-item">
       <div class="evidence-head">
@@ -241,4 +242,6 @@ el.kbForm.addEventListener("submit", (event) => {
 
 el.questionForm.addEventListener("submit", requestAnswer);
 bindSharedApiToken(el.token);
+initI18n({ mount: ".workbench-links" });
 updateLinks();
+translatePage();

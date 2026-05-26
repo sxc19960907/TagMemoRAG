@@ -1,4 +1,5 @@
 import { bindSharedApiToken, setSharedApiToken } from "./admin_token.js";
+import { initI18n, t, translatePage } from "./i18n.js";
 
 const configEl = document.getElementById("manual-library-config");
 const config = JSON.parse(configEl?.textContent || "{}");
@@ -168,7 +169,7 @@ function formatDetail(detail) {
 
 function setStatus(message, kind = "") {
   el.status.className = `status-strip ${kind}`.trim();
-  el.status.textContent = message || "";
+  el.status.textContent = message ? t(message) : "";
 }
 
 function updateLinks() {
@@ -547,8 +548,8 @@ function renderDiagnostics(errorMessage = "") {
     return;
   }
   if (!diagnostics) {
-    el.diagnosticsSummary.textContent = "Diagnostics not loaded";
-    el.queueSummary.textContent = "Queue state not loaded";
+    el.diagnosticsSummary.textContent = t("Diagnostics not loaded");
+    el.queueSummary.textContent = t("Queue state not loaded");
     return;
   }
   const registry = diagnostics.registry || {};
@@ -558,12 +559,12 @@ function renderDiagnostics(errorMessage = "") {
   const queue = diagnostics.rebuild_queue || {};
   el.diagnosticsSummary.textContent = `${diagnostics.kb_name || state.kbName} | registry ${registry.enabled ? registry.registry_backend : "file-sidecar"} | blob ${blob.blob_backend || registry.blob_backend || "local"}`;
   [
-    ["Registry", registry.enabled ? `${registry.record_count || 0} records` : "file sidecars", registry.enabled ? "ok" : "off"],
-    ["Blob Health", blob.checked ? `${blob.missing_count || 0} missing / ${blob.checked_count || 0} checked` : "unchecked", blob.missing_count ? "warn" : "off"],
-    ["Dirty State", dirty.pending_changes ? `${dirty.dirty_manual_count || 0} dirty` : "clear", dirty.pending_changes ? "warn" : "ok"],
-    ["Queue", queue.enabled ? `${(queue.jobs || []).length} jobs` : "disabled", queue.enabled ? "ok" : "off"],
-    ["Last Build", last.last_successful_build_id || last.current_build_id || "none", "off"],
-    ["Qdrant", last.qdrant_sync ? `${last.qdrant_sync.strategy || "sync"} up ${last.qdrant_sync.points_upserted || 0}` : "not reported", last.qdrant_sync?.fallback_reason ? "warn" : "off"],
+    [t("Registry"), registry.enabled ? `${registry.record_count || 0} ${t("records")}` : t("file sidecars"), registry.enabled ? "ok" : "off"],
+    [t("Blob Health"), blob.checked ? `${blob.missing_count || 0} ${t("missing")} / ${blob.checked_count || 0} ${t("checked")}` : t("unchecked"), blob.missing_count ? "warn" : "off"],
+    [t("Dirty State"), dirty.pending_changes ? `${dirty.dirty_manual_count || 0} ${t("dirty")}` : t("clear"), dirty.pending_changes ? "warn" : "ok"],
+    [t("Queue"), queue.enabled ? `${(queue.jobs || []).length} ${t("jobs")}` : t("disabled"), queue.enabled ? "ok" : "off"],
+    [t("Last Build"), last.last_successful_build_id || last.current_build_id || t("none"), "off"],
+    [t("Qdrant"), last.qdrant_sync ? `${last.qdrant_sync.strategy || "sync"} up ${last.qdrant_sync.points_upserted || 0}` : t("not reported"), last.qdrant_sync?.fallback_reason ? "warn" : "off"],
   ].forEach(([label, value, kind]) => {
     const div = document.createElement("div");
     div.className = "ops-card";
@@ -573,7 +574,7 @@ function renderDiagnostics(errorMessage = "") {
   const recommendations = diagnostics.recommendations || [];
   el.recommendations.innerHTML = recommendations.length
     ? recommendations.map((item) => `<div class="recommendation">${badge(item.severity || "info", item.severity === "warning" ? "warn" : "off")}<span>${escapeHtml(recommendationLabel(item.code, item.label))}</span></div>`).join("")
-    : '<div class="muted">No recovery actions recommended.</div>';
+    : `<div class="muted">${t("No recovery actions recommended.")}</div>`;
   renderBlobRows(blob);
   renderRebuildJobs(queue);
 }
@@ -590,9 +591,9 @@ function renderBlobRows(blob) {
 
 function renderRebuildJobs(queue) {
   const jobs = queue.jobs || [];
-  el.queueSummary.textContent = queue.enabled ? `${jobs.length} current-process jobs` : "Queue disabled; immediate rebuild polling is active.";
+  el.queueSummary.textContent = queue.enabled ? `${jobs.length} ${t("current-process jobs")}` : t("Queue disabled; immediate rebuild polling is active.");
   if (!jobs.length) {
-    el.queueRows.innerHTML = `<tr><td colspan="7" class="muted">${queue.enabled ? "No rebuild jobs." : "Queue disabled."}</td></tr>`;
+    el.queueRows.innerHTML = `<tr><td colspan="7" class="muted">${queue.enabled ? t("No rebuild jobs.") : t("Queue disabled.")}</td></tr>`;
     return;
   }
   jobs.forEach((job) => {
@@ -605,9 +606,9 @@ function renderRebuildJobs(queue) {
       <td>${escapeHtml(job.queue_position ?? "")}</td>
       <td>${escapeHtml(shortDate(job.updated_at))}</td>
       <td>
-        <button type="button" data-job-action="inspect" data-job-id="${escapeHtml(job.job_id)}">Inspect</button>
-        ${["queued", "running", "retrying", "cancel_requested"].includes(job.status) ? `<button type="button" data-job-action="cancel" data-job-id="${escapeHtml(job.job_id)}">Cancel</button>` : ""}
-        ${job.status === "failed" ? `<button type="button" data-job-action="retry" data-job-id="${escapeHtml(job.job_id)}">Retry</button>` : ""}
+        <button type="button" data-job-action="inspect" data-job-id="${escapeHtml(job.job_id)}">${t("Inspect")}</button>
+        ${["queued", "running", "retrying", "cancel_requested"].includes(job.status) ? `<button type="button" data-job-action="cancel" data-job-id="${escapeHtml(job.job_id)}">${t("Cancel")}</button>` : ""}
+        ${job.status === "failed" ? `<button type="button" data-job-action="retry" data-job-id="${escapeHtml(job.job_id)}">${t("Retry")}</button>` : ""}
       </td>
     `;
     el.queueRows.appendChild(tr);
@@ -621,12 +622,12 @@ function renderAuditTimeline(disabled = false, errorMessage = "") {
     return;
   }
   if (disabled) {
-    el.auditSummary.textContent = "Registry disabled; audit timeline is empty in file-sidecar mode.";
+    el.auditSummary.textContent = t("Registry disabled; audit timeline is empty in file-sidecar mode.");
     return;
   }
-  el.auditSummary.textContent = state.auditManualId ? `Audit events for ${state.auditManualId}` : "Latest KB audit events";
+  el.auditSummary.textContent = state.auditManualId ? `Audit events for ${state.auditManualId}` : t("Latest KB audit events");
   if (!state.auditEvents.length) {
-    el.auditRows.innerHTML = '<tr><td colspan="7" class="muted">No audit events.</td></tr>';
+    el.auditRows.innerHTML = `<tr><td colspan="7" class="muted">${t("No audit events.")}</td></tr>`;
     return;
   }
   state.auditEvents.forEach((event) => {
@@ -687,7 +688,7 @@ function renderTagGovernance() {
   const summary = state.tagReport?.summary || {};
   el.tagSummary.textContent = state.tagReport
     ? `${summary.tag_count || 0} tags | ${summary.issue_count || 0} drift issues | ${summary.warning_count || 0} warnings | ${summary.error_count || 0} errors`
-    : "No tag report loaded.";
+    : t("No tag report loaded.");
   el.tagStatRows.innerHTML = "";
   stats.forEach((stat) => {
     const tr = document.createElement("tr");
@@ -833,11 +834,11 @@ function render() {
 
 function renderTable() {
   const rows = filteredManuals();
-  el.root.textContent = state.libraryRoot ? `Root ${state.libraryRoot}` : "Root not loaded";
+  el.root.textContent = state.libraryRoot ? `${t("Root")} ${state.libraryRoot}` : t("Root not loaded");
   const dirtyLabels = state.dirtyManuals.slice(0, 4).map((manual) => `${manual.manual_id}:${manual.operation}`);
   el.dirtySummary.textContent = state.pendingChanges
     ? `${state.dirtyManualCount} dirty manual${state.dirtyManualCount === 1 ? "" : "s"}${dirtyLabels.length ? ` | ${dirtyLabels.join(", ")}` : ""}`
-    : "No dirty manuals";
+    : t("No dirty manuals");
   el.count.textContent = `${rows.length} of ${state.manuals.length} manuals`;
   el.rows.innerHTML = "";
   rows.forEach((manual) => {
@@ -868,7 +869,7 @@ function renderTable() {
   });
   el.empty.hidden = state.loading || rows.length > 0;
   if (!state.loading && rows.length === 0) {
-    el.empty.textContent = state.manuals.length ? "No manuals match the current filters." : "No managed manuals found.";
+    el.empty.textContent = state.manuals.length ? t("No manuals match the current filters.") : t("No managed manuals found.");
   }
 }
 
@@ -886,7 +887,7 @@ function renderDetail() {
   el.disableManual.disabled = disabled;
   el.hardDelete.disabled = disabled || el.hardDeleteConfirm.value !== manual?.manual_id;
   el.hardDeleteConfirm.disabled = disabled;
-  el.detailSubtitle.textContent = manual ? manual.manual_id : "Select a manual";
+  el.detailSubtitle.textContent = manual ? manual.manual_id : t("Select a manual");
   if (!manual) {
     clearSuggestions("detail");
     return;
@@ -933,7 +934,7 @@ async function validateMetadata(metadata, mode, currentManualId, container) {
   });
   const messages = body.messages || [];
   if (body.valid) {
-    showMessages(container, ["Metadata is valid."], "success");
+    showMessages(container, [t("Metadata is valid.")], "success");
   } else {
     showMessages(container, messages, "error");
   }
@@ -1287,9 +1288,11 @@ async function pollRebuild(taskId) {
   tick();
 }
 
+initI18n({ mount: ".top-actions" });
 renderDetail();
 renderBulkPreview();
 loadManuals();
 loadDiagnostics();
 loadAuditTimeline(null);
 updateLinks();
+translatePage();

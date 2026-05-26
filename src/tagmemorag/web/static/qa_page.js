@@ -1,4 +1,5 @@
 import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+import { initI18n, t, translatePage } from "./i18n.js";
 
 const configEl = document.getElementById("qa-page-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
@@ -55,7 +56,7 @@ function headers() {
 }
 
 function setStatus(message, kind = "") {
-  el.status.textContent = message || "";
+  el.status.textContent = message ? t(message) : "";
   el.status.className = kind ? `status-strip qa-status ${kind}` : "status-strip qa-status";
 }
 
@@ -75,6 +76,7 @@ function escapeHtml(value) {
 function updateLocationKb() {
   if (el.contextNote) {
     el.contextNote.textContent = "Ask a question and get an answer grounded in the available manuals.";
+    translatePage();
   }
 }
 
@@ -82,7 +84,7 @@ async function requestAnswer(event) {
   event.preventDefault();
   const question = el.question.value.trim();
   if (!question) {
-    setStatus("Enter a question first.", "error");
+    setStatus(t("Enter a question first."), "error");
     el.question.focus();
     return;
   }
@@ -93,7 +95,7 @@ async function requestAnswer(event) {
 async function requestNewQuestion() {
   const question = el.question.value.trim();
   if (!question) {
-    setStatus("Enter a question first.", "error");
+    setStatus(t("Enter a question first."), "error");
     el.question.focus();
     return;
   }
@@ -108,10 +110,10 @@ async function askQuestion(question, options = {}) {
     usedContext: contextTurns.length > 0,
     contextSummary: contextTurns.map((item) => ({ question: item.question })),
   });
-  renderPending();
+  renderPending(question);
   el.submit.disabled = true;
   if (el.submitNew) el.submitNew.disabled = true;
-  setStatus("Asking...");
+  setStatus(t("Asking..."));
 
   try {
     const response = await fetch("/qa/answer", {
@@ -135,7 +137,7 @@ async function askQuestion(question, options = {}) {
     });
     if (state.activeTurnId === turn.id) {
       renderAnswer(body);
-      setStatus("Answer ready.", "success");
+      setStatus(t("Answer ready."), "success");
     }
   } catch (error) {
     const message = userFacingError(error.message);
@@ -153,16 +155,16 @@ async function askQuestion(question, options = {}) {
   }
 }
 
-function renderPending() {
+function renderPending(question = "") {
   resetPostAnswerUi();
   state.lastAnswerText = "";
-  el.answer.className = "qa-answer-message empty-state";
-  el.answer.innerHTML = '<p class="qa-loading-stage">Understanding the question...</p>';
-  el.answerMeta.textContent = "Preparing answer";
+  el.answer.className = "qa-answer-message";
+  el.answer.innerHTML = renderConversationShell(question, `<p class="qa-loading-stage">${t("Understanding the question...")}</p>`);
+  el.answerMeta.textContent = t("Preparing answer");
   if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
-  el.sources.textContent = "Finding sources...";
-  el.sourceMeta.textContent = "Cited source snippets will appear here.";
+  el.sources.textContent = t("Finding sources...");
+  el.sourceMeta.textContent = t("Cited source snippets will appear here.");
   startLoadingStages();
 }
 
@@ -171,12 +173,13 @@ function renderError(error) {
   resetPostAnswerUi();
   state.lastAnswerText = "";
   el.answer.className = "qa-answer-message error";
-  el.answer.textContent = userFacingError(error.message);
-  el.answerMeta.textContent = "Request failed";
+  const question = activeConversationTurn()?.question || "";
+  el.answer.innerHTML = renderConversationShell(question, `<p>${escapeHtml(userFacingError(error.message))}</p>`);
+  el.answerMeta.textContent = t("Request failed");
   if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
-  el.sources.textContent = "No sources available.";
-  el.sourceMeta.textContent = "Sources unavailable.";
+  el.sources.textContent = t("No sources available.");
+  el.sourceMeta.textContent = t("Sources unavailable.");
 }
 
 function renderAnswer(body) {
@@ -188,7 +191,7 @@ function renderAnswer(body) {
   if (kind === "answer") {
     state.lastAnswerText = String(answer.text || "");
     el.answer.className = "qa-answer-message";
-    el.answer.innerHTML = renderAnswerText(answer.text || "");
+    el.answer.innerHTML = renderConversationShell(body.question || activeConversationTurn()?.question || "", renderAnswerText(answer.text || ""));
     el.answerMeta.textContent = confidenceLabel(answer.confidence);
     if (el.copyAnswer) el.copyAnswer.disabled = !state.lastAnswerText;
     renderContextNotice(body.context);
@@ -198,13 +201,13 @@ function renderAnswer(body) {
     resetPostAnswerUi();
     state.lastAnswerText = "";
     el.answer.className = "qa-answer-message warn";
-    const reason = answer.text || answer.refusal_reason || "I could not answer from the available manual content.";
+    const reason = answer.text || answer.refusal_reason || t("I could not answer from the available manual content.");
     const hints = Array.isArray(answer.missing_evidence_hints) ? answer.missing_evidence_hints : [];
-    el.answer.innerHTML = [
+    el.answer.innerHTML = renderConversationShell(body.question || activeConversationTurn()?.question || "", [
       `<p>${escapeHtml(userFacingReason(reason))}</p>`,
       ...hints.map((hint) => `<p class="muted">${escapeHtml(hint)}</p>`),
-    ].join("");
-    el.answerMeta.textContent = "No grounded answer available";
+    ].join(""));
+    el.answerMeta.textContent = t("No grounded answer available");
     if (el.copyAnswer) el.copyAnswer.disabled = true;
     renderContextNotice(body.context);
   }
@@ -216,6 +219,30 @@ function renderAnswer(body) {
   }
 }
 
+function renderConversationShell(question, answerHtml) {
+  const questionHtml = question
+    ? `
+      <section class="qa-message-row user">
+        <div class="qa-message-bubble">
+          <span class="eyebrow">${t("Your question")}</span>
+          <p>${escapeHtml(question)}</p>
+        </div>
+      </section>
+    `
+    : "";
+  return `
+    <div class="qa-message-stack">
+      ${questionHtml}
+      <section class="qa-message-row assistant">
+        <div class="qa-message-bubble">
+          <span class="eyebrow">${t("Manual answer")}</span>
+          ${answerHtml}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function startLoadingStages() {
   stopLoadingStages();
   state.loadingStageIndex = 0;
@@ -223,8 +250,8 @@ function startLoadingStages() {
     state.loadingStageIndex = (state.loadingStageIndex + 1) % loadingStages.length;
     const stage = loadingStages[state.loadingStageIndex];
     const stageEl = el.answer.querySelector(".qa-loading-stage");
-    if (stageEl) stageEl.textContent = stage;
-    el.answerMeta.textContent = stage;
+    if (stageEl) stageEl.textContent = t(stage);
+    el.answerMeta.textContent = t(stage);
   }, 700);
 }
 
@@ -330,7 +357,7 @@ function renderHistory() {
   if (!el.history) return;
   if (state.turns.length === 0) {
     el.history.className = "qa-history-list empty-state";
-    el.history.textContent = "No questions yet.";
+    el.history.textContent = t("No questions yet.");
     if (el.clearHistory) el.clearHistory.disabled = true;
     return;
   }
@@ -481,8 +508,8 @@ function renderContextNotice(context) {
   notice.setAttribute("aria-label", "Conversation context");
   const question = summary.map((item) => item.question).filter(Boolean)[0] || "previous question";
   notice.innerHTML = `
-    <strong>Continuing from earlier</strong>
-    <p>Using context from: ${escapeHtml(question)}</p>
+    <strong>${t("Continuing from earlier")}</strong>
+    <p>${t("Using context from: {question}", { question: escapeHtml(question) })}</p>
   `;
   el.answer.insertAdjacentElement("afterend", notice);
 }
@@ -494,11 +521,11 @@ function updateSubmitNewState() {
 }
 
 function historyStatusLabel(status) {
-  if (status === "pending") return "Asking...";
-  if (status === "answered") return "Answered";
-  if (status === "clarification") return "Needs detail";
-  if (status === "error") return "Failed";
-  return "No answer";
+  if (status === "pending") return t("Asking...");
+  if (status === "answered") return t("Answered");
+  if (status === "clarification") return t("Needs detail");
+  if (status === "error") return t("Failed");
+  return t("No answer");
 }
 
 function restoreConversationTurn(turnId) {
@@ -514,7 +541,7 @@ function restoreConversationTurn(turnId) {
     return;
   }
   if (turn.status === "error") {
-    renderError({ message: turn.errorMessage || "Answer request failed." });
+    renderError({ message: turn.errorMessage || t("Answer request failed.") });
     updateSubmitNewState();
     return;
   }
@@ -554,7 +581,7 @@ function renderFollowups(answerText, citations) {
     return;
   }
   el.followups.innerHTML = `
-    <span class="eyebrow">Follow up</span>
+    <span class="eyebrow">${t("Follow up")}</span>
     <div class="qa-followup-list">
       ${questions.map((question) => `<button class="qa-followup-chip" type="button" data-followup="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}
     </div>
@@ -623,8 +650,8 @@ function activeConversationTurn() {
 }
 
 function feedbackNoteForKind(kind) {
-  if (kind === "helpful") return "Marked helpful for this answer.";
-  if (kind === "not-helpful") return "Marked for review in this page session.";
+  if (kind === "helpful") return t("Marked helpful for this answer.");
+  if (kind === "not-helpful") return t("Marked for review in this page session.");
   return "";
 }
 
@@ -632,17 +659,17 @@ async function copyAnswer() {
   if (!state.lastAnswerText) return;
   try {
     await navigator.clipboard.writeText(state.lastAnswerText);
-    setStatus("Answer copied.", "success");
+    setStatus(t("Answer copied."), "success");
   } catch (_error) {
-    setStatus("Copy failed. Select the answer text to copy it manually.", "error");
+    setStatus(t("Copy failed. Select the answer text to copy it manually."), "error");
   }
 }
 
 function confidenceLabel(confidence) {
-  if (typeof confidence !== "number") return "Answer generated from manual evidence";
-  if (confidence >= 0.75) return "High confidence";
-  if (confidence >= 0.45) return "Medium confidence";
-  return "Low confidence";
+  if (typeof confidence !== "number") return t("Answer generated from manual evidence");
+  if (confidence >= 0.75) return t("High confidence");
+  if (confidence >= 0.45) return t("Medium confidence");
+  return t("Low confidence");
 }
 
 function renderAnswerText(text) {
@@ -727,13 +754,13 @@ function renderSources(citations, evidence) {
 
   if (items.length === 0) {
     el.sources.className = "qa-source-list empty-state";
-    el.sources.textContent = "No cited sources returned.";
-    el.sourceMeta.textContent = "No sources available.";
+    el.sources.textContent = t("No cited sources returned.");
+    el.sourceMeta.textContent = t("No sources available.");
     return;
   }
 
   el.sources.className = "qa-source-list";
-  el.sourceMeta.textContent = `${items.length} source${items.length === 1 ? "" : "s"} cited`;
+  el.sourceMeta.textContent = t("{count} source{plural} cited", { count: items.length, plural: items.length === 1 ? "" : "s" });
   el.sources.innerHTML = items.map(renderSourceItem).join("");
   bindSourceToggles();
   bindCitationLinks();
@@ -742,26 +769,26 @@ function renderSources(citations, evidence) {
 function renderClarificationCandidates(candidates) {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     el.sources.className = "qa-source-list empty-state";
-    el.sources.textContent = "No candidate manuals available.";
-    el.sourceMeta.textContent = "More detail needed.";
+    el.sources.textContent = t("No candidate manuals available.");
+    el.sourceMeta.textContent = t("More detail needed.");
     return;
   }
   el.sources.className = "qa-source-list";
-  el.sourceMeta.textContent = "Possible manual contexts";
+  el.sourceMeta.textContent = t("Possible manual contexts");
   el.sources.innerHTML = candidates
     .map((candidate) => `
       <article class="qa-source-item">
         <div class="evidence-head">
-          <span>${escapeHtml(candidate.label || candidate.kb_name || "Manual")}</span>
+          <span>${escapeHtml(candidate.label || candidate.kb_name || t("Manual"))}</span>
         </div>
-        <p class="muted">Add the product name, model, or error code to route this question.</p>
+        <p class="muted">${t("Add the product name, model, or error code to route this question.")}</p>
       </article>
     `)
     .join("");
 }
 
 function renderSourceItem(item) {
-  const citation = item.citation_id || item.evidence_id || "source";
+  const citation = item.citation_id || item.evidence_id || t("source");
   const safeCitation = escapeHtml(citation);
   const source = item.source || item.source_file || "";
   const section = Array.isArray(item.section_path) ? item.section_path.join(" / ") : "";
@@ -776,7 +803,7 @@ function renderSourceItem(item) {
       </div>
       ${section ? `<p class="qa-source-section">${escapeHtml(section)}</p>` : ""}
       <p class="qa-source-summary">${escapeHtml(summary)}</p>
-      ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>Show more</button>` : ""}
+      ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>${t("Show more")}</button>` : ""}
     </article>
   `;
 }
@@ -802,7 +829,7 @@ function bindSourceToggles() {
       const expanding = full.hidden;
       full.hidden = !expanding;
       summary.hidden = expanding;
-      button.textContent = expanding ? "Show less" : "Show more";
+      button.textContent = expanding ? t("Show less") : t("Show more");
     });
   });
 }
@@ -840,9 +867,11 @@ if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
 if (el.question) el.question.addEventListener("input", updateSubmitNewState);
 bindSharedApiToken(el.token);
+initI18n({ mount: ".qa-left-rail" });
 renderSuggestions();
 loadSessionMemory();
 renderHistory();
 if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);
 updateSubmitNewState();
 updateLocationKb();
+translatePage();

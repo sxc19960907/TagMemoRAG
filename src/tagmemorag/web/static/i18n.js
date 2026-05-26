@@ -1,0 +1,518 @@
+const LANGUAGE_KEY = "tagmemoragUiLanguage";
+const SUPPORTED_LANGUAGES = new Set(["en", "zh"]);
+
+const zh = {
+  "Language": "界面语言",
+  "RAG Workbench": "RAG 工作台",
+  "Manual Library": "资料库",
+  "Retrieval Quality": "检索质量",
+  "People & Access": "人员与权限",
+  "Ask Q&A": "问答",
+  "Manual Q&A": "手册问答",
+  "Your question": "你的问题",
+  "Manual answer": "手册回答",
+  "KB": "知识库",
+  "Load": "加载",
+  "Use": "使用",
+  "API token": "API 令牌",
+  "Bearer token": "Bearer 令牌",
+  "Admin bearer token": "管理员 Bearer 令牌",
+  "Workbench navigation": "工作台导航",
+  "People navigation": "人员导航",
+  "Question and answer": "问题与回答",
+  "Workbench answer workspace": "工作台回答区",
+  "Ask": "提问",
+  "Question, answer, citations, and retrieval state for one KB": "查看单个知识库的问题、回答、引用和检索状态",
+  "Question": "问题",
+  "Workbench question": "工作台问题",
+  "Ask a product-manual question": "输入产品手册问题",
+  "Top K": "Top K",
+  "Source K": "来源 K",
+  "Mode": "模式",
+  "Classic": "经典",
+  "Agentic": "Agent 模式",
+  "Answer": "回答",
+  "No answer yet": "还没有回答",
+  "Ask a question to generate an answer.": "提问后会生成回答。",
+  "Warnings and trace": "警告与追踪",
+  "Trace": "追踪",
+  "No request yet": "还没有请求",
+  "Evidence and retrieval detail": "证据与检索详情",
+  "Evidence": "证据",
+  "No retrieval payload": "还没有检索数据",
+  "Cited Evidence": "引用证据",
+  "No evidence loaded.": "还没有加载证据。",
+  "Top Results": "顶部结果",
+  "No results loaded.": "还没有加载结果。",
+  "Enter a question first.": "请先输入问题。",
+  "Asking...": "正在提问...",
+  "Answer loaded.": "回答已加载。",
+  "Answer request failed.": "回答请求失败。",
+  "Waiting for answer...": "正在等待回答...",
+  "Waiting for evidence...": "正在等待证据...",
+  "Waiting for results...": "正在等待结果...",
+  "Request in progress": "请求进行中",
+  "Request failed": "请求失败",
+  "No answer citations.": "没有回答引用。",
+  "No warnings.": "没有警告。",
+  "No answerability summary": "没有可回答性摘要",
+  "answerable": "可回答",
+  "not answerable": "不可回答",
+  "No evidence returned.": "没有返回证据。",
+  "No results returned.": "没有返回结果。",
+  "Result": "结果",
+
+  "Bulk Import": "批量导入",
+  "Tags": "标签",
+  "Upload": "上传",
+  "Full": "全量",
+  "Incremental": "增量",
+  "Auto": "自动",
+  "Rebuild": "重建",
+  "Manual library diagnostics": "资料库诊断",
+  "Operations": "运维",
+  "Diagnostics not loaded": "诊断尚未加载",
+  "Refresh": "刷新",
+  "Verify blobs": "校验文件对象",
+  "Recovery": "恢复建议",
+  "Safe next actions from dirty state, blob health, queue, and Qdrant signals": "根据脏状态、文件健康、队列和 Qdrant 信号给出安全下一步",
+  "Rebuild Queue": "重建队列",
+  "Queue state not loaded": "队列状态尚未加载",
+  "Status": "状态",
+  "Attempt": "尝试",
+  "Task": "任务",
+  "Position": "位置",
+  "Updated": "更新时间",
+  "Action": "操作",
+  "Manual filters": "手册筛选",
+  "Search": "搜索",
+  "id, title, source, model, category": "ID、标题、来源、型号、分类",
+  "All": "全部",
+  "Active": "启用",
+  "Disabled": "禁用",
+  "Archived": "归档",
+  "Searchable": "可检索",
+  "Unbuilt": "未构建",
+  "Required": "需要",
+  "Clear": "清除",
+  "Managed manuals": "已管理手册",
+  "Library": "资料库",
+  "Root not loaded": "根目录尚未加载",
+  "No dirty manuals": "没有待重建手册",
+  "0 manuals": "0 份手册",
+  "Manual ID": "手册 ID",
+  "Title": "标题",
+  "Source": "来源",
+  "Category": "分类",
+  "Model": "型号",
+  "Lang": "语言",
+  "Chunks": "分块",
+  "Load a KB to view managed manuals.": "加载知识库后查看已管理手册。",
+  "Manual detail": "手册详情",
+  "Detail": "详情",
+  "Select a manual": "选择一份手册",
+  "Source file": "源文件",
+  "Brand": "品牌",
+  "Product": "产品",
+  "Language": "语言",
+  "Version": "版本",
+  "comma or newline separated": "用逗号或换行分隔",
+  "Suggest tags": "推荐标签",
+  "Accept all": "全部接受",
+  "Notes": "备注",
+  "Raw JSON": "原始 JSON",
+  "Validate": "校验",
+  "Validate selected manual metadata": "校验选中手册元数据",
+  "Validate upload metadata": "校验上传元数据",
+  "Save": "保存",
+  "Source File": "源文件",
+  "Large content changes may leave anchors unresolved until the next rebuild.": "大幅修改内容后，锚点可能要等下次重建后才能重新对齐。",
+  "Replace file": "替换文件",
+  "Audit Timeline": "审计时间线",
+  "Select a manual or load KB audit events": "选择手册或加载知识库审计事件",
+  "Time": "时间",
+  "Manual": "手册",
+  "Operation": "操作",
+  "Outcome": "结果",
+  "Actor": "操作者",
+  "Disable or Delete": "禁用或删除",
+  "Disabled manuals remain on disk and are excluded from future rebuilds.": "禁用的手册仍保留在磁盘上，但会从后续重建中排除。",
+  "Disable": "禁用",
+  "Type manual id to hard delete": "输入手册 ID 以硬删除",
+  "Hard delete": "硬删除",
+  "Upload Manual": "上传手册",
+  "Close": "关闭",
+  "Close upload dialog": "关闭上传弹窗",
+  "Close bulk import dialog": "关闭批量导入弹窗",
+  "Close tag governance dialog": "关闭标签治理弹窗",
+  "File": "文件",
+  "Overwrite existing": "覆盖已有手册",
+  "Trigger rebuild after upload": "上传后触发重建",
+  "Metadata format": "元数据格式",
+  "Metadata file": "元数据文件",
+  "Metadata text": "元数据文本",
+  "Documents": "文档",
+  "Approve overwrite/upsert": "允许覆盖或更新",
+  "Trigger rebuild after import": "导入后触发重建",
+  "Bulk preview filters": "批量预览筛选",
+  "Severity": "严重级别",
+  "Error": "错误",
+  "Warning": "警告",
+  "Info": "信息",
+  "Create": "创建",
+  "Update": "更新",
+  "Skip": "跳过",
+  "Conflict": "冲突",
+  "Invalid": "无效",
+  "Tag": "标签",
+  "No preview loaded.": "还没有预览。",
+  "Select all valid rows": "选择所有有效行",
+  "Row": "行",
+  "Message": "消息",
+  "Preview": "预览",
+  "Import selected valid rows": "导入选中的有效行",
+  "Tag Governance": "标签治理",
+  "No tag report loaded.": "还没有标签报告。",
+  "Facets": "分面",
+  "Library tags and searchable graph counts": "资料库标签和可检索图谱数量",
+  "Canonical": "规范标签",
+  "State": "状态",
+  "Manuals": "手册",
+  "Graph": "图谱",
+  "Drift": "漂移",
+  "Warnings before rebuild or taxonomy churn spreads": "在重建或分类漂移扩散前发现警告",
+  "Code": "代码",
+  "Count": "数量",
+  "Policy JSON": "策略 JSON",
+  "Save policy": "保存策略",
+  "Source tags": "源标签",
+  "Target tag": "目标标签",
+  "Policy alias": "策略别名",
+  "Update policy aliases": "更新策略别名",
+  "Before": "之前",
+  "After": "之后",
+  "Preview rewrite": "预览改写",
+  "Commit rewrite": "提交改写",
+  "Loading suggestions...": "正在加载推荐...",
+  "No new tag suggestions.": "没有新的标签推荐。",
+  "Loading tag report...": "正在加载标签报告...",
+  "Tag report loaded.": "标签报告已加载。",
+  "Policy saved.": "策略已保存。",
+  "Metadata is valid.": "元数据有效。",
+  "Metadata saved. Rebuild is required before search reflects the change.": "元数据已保存。搜索生效前需要重建。",
+  "Choose a replacement source file first.": "请先选择替换源文件。",
+  "Replace this manual source file? Anchors may need rebuild reconciliation.": "要替换这份手册的源文件吗？锚点可能需要重建后重新对齐。",
+  "Source file replaced. Rebuild is required before search reflects the change.": "源文件已替换。搜索生效前需要重建。",
+  "Manual disabled. Rebuild is required to remove it from search.": "手册已禁用。需要重建后才会从搜索中移除。",
+  "Manual hard deleted. Rebuild is required to clear search state.": "手册已硬删除。需要重建以清理搜索状态。",
+  "Manual uploaded and rebuild job queued.": "手册已上传，重建任务已入队。",
+  "Manual uploaded and rebuild started.": "手册已上传，重建已开始。",
+  "Manual uploaded. Rebuild is required before it is searchable.": "手册已上传。需要重建后才能被检索。",
+  "Registry blob verification complete.": "注册表文件对象校验完成。",
+  "Rebuild job cancellation requested.": "已请求取消重建任务。",
+  "Rebuild job queued for retry.": "重建任务已加入重试队列。",
+  "Registry": "注册表",
+  "Blob Health": "文件健康",
+  "Dirty State": "脏状态",
+  "Last Build": "最近构建",
+  "records": "条记录",
+  "file sidecars": "文件旁路元数据",
+  "missing": "缺失",
+  "checked": "已检查",
+  "unchecked": "未检查",
+  "dirty": "待处理",
+  "jobs": "个任务",
+  "disabled": "已禁用",
+  "none": "无",
+  "not reported": "未报告",
+  "No recovery actions recommended.": "没有推荐的恢复操作。",
+  "current-process jobs": "个当前进程任务",
+  "Queue disabled; immediate rebuild polling is active.": "队列已禁用，正在使用即时重建轮询。",
+  "No rebuild jobs.": "没有重建任务。",
+  "Queue disabled.": "队列已禁用。",
+  "Inspect": "检查",
+  "Cancel": "取消",
+  "Retry": "重试",
+  "Registry disabled; audit timeline is empty in file-sidecar mode.": "注册表已禁用，文件旁路模式下审计时间线为空。",
+  "Latest KB audit events": "最新知识库审计事件",
+  "No audit events.": "没有审计事件。",
+  "Root": "根目录",
+  "No manuals match the current filters.": "没有手册符合当前筛选。",
+  "No managed manuals found.": "没有找到已管理手册。",
+
+  "Question answering context": "问答上下文",
+  "Assistant": "助手",
+  "Product manual support": "产品手册支持",
+  "Ask a question and get an answer grounded in the available manuals.": "提出问题，系统会基于可用手册给出回答。",
+  "Suggested questions": "推荐问题",
+  "Try asking": "试着这样问",
+  "Conversation history": "对话历史",
+  "Conversation": "对话",
+  "Clear": "清除",
+  "No questions yet.": "还没有问题。",
+  "Answer workspace": "回答工作区",
+  "Product Manual Assistant": "产品手册助手",
+  "Ask a manual question": "询问手册问题",
+  "Copy answer": "复制回答",
+  "Ask about a symptom, task, or error.": "可以询问症状、操作或错误。",
+  "Good questions include weak steam, no coffee output, descaling, or nozzle cleaning.": "例如蒸汽弱、不出咖啡、除垢或喷嘴清洁。",
+  "Follow-up questions": "追问",
+  "Answer feedback": "回答反馈",
+  "Feedback": "反馈",
+  "Was this useful?": "这个回答有帮助吗？",
+  "Helpful": "有帮助",
+  "Not helpful": "没帮助",
+  "Ask as new": "作为新问题提问",
+  "Ask without conversation context": "不带对话上下文提问",
+  "Ask question": "提问",
+  "Q&A question": "问答问题",
+  "Sources": "来源",
+  "Grounding": "依据",
+  "Cited source snippets will appear here.": "引用来源片段会显示在这里。",
+  "No sources yet.": "还没有来源。",
+  "Understanding the question...": "正在理解问题...",
+  "Finding the most relevant manual passages...": "正在查找最相关的手册片段...",
+  "Composing a grounded answer...": "正在生成有依据的回答...",
+  "Preparing answer": "正在准备回答",
+  "Finding sources...": "正在查找来源...",
+  "Answer ready.": "回答已就绪。",
+  "No sources available.": "没有可用来源。",
+  "Sources unavailable.": "来源不可用。",
+  "No grounded answer available": "没有可依据手册回答的内容",
+  "I could not answer from the available manual content.": "我无法从现有手册内容中回答。",
+  "Continuing from earlier": "正在延续上文",
+  "Using context from: {question}": "正在使用上下文：{question}",
+  "previous question": "上一个问题",
+  "Asking": "提问中",
+  "Answered": "已回答",
+  "Needs detail": "需要更多信息",
+  "Failed": "失败",
+  "No answer": "无回答",
+  "Follow up": "追问",
+  "Thanks. Feedback saved locally for this session.": "谢谢，反馈已保存在本次会话中。",
+  "Feedback cleared.": "反馈已清除。",
+  "Answer copied.": "回答已复制。",
+  "Copy failed. Select the answer text to copy it manually.": "复制失败。请选中回答文本后手动复制。",
+  "Marked helpful for this answer.": "已标记这条回答有帮助。",
+  "Marked for review in this page session.": "已在本页会话中标记为需要复核。",
+  "Answer generated from manual evidence": "已基于手册证据生成回答",
+  "High confidence": "高置信度",
+  "Medium confidence": "中等置信度",
+  "Low confidence": "低置信度",
+  "No cited sources returned.": "没有返回引用来源。",
+  "{count} source{plural} cited": "引用了 {count} 个来源",
+  "No candidate manuals available.": "没有可选手册。",
+  "More detail needed.": "需要更多信息。",
+  "Possible manual contexts": "可能的手册上下文",
+  "Add the product name, model, or error code to route this question.": "补充产品名称、型号或错误代码，以便定位正确手册。",
+  "Show more": "展开",
+  "Show less": "收起",
+  "source": "来源",
+  "Answer selected for copying.": "回答已选中，可复制。",
+
+  "Access summary": "权限摘要",
+  "Auth": "认证",
+  "Active keys": "启用密钥",
+  "0 total": "共 0 个",
+  "Admin keys": "管理员密钥",
+  "0 revoked": "0 个已撤销",
+  "Global rate limit": "全局限流",
+  "requests / minute": "请求 / 分钟",
+  "Access identities": "访问身份",
+  "Config-backed API key identities, scopes, KB access, and usage state": "基于配置的 API 密钥身份、权限范围、知识库访问和使用状态",
+  "Person / key": "人员 / 密钥",
+  "Scopes": "权限范围",
+  "KB access": "知识库访问",
+  "Rate": "速率",
+  "Last used": "最近使用",
+  "Loading access identities...": "正在加载访问身份...",
+  "Selected access": "选中权限",
+  "Choose a row to inspect scope and limits": "选择一行查看权限范围和限制",
+  "Identity": "身份",
+  "No key selected": "未选择密钥",
+  "Lifecycle": "生命周期",
+  "Select an access identity to prepare revoke or rotation steps.": "选择访问身份以准备撤销或轮换步骤。",
+  "Public paths": "公开路径",
+  "Not loaded.": "尚未加载。",
+  "Add access": "新增访问",
+  "Generate a key, add the config entry under `auth.keys`, then give the plaintext key to the client once.": "生成密钥，把配置项加入 `auth.keys`，然后只向客户端交付一次明文密钥。",
+  "ID": "ID",
+  "Label": "标签",
+  "Rate / min": "速率 / 分钟",
+  "Prefix": "前缀",
+  "Generate key": "生成密钥",
+  "One-time result": "一次性结果",
+  "Copy now": "现在复制",
+  "Plaintext key": "明文密钥",
+  "Copy plaintext key": "复制明文密钥",
+  "Config entry": "配置项",
+  "Copy config JSON": "复制配置 JSON",
+  "Loading access summary...": "正在加载权限摘要...",
+  "Access summary loaded.": "权限摘要已加载。",
+  "Access summary failed.": "权限摘要加载失败。",
+  "Enter an ID for the new access key.": "请输入新访问密钥的 ID。",
+  "Generating one-time key...": "正在生成一次性密钥...",
+  "One-time key generated. Copy it before leaving this page.": "一次性密钥已生成。离开页面前请复制。",
+  "Enabled": "已启用",
+  "No public paths configured.": "没有配置公开路径。",
+  "No API-key identities are configured.": "没有配置 API 密钥身份。",
+  "All KBs": "所有知识库",
+  "No access identity selected": "未选择访问身份",
+  "No configured API keys.": "没有配置 API 密钥。",
+  "Created": "创建时间",
+  "Use as template": "用作模板",
+  "Copy revoke config": "复制撤销配置",
+  "Revoke config entry": "撤销配置项",
+  "Set the old key to revoked in config. The original hash is intentionally not shown here.": "在配置中把旧密钥设为 revoked。这里故意不显示原始哈希。",
+  "Rotate plan": "轮换计划",
+  "Plaintext key copied.": "明文密钥已复制。",
+  "Config JSON copied.": "配置 JSON 已复制。",
+  "Plaintext key selected for copying.": "明文密钥已选中，可复制。",
+  "Config JSON selected for copying.": "配置 JSON 已选中，可复制。",
+
+  "Feedback filters": "反馈筛选",
+  "query text": "查询文本",
+  "Outcome": "结果",
+  "Limit": "限制",
+  "Search feedback": "搜索反馈",
+  "0 records": "0 条记录",
+  "Preview Selected": "预览所选",
+  "Refs": "引用",
+  "Load feedback to review retrieval quality.": "加载反馈以评估检索质量。",
+  "Feedback detail": "反馈详情",
+  "Select feedback": "选择反馈",
+  "Review": "审核",
+  "Operator note": "操作员备注",
+  "Save Review": "保存审核",
+  "Dismiss": "忽略",
+  "Promotion": "提升",
+  "Output path": "输出路径",
+  "optional eval draft path": "可选评测草稿路径",
+  "Append": "追加",
+  "Overwrite": "覆盖",
+  "Export": "导出",
+  "Loading feedback...": "正在加载反馈...",
+  "Review saved.": "审核已保存。",
+  "Selected": "已选",
+  "Expected": "预期",
+};
+
+const dictionaries = { zh };
+const reverse = {
+  zh: Object.fromEntries(Object.entries(zh).map(([key, value]) => [value, key])),
+};
+
+export function currentLanguage() {
+  try {
+    const saved = window.localStorage.getItem(LANGUAGE_KEY);
+    if (SUPPORTED_LANGUAGES.has(saved)) return saved;
+  } catch (_error) {
+    return "en";
+  }
+  return "en";
+}
+
+export function setLanguage(language) {
+  const normalized = SUPPORTED_LANGUAGES.has(language) ? language : "en";
+  try {
+    window.localStorage.setItem(LANGUAGE_KEY, normalized);
+  } catch (_error) {
+    return normalized;
+  }
+  return normalized;
+}
+
+export function t(text, values = {}) {
+  const language = currentLanguage();
+  const template = language === "en" ? text : dictionaries[language]?.[text] || text;
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template,
+  );
+}
+
+export function initI18n(options = {}) {
+  ensureLanguageSwitcher(options.mount);
+  applyLanguage(currentLanguage());
+  const observer = new MutationObserver(() => {
+    observer.disconnect();
+    applyLanguage(currentLanguage());
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener("storage", (event) => {
+    if (event.key === LANGUAGE_KEY) applyLanguage(currentLanguage());
+  });
+}
+
+export function translatePage() {
+  applyLanguage(currentLanguage());
+}
+
+function ensureLanguageSwitcher(mountSelector = "") {
+  if (document.getElementById("ui-language-switcher")) return;
+  const mount = mountSelector
+    ? document.querySelector(mountSelector)
+    : document.querySelector(".topbar .top-actions, .qa-left-rail, body");
+  const wrapper = document.createElement("label");
+  wrapper.id = "ui-language-switcher";
+  wrapper.className = "language-switcher";
+  wrapper.innerHTML = `
+    <span>Language</span>
+    <select aria-label="Language">
+      <option value="en">English</option>
+      <option value="zh">中文</option>
+    </select>
+  `;
+  const select = wrapper.querySelector("select");
+  select.value = currentLanguage();
+  select.addEventListener("change", () => {
+    setLanguage(select.value);
+    applyLanguage(select.value);
+  });
+  mount.appendChild(wrapper);
+}
+
+function applyLanguage(language) {
+  const normalized = SUPPORTED_LANGUAGES.has(language) ? language : "en";
+  document.documentElement.lang = normalized === "zh" ? "zh-CN" : "en";
+  const select = document.querySelector("#ui-language-switcher select");
+  if (select && select.value !== normalized) select.value = normalized;
+  translateTextNodes(document.body, normalized);
+  translateAttributes(normalized);
+}
+
+function translateTextNodes(root, language) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement?.closest("script, style, textarea, code, pre")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    node.nodeValue = translateString(node.nodeValue, language);
+  });
+}
+
+function translateAttributes(language) {
+  document.querySelectorAll("[placeholder], [aria-label], [title]").forEach((node) => {
+    ["placeholder", "aria-label", "title"].forEach((name) => {
+      if (!node.hasAttribute(name)) return;
+      node.setAttribute(name, translateString(node.getAttribute(name) || "", language));
+    });
+  });
+}
+
+function translateString(value, language) {
+  const leading = value.match(/^\s*/)?.[0] || "";
+  const trailing = value.match(/\s*$/)?.[0] || "";
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (language === "en") {
+    return `${leading}${reverse.zh[trimmed] || trimmed}${trailing}`;
+  }
+  return `${leading}${dictionaries[language]?.[trimmed] || trimmed}${trailing}`;
+}

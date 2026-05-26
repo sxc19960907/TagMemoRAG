@@ -40,7 +40,7 @@
         <section class="status-strip" id="workbench-status" role="status" aria-live="polite"></section>
 
         <div class="workspace workbench-workspace">
-          <section class="table-pane workbench-main" aria-label="Question and answer">
+          <section class="table-pane workbench-main" aria-label="Workbench answer workspace">
             <div class="pane-header">
               <div>
                 <h2>Ask</h2>
@@ -51,7 +51,7 @@
             <form id="workbench-question-form" class="workbench-question-form">
               <label>
                 <span>Question</span>
-                <textarea id="workbench-question" rows="4" placeholder="Ask a product-manual question"></textarea>
+                <textarea id="workbench-question" rows="4" aria-label="Workbench question" placeholder="Ask a product-manual question"></textarea>
               </label>
               <div class="workbench-controls">
                 <label><span>Top K</span><input id="workbench-top-k" type="number" min="1" max="30" value="5"></label>

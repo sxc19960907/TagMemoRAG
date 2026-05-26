@@ -51,6 +51,7 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="rewrite-preview-rows"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/manual_library.js" in body
+    assert 'from "./i18n.js"' in client.get("/static/manual-library/manual_library.js").text
 
 
 def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
@@ -94,6 +95,19 @@ def test_admin_token_static_asset_is_served(tmp_path, fake_embedder):
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
     assert "localStorage" not in js.text
+
+
+def test_i18n_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/i18n.js")
+
+    assert js.status_code == 200
+    assert "tagmemoragUiLanguage" in js.text
+    assert "initI18n" in js.text
+    assert "currentLanguage" in js.text
+    assert "English" in js.text
+    assert "中文" in js.text
 
 
 def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -160,6 +174,8 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'href="/qa?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/rag_workbench.js" in body
+    assert 'aria-label="Workbench answer workspace"' in body
+    assert 'aria-label="Workbench question"' in body
 
 
 def test_root_route_redirects_to_rag_workbench(tmp_path, fake_embedder):
@@ -406,6 +422,9 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'class="qa-right-rail"' in body
     assert 'id="qa-question"' in body
     assert 'id="qa-submit-new"' in body
+    assert 'aria-label="Ask without conversation context"' in body
+    assert 'aria-label="Ask question"' in body
+    assert 'aria-label="Q&A question"' in body
     assert 'id="qa-answer"' in body
     assert 'id="qa-suggestions"' in body
     assert 'id="qa-copy-answer"' in body
