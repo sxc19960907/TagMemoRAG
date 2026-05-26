@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Task updates API summary contract and browser admin UI."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Must preserve structured report-loading errors while adding guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Guidance heuristics need deterministic focused tests."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans eval report payload, API summary, JS rendering, i18n, CSS, and browser tests."}

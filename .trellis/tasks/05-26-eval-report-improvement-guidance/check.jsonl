@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Verify API and UI changes fit project boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify deterministic tests cover new guidance paths."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify guidance contract is consistent across backend, UI, and tests."}
