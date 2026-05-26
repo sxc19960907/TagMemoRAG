@@ -1185,3 +1185,43 @@ Synchronized master after PR #26, ignored local tooling artifacts, added user tr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 122: Eval report discovery governance
+
+**Date**: 2026-05-26
+**Task**: Eval Report Discovery
+**Branch**: `master`
+
+### Summary
+
+Completed the browser-first eval report discovery pass so admins can open the Eval Report page without remembering JSON paths. The page now lists recent bounded project-local reports, loads a selected report, and keeps the Q&A/workbench handoff intact.
+
+### Main Changes
+
+- Added admin-only `GET /eval/reports` with bounded `.tmp` / readiness-path discovery and lightweight report metadata.
+- Added Recent Reports UI, click-to-load behavior, styling, and Chinese translations.
+- Extended unit and browser coverage for discovery, malformed reports, project-root bounds, and the no-path browser flow.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ba43f6f` | Discover eval reports in browser |
+| `da40332` | Record eval report discovery task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer -q -s`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed and archived**
+
+### Next Steps
+
+- Functional next: add a guided eval run launcher or saved eval suites in the browser, with explicit admin confirmation and safe job status tracking, so users can evaluate RAG quality without leaving the UI.
