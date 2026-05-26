@@ -30,6 +30,7 @@ const el = {
   results: document.getElementById("workbench-results"),
   manualLibrary: document.getElementById("workbench-manual-library"),
   retrievalQuality: document.getElementById("workbench-retrieval-quality"),
+  evalReport: document.getElementById("workbench-eval-report"),
   people: document.getElementById("workbench-people"),
   qa: document.getElementById("workbench-qa"),
 };
@@ -57,6 +58,7 @@ function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
+  el.evalReport.href = `/admin/eval-report?kb_name=${kb}`;
   el.people.href = `/admin/people?kb_name=${kb}`;
   el.qa.href = `/qa?kb_name=${kb}`;
 }
@@ -233,6 +235,14 @@ function renderResultItem(item) {
   `;
 }
 
+function applyQuestionPrefill() {
+  const params = new URLSearchParams(window.location.search);
+  const question = params.get("question") || "";
+  if (!question) return;
+  el.question.value = question;
+  setStatus(t("Question prefilled. Review it, then ask when ready."), "success");
+}
+
 el.kbForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.kbName = el.kbName.value.trim() || "default";
@@ -244,4 +254,5 @@ el.questionForm.addEventListener("submit", requestAnswer);
 bindSharedApiToken(el.token);
 initI18n({ mount: ".workbench-links" });
 updateLinks();
+applyQuestionPrefill();
 translatePage();

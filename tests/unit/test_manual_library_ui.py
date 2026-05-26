@@ -221,6 +221,10 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "eval-report-cases" in js.text
     assert "renderCaseCard" in js.text
     assert "renderGuidanceItem" in js.text
+    assert "caseQaHref" in js.text
+    assert "caseWorkbenchHref" in js.text
+    assert "Ask in Q&A" in js.text
+    assert "Open in Workbench" in js.text
     assert "Recommended Fix" in js.text
     assert "Expected Evidence" in js.text
     assert "Actual Top Results" in js.text
@@ -317,8 +321,10 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="workbench-results"' in body
     assert 'id="workbench-manual-library"' in body
     assert 'id="workbench-retrieval-quality"' in body
+    assert 'id="workbench-eval-report"' in body
     assert 'id="workbench-people"' in body
     assert 'id="workbench-qa"' in body
+    assert 'href="/admin/eval-report?kb_name=ops"' in body
     assert 'href="/admin/people?kb_name=ops"' in body
     assert 'href="/qa?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
@@ -346,6 +352,10 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "include_retrieve" in js.text
     assert "workbench-answer" in js.text
     assert "workbench-evidence" in js.text
+    assert "workbench-eval-report" in js.text
+    assert "/admin/eval-report?kb_name=" in js.text
+    assert "applyQuestionPrefill" in js.text
+    assert "Question prefilled. Review it, then ask when ready." in js.text
     assert "/admin/people" in js.text
     assert "/qa?kb_name=" in js.text
     assert "bindSharedApiToken" in js.text
@@ -604,6 +614,8 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
     assert "conversation_context" in js.text
+    assert "applyQuestionPrefill" in js.text
+    assert "Question prefilled. Review it, then ask when ready." in js.text
     assert "conversationContextForRequest" in js.text
     assert "answerPreviewForContext" in js.text
     assert "shouldUseConversationContext" in js.text

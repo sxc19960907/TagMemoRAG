@@ -111,7 +111,16 @@ def test_browser_eval_report_viewer(tmp_path):
                 assert "Recommended Fix" in page.locator("#eval-report-cases").inner_text()
                 assert "No expected evidence matched" in page.locator("#eval-report-cases").inner_text()
                 assert "Check whether the expected source is built into the KB" in page.locator("#eval-report-cases").inner_text()
+                assert "Ask in Q&A" in page.locator("#eval-report-cases").inner_text()
+                assert "Open in Workbench" in page.locator("#eval-report-cases").inner_text()
                 assert "coffee.md" in page.locator("#eval-report-cases").inner_text()
+                qa_href = page.locator("#eval-report-cases a").filter(has_text="Ask in Q&A").first.get_attribute("href")
+                assert qa_href is not None
+                assert "/qa?" in qa_href
+                assert "question=steam+is+weak" in qa_href
+                page.goto(f"http://127.0.0.1:{port}{qa_href}")
+                page.locator("#qa-status").get_by_text("Question prefilled.").wait_for(timeout=10000)
+                assert page.locator("#qa-question").input_value() == "steam is weak"
                 assert console_errors == []
             finally:
                 browser.close()

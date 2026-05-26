@@ -80,6 +80,14 @@ function updateLocationKb() {
   }
 }
 
+function applyQuestionPrefill() {
+  const params = new URLSearchParams(window.location.search);
+  const question = params.get("question") || "";
+  if (!question) return;
+  el.question.value = question;
+  setStatus(t("Question prefilled. Review it, then ask when ready."), "success");
+}
+
 async function requestAnswer(event) {
   event.preventDefault();
   const question = el.question.value.trim();
@@ -1023,6 +1031,7 @@ renderSuggestions();
 loadSessionMemory();
 renderHistory();
 if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);
+applyQuestionPrefill();
 updateSubmitNewState();
 updateLocationKb();
 translatePage();

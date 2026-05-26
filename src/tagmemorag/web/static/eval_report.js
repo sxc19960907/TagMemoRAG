@@ -146,6 +146,10 @@ function renderCaseCard(item) {
           <span class="status-pill ${statusClass}">${escapeHtml(statusLabel(item.status))}</span>
           <h3>${escapeHtml(item.id || t("Eval case"))}</h3>
           <p>${escapeHtml(item.query || "")}</p>
+          <p class="eval-report-case-actions">
+            <a class="button-link compact" href="${escapeHtml(caseQaHref(item))}">${t("Ask in Q&A")}</a>
+            <a class="button-link compact" href="${escapeHtml(caseWorkbenchHref(item))}">${t("Open in Workbench")}</a>
+          </p>
         </div>
         <dl>
           <dt>${t("Recall")}</dt><dd>${metric(item.metrics?.recall_at_k)}</dd>
@@ -167,6 +171,23 @@ function renderCaseCard(item) {
       </div>
     </article>
   `;
+}
+
+function caseQaHref(item) {
+  const params = caseParams(item);
+  return `/qa?${params.toString()}`;
+}
+
+function caseWorkbenchHref(item) {
+  const params = caseParams(item);
+  return `/admin/rag-workbench?${params.toString()}`;
+}
+
+function caseParams(item) {
+  const params = new URLSearchParams();
+  params.set("kb_name", item.kb_name || (state.report?.kb_names || [])[0] || state.kbName || "default");
+  if (item.query) params.set("question", item.query);
+  return params;
 }
 
 function renderGuidanceItem(item) {

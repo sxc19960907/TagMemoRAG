@@ -1569,6 +1569,13 @@ dialog {
   overflow-wrap: anywhere;
 }
 
+.eval-report-case-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px !important;
+}
+
 .eval-report-case-card dl {
   display: grid;
   grid-template-columns: 1fr auto;
