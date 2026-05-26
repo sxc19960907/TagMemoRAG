@@ -38,6 +38,50 @@ Opened the next Trellis journal because journal-2.md was near the 2000-line thre
 - None - task complete
 
 
+## Session 123: Eval run user guidance
+
+**Date**: 2026-05-26
+**Task**: Eval run user guidance
+**Branch**: `master`
+
+### Summary
+
+Completed a Trellis-managed task that makes exported feedback eval drafts easier to run. The Retrieval Quality promotion summary now shows a suite path, report path, shell-safe eval command with `--reuse-built-kb` and `--output`, plus a short explanation of what the command validates.
+
+### Main Changes
+
+- Created, activated, completed, and archived Trellis task `05-26-eval-run-user-guidance`.
+- Extended feedback promotion summary with `suite_path`, `report_path`, `next_command`, and `command_note`.
+- Updated Retrieval Quality UI to show the eval report path and command note.
+- Added unit coverage for shell quoting when paths contain spaces.
+- Extended browser coverage to verify the exported feedback eval guidance is visible after the Q&A feedback workflow.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eaa7bac` | Guide feedback eval run command |
+| `298cfd0` | Record eval run guidance task |
+| `pending` | Archive eval run guidance task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/retrieval_quality.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_retrieval_feedback.py tests/unit/test_manual_library_ui.py tests/integration/test_browser_admin_ui.py`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_manual_library_to_qa_user_flow`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_admin_ui_browser_workflows`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Consider adding docs or a browser-visible report viewer if users need help interpreting eval JSON reports.
+
+
 ## Session 122: RAG feedback eval closure backfill
 
 **Date**: 2026-05-26
