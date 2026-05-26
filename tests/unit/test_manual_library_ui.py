@@ -220,6 +220,8 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "/eval/report?path=" in js.text
     assert "eval-report-cases" in js.text
     assert "renderCaseCard" in js.text
+    assert "renderGuidanceItem" in js.text
+    assert "Recommended Fix" in js.text
     assert "Expected Evidence" in js.text
     assert "Actual Top Results" in js.text
     assert "bindSharedApiToken" in js.text
@@ -243,10 +245,37 @@ def test_eval_report_api_summarizes_valid_report(tmp_path, fake_embedder):
     assert body["counts"]["total"] == 2
     assert body["counts"]["failed"] == 1
     assert body["counts"]["urgent"] == 1
+    assert body["guidance_counts"]["threshold_failure"] == 1
     assert body["cases"][0]["id"] == "failed-case"
     assert body["cases"][0]["status"] == "urgent"
+    assert body["cases"][0]["primary_issue"] == "threshold_failure"
+    assert body["cases"][0]["guidance"][0]["title"] == "Threshold failure"
     assert body["cases"][0]["matched_expected_indexes"] == [0]
     assert body["cases"][0]["actual_top_k"][0]["source_file"] == "coffee.md"
+
+
+def test_eval_report_api_guidance_classifies_common_failure_modes(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    report_path = tmp_path / "guidance-report.json"
+    report_path.write_text(json.dumps(_eval_report_guidance_payload(), ensure_ascii=False), encoding="utf-8")
+
+    response = client.get(f"/eval/report?path={report_path}")
+
+    assert response.status_code == 200
+    body = response.json()
+    cases = {case["id"]: case for case in body["cases"]}
+    assert cases["no-match"]["primary_issue"] == "no_expected_match"
+    assert [item["code"] for item in cases["partial"]["guidance"]] == ["partial_recall"]
+    assert [item["code"] for item in cases["low-rank"]["guidance"]] == ["low_rank"]
+    assert cases["negative"]["primary_issue"] == "negative_hit"
+    assert cases["weak"]["primary_issue"] == "weak_matcher"
+    assert body["guidance_counts"] == {
+        "low_rank": 1,
+        "negative_hit": 1,
+        "no_expected_match": 1,
+        "partial_recall": 1,
+        "weak_matcher": 1,
+    }
 
 
 def test_eval_report_api_returns_structured_error_for_missing_file(tmp_path, fake_embedder):
@@ -666,6 +695,84 @@ def _eval_report_payload() -> dict:
                 "expected": [{"source_file": "coffee.md", "text_contains": ["steam"]}],
                 "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": [0]}],
                 "failures": ["case recall_at_k 0.000000 < 0.800000"],
+            },
+        ],
+        "config_snapshot": {"reuse_built_kb": True},
+    }
+
+
+def _eval_report_guidance_payload() -> dict:
+    return {
+        "suite": ".tmp/guidance.jsonl",
+        "docs": None,
+        "kb_names": ["default"],
+        "top_k": 5,
+        "thresholds": {},
+        "summary": {"cases": 5, "passed": False, "precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
+        "cases": [
+            {
+                "id": "no-match",
+                "query": "missing evidence",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": False,
+                "metrics": {"precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
+                "thresholds": {},
+                "expected": [{"source_file": "missing.md", "text_contains": ["needle"]}],
+                "actual_top_k": [{"rank": 1, "source_file": "other.md", "matched_expected_indexes": []}],
+                "failures": [],
+            },
+            {
+                "id": "partial",
+                "query": "multi evidence",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": True,
+                "metrics": {"precision_at_k": 0.2, "recall_at_k": 0.5, "mrr": 1.0, "hit_at_k": 1.0},
+                "thresholds": {},
+                "expected": [{"source_file": "a.md"}, {"source_file": "b.md"}],
+                "actual_top_k": [{"rank": 1, "source_file": "a.md", "matched_expected_indexes": [0]}],
+                "failures": [],
+            },
+            {
+                "id": "low-rank",
+                "query": "ranked low",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": True,
+                "metrics": {"precision_at_k": 0.2, "recall_at_k": 1.0, "mrr": 0.333333, "hit_at_k": 1.0},
+                "thresholds": {},
+                "expected": [{"source_file": "ranked.md"}],
+                "actual_top_k": [
+                    {"rank": 1, "source_file": "other.md", "matched_expected_indexes": []},
+                    {"rank": 3, "source_file": "ranked.md", "matched_expected_indexes": [0]},
+                ],
+                "failures": [],
+            },
+            {
+                "id": "negative",
+                "query": "wrong domain",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": False,
+                "metrics": {"precision_at_k": 0.0, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
+                "thresholds": {},
+                "expected": [{"source_file": "right.md"}],
+                "actual_top_k": [{"rank": 1, "source_file": "right.md", "matched_expected_indexes": [0]}],
+                "failures": [],
+                "negative_hits": [{"rank": 2, "source_file": "wrong.md"}],
+            },
+            {
+                "id": "weak",
+                "query": "weak matcher",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": False,
+                "metrics": {"precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
+                "thresholds": {},
+                "expected": [{}],
+                "actual_top_k": [],
+                "failures": [],
             },
         ],
         "config_snapshot": {"reuse_built_kb": True},

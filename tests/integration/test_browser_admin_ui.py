@@ -108,7 +108,9 @@ def test_browser_eval_report_viewer(tmp_path):
                 assert page.locator("#eval-report-count-total").inner_text() == "2"
                 assert page.locator("#eval-report-count-failed").inner_text() == "1"
                 assert "failed-case" in page.locator("#eval-report-cases").inner_text()
-                assert "case recall_at_k" in page.locator("#eval-report-cases").inner_text()
+                assert "Recommended Fix" in page.locator("#eval-report-cases").inner_text()
+                assert "No expected evidence matched" in page.locator("#eval-report-cases").inner_text()
+                assert "Check whether the expected source is built into the KB" in page.locator("#eval-report-cases").inner_text()
                 assert "coffee.md" in page.locator("#eval-report-cases").inner_text()
                 assert console_errors == []
             finally:
@@ -872,7 +874,7 @@ def _eval_report_payload() -> dict:
                 "thresholds": {},
                 "expected": [{"source_file": "coffee.md", "text_contains": ["steam"]}],
                 "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": []}],
-                "failures": ["case recall_at_k 0.000000 < 0.800000"],
+                "failures": [],
             },
         ],
         "config_snapshot": {"reuse_built_kb": True},

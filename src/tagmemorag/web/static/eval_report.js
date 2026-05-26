@@ -136,6 +136,7 @@ function renderCases() {
 function renderCaseCard(item) {
   const statusClass = item.status === "ok" ? "good" : item.status === "urgent" ? "needs-review" : "in-progress";
   const failures = (item.failures || []).map((failure) => `<li>${escapeHtml(failure)}</li>`).join("");
+  const guidance = (item.guidance || []).map(renderGuidanceItem).join("");
   const expected = (item.expected || []).map(renderExpected).join("");
   const actual = (item.actual_top_k || []).map(renderActualResult).join("");
   return `
@@ -152,6 +153,7 @@ function renderCaseCard(item) {
           <dt>${t("Hit")}</dt><dd>${metric(item.metrics?.hit_at_k)}</dd>
         </dl>
       </header>
+      ${guidance ? `<section class="eval-report-guidance"><strong>${t("Recommended Fix")}</strong>${guidance}</section>` : ""}
       ${failures ? `<section class="eval-report-failures"><strong>${t("Failures")}</strong><ul>${failures}</ul></section>` : ""}
       <div class="eval-report-evidence-grid">
         <section>
@@ -162,6 +164,20 @@ function renderCaseCard(item) {
           <h4>${t("Actual Top Results")}</h4>
           ${actual || `<p class="muted">${t("No actual results.")}</p>`}
         </section>
+      </div>
+    </article>
+  `;
+}
+
+function renderGuidanceItem(item) {
+  const severityClass = item.severity === "urgent" ? "needs-review" : "in-progress";
+  return `
+    <article class="eval-report-guidance-card ${escapeHtml(item.code || "")}">
+      <span class="status-pill ${severityClass}">${escapeHtml(t(item.severity === "urgent" ? "Urgent" : "Review"))}</span>
+      <div>
+        <h4>${escapeHtml(t(item.title || "Review failed case"))}</h4>
+        <p>${escapeHtml(t(item.explanation || ""))}</p>
+        <small>${escapeHtml(t(item.next_action || ""))}</small>
       </div>
     </article>
   `;
