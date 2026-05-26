@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG Eval Report</title>
+    <link rel="stylesheet" href="{{ url_for('manual-library-static', path='manual_library.css') }}">
+  </head>
+  <body>
+    <script id="eval-report-config" type="application/json">
+      {{ {"defaultKbName": default_kb_name, "defaultReportPath": default_report_path, "apiBasePath": api_base_path, "authEnabled": auth_enabled} | tojson }}
+    </script>
+
+    <div class="app-shell eval-report-shell">
+      <header class="topbar eval-report-topbar">
+        <div class="brand">
+          <span class="eyebrow">TagMemoRAG</span>
+          <h1>Eval Report</h1>
+        </div>
+        <form class="kb-form eval-report-form" id="eval-report-form">
+          <label>
+            <span>Report path</span>
+            <input id="eval-report-path" name="report_path" value="{{ default_report_path }}" autocomplete="off" placeholder=".tmp/eval-report.json">
+          </label>
+          <button id="eval-report-load" type="submit" class="primary">Load</button>
+        </form>
+        <label class="token-field">
+          <span>API token</span>
+          <input id="eval-report-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+        </label>
+        <div class="top-actions">
+          <a id="eval-report-quality" class="button-link" href="/admin/retrieval-quality?kb_name={{ default_kb_name }}">Retrieval Quality</a>
+          <a id="eval-report-workbench" class="button-link" href="/admin/rag-workbench?kb_name={{ default_kb_name }}">RAG Workbench</a>
+          <a id="eval-report-qa" class="button-link" href="/qa?kb_name={{ default_kb_name }}">Ask Q&A</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="status-strip" id="eval-report-status" role="status" aria-live="polite"></section>
+
+        <section class="eval-report-hero" aria-label="Eval report summary">
+          <div>
+            <span id="eval-report-state" class="status-pill neutral">Not loaded</span>
+            <h2 id="eval-report-title">Load an eval report</h2>
+            <p id="eval-report-subtitle">Run the suggested eval command, then load its JSON report here.</p>
+          </div>
+          <dl id="eval-report-meta" class="eval-report-meta"></dl>
+        </section>
+
+        <section class="quality-summary-grid eval-report-summary-grid" aria-label="Eval report metrics">
+          <article>
+            <span>Cases</span>
+            <strong id="eval-report-count-total">0</strong>
+          </article>
+          <article>
+            <span>Failed</span>
+            <strong id="eval-report-count-failed">0</strong>
+          </article>
+          <article>
+            <span>Recall</span>
+            <strong id="eval-report-metric-recall">0.000</strong>
+          </article>
+          <article>
+            <span>MRR</span>
+            <strong id="eval-report-metric-mrr">0.000</strong>
+          </article>
+          <article>
+            <span>Hit</span>
+            <strong id="eval-report-metric-hit">0.000</strong>
+          </article>
+        </section>
+
+        <div class="eval-report-layout">
+          <section class="table-pane eval-report-cases-pane" aria-label="Eval cases">
+            <div class="pane-header">
+              <div>
+                <h2>Case Review</h2>
+                <p id="eval-report-case-count">0 cases</p>
+              </div>
+              <select id="eval-report-filter" aria-label="Case filter">
+                <option value="all">All</option>
+                <option value="needs-review">Needs review</option>
+                <option value="failed">Failed</option>
+                <option value="passed">Passed</option>
+              </select>
+            </div>
+            <div id="eval-report-cases" class="eval-report-case-list empty-state">Load a report to inspect eval cases.</div>
+          </section>
+
+          <aside class="detail-pane eval-report-detail" aria-label="Eval report detail">
+            <div class="pane-header">
+              <div>
+                <h2>Run Context</h2>
+                <p>Configuration and thresholds captured by the eval run.</p>
+              </div>
+            </div>
+            <section class="quality-detail-block">
+              <h3>Thresholds</h3>
+              <pre id="eval-report-thresholds" class="json-preview"></pre>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Config Snapshot</h3>
+              <pre id="eval-report-config-snapshot" class="json-preview"></pre>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="{{ url_for('manual-library-static', path='eval_report.js') }}"></script>
+  </body>
+</html>

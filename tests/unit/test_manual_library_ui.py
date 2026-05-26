@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
@@ -142,6 +144,7 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'href="/admin/people?kb_name=ops"' in body
     assert 'id="quality-qa"' in body
     assert 'href="/qa?kb_name=ops"' in body
+    assert "/admin/eval-report" not in body
     assert 'id="quality-refresh"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/retrieval_quality.js" in body
@@ -169,6 +172,9 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "summary.report_path" in js.text
     assert "summary.next_command" in js.text
     assert "summary.command_note" in js.text
+    assert "reportViewerHref" in js.text
+    assert "/admin/eval-report" in js.text
+    assert "Open report" in js.text
     assert "quality-promotion-summary" in js.text
     assert "setExpectedEditor" in js.text
     assert "expectedFromEditor" in js.text
@@ -182,6 +188,89 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "/admin/manual-library" in js.text
     assert "/admin/people" in js.text
     assert "/qa?kb_name=" in js.text
+
+
+def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/admin/eval-report?kb_name=ops&report_path=.tmp/report.json")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "Eval Report" in body
+    assert 'id="eval-report-path"' in body
+    assert 'value=".tmp/report.json"' in body
+    assert 'id="eval-report-api-token"' in body
+    assert 'id="eval-report-quality"' in body
+    assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="eval-report-cases"' in body
+    assert 'id="eval-report-config-snapshot"' in body
+    assert '"defaultKbName": "ops"' in body
+    assert '"defaultReportPath": ".tmp/report.json"' in body
+    assert "/static/manual-library/eval_report.js" in body
+
+
+def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/eval_report.js")
+
+    assert js.status_code == 200
+    assert "/eval/report?path=" in js.text
+    assert "eval-report-cases" in js.text
+    assert "renderCaseCard" in js.text
+    assert "Expected Evidence" in js.text
+    assert "Actual Top Results" in js.text
+    assert "bindSharedApiToken" in js.text
+    assert "authHeadersFromToken" in js.text
+    assert "/admin/retrieval-quality" in js.text
+    assert "/qa?kb_name=" in js.text
+
+
+def test_eval_report_api_summarizes_valid_report(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+
+    response = client.get(f"/eval/report?path={report_path}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "eval_report_view.v1"
+    assert body["report_path"] == str(report_path)
+    assert body["summary"]["passed"] is False
+    assert body["counts"]["total"] == 2
+    assert body["counts"]["failed"] == 1
+    assert body["counts"]["urgent"] == 1
+    assert body["cases"][0]["id"] == "failed-case"
+    assert body["cases"][0]["status"] == "urgent"
+    assert body["cases"][0]["matched_expected_indexes"] == [0]
+    assert body["cases"][0]["actual_top_k"][0]["source_file"] == "coffee.md"
+
+
+def test_eval_report_api_returns_structured_error_for_missing_file(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get(f"/eval/report?path={tmp_path / 'missing.json'}")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert "not found" in body["message"]
+
+
+def test_eval_report_api_returns_structured_error_for_malformed_report(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    report_path = tmp_path / "bad.json"
+    report_path.write_text('{"summary": {}}', encoding="utf-8")
+
+    response = client.get(f"/eval/report?path={report_path}")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert "cases list" in body["message"]
 
 
 def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -536,3 +625,48 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-kb-name" not in js.text
     assert "plan_id" in js.text
     assert "build_id" in js.text
+
+
+def _eval_report_payload() -> dict:
+    return {
+        "suite": ".tmp/feedback.jsonl",
+        "docs": None,
+        "kb_names": ["default"],
+        "top_k": 5,
+        "thresholds": {"min_recall_at_k": 0.8, "min_mrr": 0.75, "min_hit_at_k": 0.8},
+        "summary": {
+            "cases": 2,
+            "passed": False,
+            "precision_at_k": 0.4,
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "hit_at_k": 0.5,
+        },
+        "cases": [
+            {
+                "id": "passed-case",
+                "query": "how to descale",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": True,
+                "metrics": {"precision_at_k": 0.2, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
+                "thresholds": {},
+                "expected": [{"source_file": "coffee.md", "text_contains": ["descale"]}],
+                "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": [0]}],
+                "failures": [],
+            },
+            {
+                "id": "failed-case",
+                "query": "steam is weak",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": False,
+                "metrics": {"precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
+                "thresholds": {},
+                "expected": [{"source_file": "coffee.md", "text_contains": ["steam"]}],
+                "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": [0]}],
+                "failures": ["case recall_at_k 0.000000 < 0.800000"],
+            },
+        ],
+        "config_snapshot": {"reuse_built_kb": True},
+    }

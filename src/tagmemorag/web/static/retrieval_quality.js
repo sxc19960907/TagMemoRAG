@@ -384,6 +384,7 @@ function renderPromotionSummary(result) {
       <small>${escapeHtml(summary.ready_count ?? cases.length)} ${t("ready")} / ${escapeHtml(summary.skipped_count ?? skipped.length)} ${t("skipped")}</small>
       ${summary.next_command ? `<code>${escapeHtml(summary.next_command)}</code>` : ""}
       ${summary.command_note ? `<small>${escapeHtml(summary.command_note)}</small>` : ""}
+      ${summary.report_path ? `<a class="button-link compact" href="${escapeHtml(reportViewerHref(summary.report_path))}">${t("Open report")}</a>` : ""}
     </article>
   `;
   const caseCards = cases.map((item) => `
@@ -410,6 +411,11 @@ function skipReasonLabel(reason) {
   if (reason === "no_usable_relevant_matcher") return t("No usable relevant matcher is available for this feedback.");
   if (reason === "duplicate_case_id") return t("An eval case with this feedback id already exists at the output path.");
   return String(reason || "");
+}
+
+function reportViewerHref(reportPath) {
+  const params = new URLSearchParams({ kb_name: currentKb(), report_path: reportPath });
+  return `/admin/eval-report?${params.toString()}`;
 }
 
 function escapeHtml(value) {

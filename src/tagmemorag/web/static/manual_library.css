@@ -1458,6 +1458,193 @@ dialog {
   padding: 7px;
 }
 
+.button-link.compact {
+  justify-self: start;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
+.eval-report-form {
+  grid-template-columns: minmax(360px, 1fr) auto;
+}
+
+.eval-report-form input {
+  min-width: min(520px, 56vw);
+}
+
+.eval-report-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 430px);
+  gap: 14px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+  padding: 16px;
+}
+
+.eval-report-hero h2 {
+  margin: 10px 0 5px;
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+
+.eval-report-hero p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.eval-report-meta {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px 10px;
+  margin: 0;
+}
+
+.eval-report-meta dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.eval-report-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.eval-report-summary-grid {
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+}
+
+.eval-report-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 14px;
+  align-items: start;
+}
+
+.eval-report-case-list {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+}
+
+.eval-report-case-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.eval-report-case-card.urgent {
+  border-color: #f0d8ab;
+  background: #fffaf2;
+}
+
+.eval-report-case-card.review {
+  border-color: #c9d7e8;
+  background: #f7fbff;
+}
+
+.eval-report-case-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+  gap: 12px;
+}
+
+.eval-report-case-card h3 {
+  margin: 7px 0 4px;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.eval-report-case-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.eval-report-case-card dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  align-content: start;
+  margin: 0;
+}
+
+.eval-report-case-card dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.eval-report-case-card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.eval-report-failures {
+  border: 1px solid #f0d8ab;
+  border-radius: 8px;
+  background: #fff8ec;
+  padding: 9px 10px;
+}
+
+.eval-report-failures strong {
+  display: block;
+  color: #6f4b11;
+  margin-bottom: 4px;
+}
+
+.eval-report-failures ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.eval-report-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.eval-report-evidence-grid h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.eval-report-mini-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  margin-bottom: 8px;
+  padding: 9px;
+}
+
+.eval-report-mini-card strong,
+.eval-report-mini-card small,
+.eval-report-mini-card p {
+  overflow-wrap: anywhere;
+}
+
+.eval-report-mini-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.eval-report-mini-card p {
+  color: var(--ink);
+  margin: 3px 0 0;
+  max-height: 96px;
+  overflow: auto;
+}
+
 .query-cell {
   max-width: 420px;
 }

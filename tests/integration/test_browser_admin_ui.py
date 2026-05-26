@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -52,6 +53,64 @@ def test_admin_ui_browser_workflows(tmp_path):
             try:
                 _exercise_manual_library(page, port)
                 _exercise_retrieval_quality(page, port)
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
+def test_browser_eval_report_viewer(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path)
+    report_path = tmp_path / "browser-eval-report.json"
+    report_path.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                page.goto(
+                    f"http://127.0.0.1:{port}/admin/eval-report"
+                    f"?kb_name=default&report_path={report_path}"
+                )
+                page.get_by_role("heading", name="Eval Report").wait_for()
+                page.locator("#eval-report-status").get_by_text("Eval report loaded.").wait_for(timeout=10000)
+                assert "Needs review" in page.locator("#eval-report-state").inner_text()
+                assert "browser-feedback.jsonl" in page.locator("#eval-report-title").inner_text()
+                assert page.locator("#eval-report-count-total").inner_text() == "2"
+                assert page.locator("#eval-report-count-failed").inner_text() == "1"
+                assert "failed-case" in page.locator("#eval-report-cases").inner_text()
+                assert "case recall_at_k" in page.locator("#eval-report-cases").inner_text()
+                assert "coffee.md" in page.locator("#eval-report-cases").inner_text()
+                assert console_errors == []
             finally:
                 browser.close()
     finally:
@@ -773,6 +832,51 @@ def _seed_feedback(tmp_path: Path) -> None:
         },
         cfg,
     )
+
+
+def _eval_report_payload() -> dict:
+    return {
+        "suite": "browser-feedback.jsonl",
+        "docs": None,
+        "kb_names": ["default"],
+        "top_k": 5,
+        "thresholds": {"min_recall_at_k": 0.8, "min_mrr": 0.75, "min_hit_at_k": 0.8},
+        "summary": {
+            "cases": 2,
+            "passed": False,
+            "precision_at_k": 0.4,
+            "recall_at_k": 0.5,
+            "mrr": 0.5,
+            "hit_at_k": 0.5,
+        },
+        "cases": [
+            {
+                "id": "passed-case",
+                "query": "how to descale",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": True,
+                "metrics": {"precision_at_k": 0.2, "recall_at_k": 1.0, "mrr": 1.0, "hit_at_k": 1.0},
+                "thresholds": {},
+                "expected": [{"source_file": "coffee.md", "text_contains": ["descale"]}],
+                "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": [0]}],
+                "failures": [],
+            },
+            {
+                "id": "failed-case",
+                "query": "steam is weak",
+                "kb_name": "default",
+                "top_k": 5,
+                "passed": False,
+                "metrics": {"precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
+                "thresholds": {},
+                "expected": [{"source_file": "coffee.md", "text_contains": ["steam"]}],
+                "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": []}],
+                "failures": ["case recall_at_k 0.000000 < 0.800000"],
+            },
+        ],
+        "config_snapshot": {"reuse_built_kb": True},
+    }
 
 
 def _wait_for_server(port: int, process: subprocess.Popen, timeout: float = 20.0) -> None:

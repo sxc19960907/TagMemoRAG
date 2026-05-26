@@ -21,7 +21,7 @@ from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .auth.keygen import generate_api_key_material
 from .cache.lru_ttl import LRUTTLCache
-from . import api_admin, api_feedback, api_manual_routes, api_search
+from . import api_admin, api_eval_report, api_feedback, api_manual_routes, api_search
 from .api_models import (
     AccessKeyGenerateRequest,
     AgenticRequestOverrides,
@@ -187,6 +187,20 @@ def retrieval_quality_admin(request: Request, kb_name: str = "default"):
         "retrieval_quality.html",
         {
             "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
+@app.get("/admin/eval-report")
+def eval_report_admin(request: Request, kb_name: str = "default", report_path: str = ""):
+    return templates.TemplateResponse(
+        request,
+        "eval_report.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "default_report_path": report_path or "",
             "api_base_path": "",
             "auth_enabled": settings.auth.enabled,
         },
@@ -767,6 +781,15 @@ def promote_search_feedback(
     _: None = Depends(rate_limit_dep),
 ):
     return api_feedback.promote_search_feedback(request, api_key, settings)
+
+
+@app.get("/eval/report")
+def get_eval_report(
+    path: str,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_eval_report.load_eval_report_view(path)
 
 
 @app.get("/rebuild/{task_id}")
