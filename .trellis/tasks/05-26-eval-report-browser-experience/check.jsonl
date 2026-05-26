@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Verify API route placement and dependency direction."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify report loading failures use structured service errors."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify test coverage and quality gate fit the risk."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify cross-layer report path and summary contract consistency."}

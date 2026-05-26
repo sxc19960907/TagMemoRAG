@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Task touches FastAPI admin routes and response contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "New report endpoint must return structured errors for missing or malformed reports."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Task requires focused backend and browser-facing regression tests."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans eval report JSON, API summary, templates, static JS, CSS, and browser UX."}
