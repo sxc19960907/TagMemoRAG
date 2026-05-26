@@ -38,6 +38,17 @@
       <main>
         <section class="status-strip" id="eval-report-status" role="status" aria-live="polite"></section>
 
+        <section class="table-pane eval-report-recents-pane" aria-label="Recent eval reports">
+          <div class="pane-header">
+            <div>
+              <h2>Recent Reports</h2>
+              <p id="eval-report-recents-count">Looking for recent eval reports...</p>
+            </div>
+            <button id="eval-report-refresh" type="button" class="button-link">Refresh</button>
+          </div>
+          <div id="eval-report-recents" class="eval-report-recents empty-state">Looking for recent eval reports...</div>
+        </section>
+
         <section class="eval-report-hero" aria-label="Eval report summary">
           <div>
             <span id="eval-report-state" class="status-pill neutral">Not loaded</span>

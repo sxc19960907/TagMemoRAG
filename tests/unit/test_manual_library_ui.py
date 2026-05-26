@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
 from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.config import ApiKeyConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
+from tagmemorag import api_eval_report
 from tagmemorag.state import AppState
 
 
@@ -204,6 +206,8 @@ def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="eval-report-api-token"' in body
     assert 'id="eval-report-quality"' in body
     assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="eval-report-recents"' in body
+    assert 'id="eval-report-refresh"' in body
     assert 'id="eval-report-cases"' in body
     assert 'id="eval-report-config-snapshot"' in body
     assert '"defaultKbName": "ops"' in body
@@ -218,7 +222,10 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
 
     assert js.status_code == 200
     assert "/eval/report?path=" in js.text
+    assert "/eval/reports?limit=20" in js.text
     assert "eval-report-cases" in js.text
+    assert "eval-report-recents" in js.text
+    assert "loadRecentReports" in js.text
     assert "renderCaseCard" in js.text
     assert "renderGuidanceItem" in js.text
     assert "caseQaHref" in js.text
@@ -232,6 +239,52 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "authHeadersFromToken" in js.text
     assert "/admin/retrieval-quality" in js.text
     assert "/qa?kb_name=" in js.text
+
+
+def test_eval_report_list_api_discovers_recent_project_reports(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = _client(tmp_path, fake_embedder)
+    report_dir = tmp_path / ".tmp" / "eval"
+    report_dir.mkdir(parents=True)
+    report_path = report_dir / "browser-report.json"
+    report_path.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+    malformed_path = report_dir / "broken-report.json"
+    malformed_path.write_text("{bad", encoding="utf-8")
+    ignored_path = tmp_path / "outside-report.json"
+    ignored_path.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+
+    response = client.get("/eval/reports?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "eval_report_list.v1"
+    paths = {item["relative_path"]: item for item in body["reports"]}
+    assert ".tmp/eval/browser-report.json" in paths
+    assert ".tmp/eval/broken-report.json" in paths
+    assert "outside-report.json" not in paths
+    assert paths[".tmp/eval/browser-report.json"]["valid"] is True
+    assert paths[".tmp/eval/browser-report.json"]["suite"] == ".tmp/feedback.jsonl"
+    assert paths[".tmp/eval/browser-report.json"]["cases"] == 2
+    assert paths[".tmp/eval/browser-report.json"]["failed"] == 1
+    assert paths[".tmp/eval/broken-report.json"]["valid"] is False
+    assert paths[".tmp/eval/broken-report.json"]["error"] == "JSONDecodeError"
+
+
+def test_eval_report_discovery_is_bounded_to_project_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    inside = tmp_path / ".tmp" / "eval" / "inside-report.json"
+    inside.parent.mkdir(parents=True)
+    inside.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-report.json"
+    outside.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
+    try:
+        body = api_eval_report.list_eval_report_candidates(project_root=tmp_path, limit=10)
+    finally:
+        outside.unlink(missing_ok=True)
+
+    paths = {item["path"] for item in body["reports"]}
+    assert str(inside.resolve()) in paths
+    assert str(outside.resolve()) not in paths
 
 
 def test_eval_report_api_summarizes_valid_report(tmp_path, fake_embedder):

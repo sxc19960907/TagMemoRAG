@@ -1472,6 +1472,56 @@ dialog {
   min-width: min(520px, 56vw);
 }
 
+.eval-report-recents-pane {
+  margin-bottom: 12px;
+}
+
+.eval-report-recents {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.eval-report-recent-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 116px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.eval-report-recent-card:hover,
+.eval-report-recent-card:focus-visible {
+  border-color: #7ca7d8;
+  box-shadow: 0 0 0 3px rgba(124, 167, 216, 0.18);
+  outline: none;
+}
+
+.eval-report-recent-card .status-pill {
+  justify-self: start;
+}
+
+.eval-report-recent-card strong,
+.eval-report-recent-card small {
+  overflow-wrap: anywhere;
+}
+
+.eval-report-recent-card strong {
+  font-size: 14px;
+}
+
+.eval-report-recent-card small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .eval-report-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 430px);

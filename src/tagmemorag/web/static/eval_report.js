@@ -5,6 +5,7 @@ const config = JSON.parse(document.getElementById("eval-report-config").textCont
 
 const state = {
   report: null,
+  recentReports: [],
   kbName: config.defaultKbName || "default",
 };
 
@@ -63,6 +64,65 @@ async function loadReport() {
   updateLinks();
   renderReport();
   setStatus(t("Eval report loaded."), "success");
+}
+
+async function loadRecentReports() {
+  $("eval-report-recents-count").textContent = t("Looking for recent eval reports...");
+  const body = await requestJson("/eval/reports?limit=20");
+  state.recentReports = Array.isArray(body.reports) ? body.reports : [];
+  renderRecentReports();
+}
+
+function renderRecentReports() {
+  const node = $("eval-report-recents");
+  const reports = state.recentReports || [];
+  $("eval-report-recents-count").textContent = `${reports.length} ${t("reports")}`;
+  if (!reports.length) {
+    node.className = "eval-report-recents empty-state";
+    node.textContent = t("No recent eval reports found.");
+    return;
+  }
+  node.className = "eval-report-recents";
+  node.innerHTML = reports.map(renderRecentReport).join("");
+}
+
+function renderRecentReport(item, index) {
+  const status = item.valid
+    ? item.passed === true
+      ? t("Passed")
+      : item.passed === false
+        ? t("Needs review")
+        : t("Ready")
+    : t("Unreadable");
+  const statusClass = item.valid
+    ? item.passed === true
+      ? "good"
+      : item.passed === false
+        ? "needs-review"
+        : "neutral"
+    : "needs-review";
+  const title = item.suite || item.relative_path || item.name || t("Eval report");
+  const meta = item.valid
+    ? `${Number(item.cases || 0)} ${t("cases")} · ${Number(item.failed || 0)} ${t("failed")}`
+    : t(item.error || "Unable to read report");
+  return `
+    <button class="eval-report-recent-card" type="button" data-report-index="${index}">
+      <span class="status-pill ${statusClass}">${escapeHtml(status)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <small>${escapeHtml(meta)}</small>
+      <small>${escapeHtml(formatModified(item.modified_at))} · ${escapeHtml(item.relative_path || item.path || "")}</small>
+    </button>
+  `;
+}
+
+function loadRecentReport(index) {
+  const item = state.recentReports[index];
+  if (!item?.path) return;
+  $("eval-report-path").value = item.path;
+  loadReport().catch((error) => {
+    renderEmpty();
+    setStatus(error.message, "error");
+  });
 }
 
 function renderEmpty() {
@@ -241,6 +301,15 @@ function metric(value) {
   return Number(value || 0).toFixed(3);
 }
 
+function formatModified(value) {
+  const timestamp = Number(value || 0) * 1000;
+  if (!timestamp) return t("Unknown time");
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -259,11 +328,24 @@ $("eval-report-form").addEventListener("submit", (event) => {
 });
 
 $("eval-report-filter").addEventListener("change", renderCases);
+$("eval-report-refresh").addEventListener("click", () => {
+  loadRecentReports().catch((error) => setStatus(error.message, "error"));
+});
+$("eval-report-recents").addEventListener("click", (event) => {
+  const card = event.target.closest("[data-report-index]");
+  if (!card) return;
+  loadRecentReport(Number(card.dataset.reportIndex));
+});
 
 bindSharedApiToken($("eval-report-api-token"));
 initI18n({ mount: ".top-actions" });
 updateLinks();
 renderEmpty();
+loadRecentReports().catch((error) => {
+  $("eval-report-recents-count").textContent = t("Recent reports unavailable");
+  $("eval-report-recents").textContent = error.message;
+  $("eval-report-recents").className = "eval-report-recents empty-state";
+});
 if (reportPath()) {
   loadReport().catch((error) => setStatus(error.message, "error"));
 }

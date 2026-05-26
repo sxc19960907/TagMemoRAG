@@ -68,7 +68,8 @@ def test_browser_eval_report_viewer(tmp_path):
     playwright = pytest.importorskip("playwright.sync_api")
     port = _free_port()
     config_path = _write_browser_config(tmp_path)
-    report_path = tmp_path / "browser-eval-report.json"
+    report_path = Path.cwd() / ".tmp" / "browser-ui" / f"{tmp_path.name}-browser-eval-report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(_eval_report_payload(), ensure_ascii=False), encoding="utf-8")
     server = subprocess.Popen(
         [
@@ -97,12 +98,12 @@ def test_browser_eval_report_viewer(tmp_path):
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
-                page.goto(
-                    f"http://127.0.0.1:{port}/admin/eval-report"
-                    f"?kb_name=default&report_path={report_path}"
-                )
-                page.get_by_role("heading", name="Eval Report").wait_for()
+                page.goto(f"http://127.0.0.1:{port}/admin/eval-report?kb_name=default")
+                page.get_by_role("heading", name="Eval Report", exact=True).wait_for()
+                page.locator("#eval-report-recents").get_by_text(report_path.name).wait_for(timeout=10000)
+                page.locator("#eval-report-recents button").filter(has_text=report_path.name).first.click()
                 page.locator("#eval-report-status").get_by_text("Eval report loaded.").wait_for(timeout=10000)
+                assert page.locator("#eval-report-path").input_value() == str(report_path)
                 assert "Needs review" in page.locator("#eval-report-state").inner_text()
                 assert "browser-feedback.jsonl" in page.locator("#eval-report-title").inner_text()
                 assert page.locator("#eval-report-count-total").inner_text() == "2"
@@ -131,6 +132,7 @@ def test_browser_eval_report_viewer(tmp_path):
         except subprocess.TimeoutExpired:
             server.kill()
             server.wait(timeout=10)
+        report_path.unlink(missing_ok=True)
 
 
 def test_browser_manual_library_to_qa_user_flow(tmp_path):

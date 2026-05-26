@@ -792,6 +792,15 @@ def get_eval_report(
     return api_eval_report.load_eval_report_view(path)
 
 
+@app.get("/eval/reports")
+def list_eval_reports(
+    limit: int = 20,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_eval_report.list_eval_report_candidates(limit=limit)
+
+
 @app.get("/rebuild/{task_id}")
 def get_rebuild(task_id: str, _api_key: ApiKey = Depends(require_scope("rebuild")), _: None = Depends(rate_limit_dep)):
     task = app_state.rebuild_tasks.get(task_id)

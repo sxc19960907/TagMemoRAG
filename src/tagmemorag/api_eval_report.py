@@ -5,9 +5,15 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ErrorCode, ServiceError
+from .release_readiness import DEFAULT_REPORT_PATHS
 
 SCHEMA_VERSION = "eval_report_view.v1"
+LIST_SCHEMA_VERSION = "eval_report_list.v1"
 MAX_RESULTS_PER_CASE = 8
+DEFAULT_REPORT_LIST_LIMIT = 20
+MAX_REPORT_LIST_LIMIT = 50
+MAX_DISCOVERY_FILES = 500
+MAX_DISCOVERY_DEPTH = 5
 
 
 def load_eval_report_view(report_path: str | Path) -> dict[str, Any]:
@@ -28,6 +34,24 @@ def load_eval_report_view(report_path: str | Path) -> dict[str, Any]:
             {"path": str(path), "line": exc.lineno, "column": exc.colno},
         ) from exc
     return summarize_eval_report_payload(payload, report_path=str(path))
+
+
+def list_eval_report_candidates(*, project_root: str | Path | None = None, limit: int = DEFAULT_REPORT_LIST_LIMIT) -> dict[str, Any]:
+    root = Path(project_root or Path.cwd()).resolve()
+    bounded_limit = max(1, min(int(limit or DEFAULT_REPORT_LIST_LIMIT), MAX_REPORT_LIST_LIMIT))
+    candidates: dict[Path, dict[str, Any]] = {}
+    for path in _discover_report_paths(root):
+        candidate = _candidate_summary(path, root)
+        if candidate is None:
+            continue
+        candidates[path] = candidate
+    reports = sorted(candidates.values(), key=lambda item: (-float(item["modified_at"]), str(item["path"])))
+    return {
+        "schema_version": LIST_SCHEMA_VERSION,
+        "project_root": str(root),
+        "count": min(len(reports), bounded_limit),
+        "reports": reports[:bounded_limit],
+    }
 
 
 def summarize_eval_report_payload(payload: Any, *, report_path: str = "") -> dict[str, Any]:
@@ -56,6 +80,106 @@ def summarize_eval_report_payload(payload: Any, *, report_path: str = "") -> dic
         "cases": cases,
         "config_snapshot": _safe_dict(payload.get("config_snapshot")),
     }
+
+
+def _discover_report_paths(project_root: Path) -> list[Path]:
+    roots = [project_root / ".tmp"]
+    for value in DEFAULT_REPORT_PATHS.values():
+        path = (project_root / value).resolve()
+        if _is_within(path, project_root):
+            roots.append(path.parent)
+
+    discovered: list[Path] = []
+    seen_roots: set[Path] = set()
+    for root in roots:
+        resolved_root = root.resolve()
+        if resolved_root in seen_roots or not _is_within(resolved_root, project_root) or not resolved_root.exists():
+            continue
+        seen_roots.add(resolved_root)
+        if resolved_root.is_file():
+            if _looks_like_report_path(resolved_root):
+                discovered.append(resolved_root)
+            continue
+        if not resolved_root.is_dir():
+            continue
+        for path in resolved_root.rglob("*.json"):
+            if len(discovered) >= MAX_DISCOVERY_FILES:
+                return discovered
+            if not _is_within(path.resolve(), resolved_root):
+                continue
+            if len(path.relative_to(resolved_root).parts) > MAX_DISCOVERY_DEPTH:
+                continue
+            if _looks_like_report_path(path):
+                discovered.append(path.resolve())
+    return discovered
+
+
+def _looks_like_report_path(path: Path) -> bool:
+    name = path.name.lower()
+    return path.suffix.lower() == ".json" and ("report" in name or "eval" in name or path.parent.name.lower() == "eval")
+
+
+def _candidate_summary(path: Path, project_root: Path) -> dict[str, Any] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    candidate: dict[str, Any] = {
+        "path": str(path),
+        "relative_path": _relative_path(path, project_root),
+        "name": path.name,
+        "modified_at": round(float(stat.st_mtime), 3),
+        "size_bytes": int(stat.st_size),
+        "valid": False,
+        "suite": "",
+        "kb_names": [],
+        "passed": None,
+        "cases": 0,
+        "failed": 0,
+        "error": "",
+    }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        candidate["error"] = type(exc).__name__
+        return candidate
+    if not isinstance(payload, dict):
+        candidate["error"] = "not_object"
+        return candidate
+    cases = payload.get("cases")
+    summary = _safe_dict(payload.get("summary"))
+    if not isinstance(cases, list):
+        candidate["error"] = "missing_cases"
+        return candidate
+    case_summaries = [_case_summary(case) for case in cases if isinstance(case, dict)]
+    counts = _counts(case_summaries)
+    candidate.update(
+        {
+            "valid": True,
+            "suite": str(payload.get("suite") or ""),
+            "kb_names": _safe_str_list(payload.get("kb_names")),
+            "passed": summary.get("passed") if isinstance(summary.get("passed"), bool) else None,
+            "cases": counts["total"],
+            "failed": counts["failed"],
+            "error": "",
+        }
+    )
+    return candidate
+
+
+def _relative_path(path: Path, project_root: Path) -> str:
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def _case_summary(case: dict[str, Any]) -> dict[str, Any]:
