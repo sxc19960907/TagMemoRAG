@@ -123,6 +123,50 @@ Extended the browser eval report viewer with deterministic improvement guidance 
 - Continue with workbench flow integration: make the report guidance easier to reach from the main RAG Workbench and Retrieval Quality review loop.
 
 
+## Session 126: RAG quality workflow integration
+
+**Date**: 2026-05-26
+**Task**: RAG quality workflow integration
+**Branch**: `master`
+
+### Summary
+
+Connected the browser quality loop so users can move from Workbench to Eval Report, and from an eval case back into Q&A or Workbench with the failing query prefilled for re-testing.
+
+### Main Changes
+
+- Added an Eval Report navigation entry to RAG Workbench.
+- Added `question` URL prefill support to Q&A and RAG Workbench without auto-submitting.
+- Added case-level `Ask in Q&A` and `Open in Workbench` actions in Eval Report.
+- Preserved `kb_name` propagation across the flow.
+- Added unit and browser smoke coverage for the integrated path.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef97afb` | Connect RAG quality browser flow |
+| `972f7a5` | Record RAG quality workflow task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/qa_page.js`
+- [OK] `node --check src/tagmemorag/web/static/rag_workbench.js`
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer -q -s`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue with user-facing run history or report discovery so users can find recent eval reports without remembering paths.
+
+
 ## Session 123: Eval run user guidance
 
 **Date**: 2026-05-26
