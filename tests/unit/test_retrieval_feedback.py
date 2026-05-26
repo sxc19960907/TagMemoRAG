@@ -93,7 +93,39 @@ def test_promotion_preview_builds_eval_case_and_skips_unusable_feedback(tmp_path
     assert [case["id"] for case in preview.cases] == ["feedback-fb-good"]
     assert preview.cases[0]["query"] == "E05 蒸汽异常怎么处理"
     assert preview.cases[0]["relevant"][0]["metadata"] == {"manual_id": "cm1"}
-    assert preview.skipped == ({"feedback_id": "fb-bad", "reason": "no_usable_relevant_matcher"},)
+    assert preview.skipped == (
+        {
+            "feedback_id": "fb-bad",
+            "reason": "no_usable_relevant_matcher",
+            "outcome": "wrong_manual",
+            "query": "E05 蒸汽异常怎么处理",
+            "message": "No usable relevant matcher is available for this feedback.",
+            "next_action": "Add expected evidence with source_file, header, anchor_key, text_contains, or metadata before promotion.",
+        },
+    )
+
+
+def test_promotion_preview_explains_duplicate_case_skip(tmp_path):
+    cfg = _settings(tmp_path)
+    feedback = create_feedback("default", _payload(feedback_id="fb-1"), cfg)
+    output = tmp_path / "eval_drafts" / "default" / "feedback.jsonl"
+    output.parent.mkdir(parents=True)
+    output.write_text('{"id": "feedback-fb-1", "query": "old"}\n', encoding="utf-8")
+
+    preview = preview_eval_promotion("default", [feedback.feedback_id], cfg, output_path=str(output))
+
+    assert preview.cases == ()
+    assert preview.skipped == (
+        {
+            "feedback_id": "fb-1",
+            "reason": "duplicate_case_id",
+            "outcome": "missing_result",
+            "query": "E05 蒸汽异常怎么处理",
+            "message": "An eval case with this feedback id already exists at the output path.",
+            "next_action": "Choose append/overwrite intentionally or keep the existing eval case.",
+            "case_id": "feedback-fb-1",
+        },
+    )
 
 
 def test_export_eval_promotion_requires_explicit_existing_file_mode_and_marks_promoted(tmp_path):

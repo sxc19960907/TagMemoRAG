@@ -125,6 +125,8 @@ function renderDetail() {
     $("quality-expected-evidence").className = "quality-ref-list empty-state";
     $("quality-expected-evidence").textContent = t("Add expected references before promoting difficult cases.");
     $("quality-operator-note").value = "";
+    $("quality-promotion-summary").className = "quality-promotion-summary empty-state";
+    $("quality-promotion-summary").textContent = t("Preview promotion to see export readiness.");
     $("quality-promotion-preview").textContent = "";
     return;
   }
@@ -184,6 +186,7 @@ async function promotion(commit) {
   };
   const path = commit ? "/search/feedback/promote" : "/search/feedback/promote/preview";
   const result = await requestJson(path, { method: "POST", body: JSON.stringify(body) });
+  renderPromotionSummary(result);
   $("quality-promotion-preview").textContent = JSON.stringify(result, null, 2);
   setStatus(commit ? `Exported ${result.cases.length} eval cases.` : `Previewed ${result.cases.length} eval cases.`, "success");
   if (commit) await loadFeedback();
@@ -320,6 +323,42 @@ function renderRefList(id, cards, emptyText) {
       ${card.badges.length ? `<p>${card.badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`).join("")}</p>` : ""}
     </article>
   `).join("");
+}
+
+function renderPromotionSummary(result) {
+  const cases = Array.isArray(result?.cases) ? result.cases : [];
+  const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+  const node = $("quality-promotion-summary");
+  if (!cases.length && !skipped.length) {
+    node.className = "quality-promotion-summary empty-state";
+    node.textContent = t("No promotion preview results.");
+    return;
+  }
+  node.className = "quality-promotion-summary";
+  const caseCards = cases.map((item) => `
+    <article class="quality-promotion-card ready">
+      <span>${t("Ready")}</span>
+      <strong>${escapeHtml(item.id || t("Eval case"))}</strong>
+      <small>${escapeHtml(item.query || "")}</small>
+      <small>${escapeHtml((item.relevant || []).length)} ${t("matcher(s)")}</small>
+    </article>
+  `);
+  const skippedCards = skipped.map((item) => `
+    <article class="quality-promotion-card blocked">
+      <span>${t("Needs input")}</span>
+      <strong>${escapeHtml(item.feedback_id || t("Feedback"))}</strong>
+      <small>${escapeHtml(item.message || skipReasonLabel(item.reason))}</small>
+      <small>${escapeHtml(item.next_action || "")}</small>
+    </article>
+  `);
+  node.innerHTML = [...caseCards, ...skippedCards].join("");
+}
+
+function skipReasonLabel(reason) {
+  if (reason === "query_too_short") return t("Feedback query is too short to become a stable eval case.");
+  if (reason === "no_usable_relevant_matcher") return t("No usable relevant matcher is available for this feedback.");
+  if (reason === "duplicate_case_id") return t("An eval case with this feedback id already exists at the output path.");
+  return String(reason || "");
 }
 
 function escapeHtml(value) {

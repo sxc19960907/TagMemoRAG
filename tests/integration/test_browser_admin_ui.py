@@ -388,6 +388,8 @@ def _exercise_retrieval_quality(page, port: int) -> None:
 
     page.locator("#quality-preview").click()
     page.locator("#quality-promotion-preview").get_by_text("washer filter blocked").wait_for()
+    assert "READY" in page.locator("#quality-promotion-summary").inner_text()
+    assert "feedback-fb-ui-1" in page.locator("#quality-promotion-summary").inner_text()
     preview = page.locator("#quality-promotion-preview").inner_text()
     assert "washer filter blocked" in preview
 
@@ -441,6 +443,12 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "Q&A" in detail_text
     assert "demo/demo-service-manual.md" in page.locator("#quality-selected-evidence").inner_text()
     assert "Review the cited evidence" in page.locator("#quality-review-guidance").inner_text()
+
+    page.locator("#quality-preview").click()
+    page.locator("#quality-promotion-summary").get_by_text("Needs input").wait_for(timeout=10000)
+    summary_text = page.locator("#quality-promotion-summary").inner_text()
+    assert "No usable relevant matcher" in summary_text
+    assert "Add expected evidence" in summary_text
 
 
 def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) -> None:

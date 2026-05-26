@@ -212,11 +212,11 @@ def preview_eval_promotion(
     for feedback in selected:
         case, reason = _feedback_to_eval_case(feedback)
         if reason:
-            skipped.append({"feedback_id": feedback.feedback_id, "reason": reason})
+            skipped.append(_promotion_skip(feedback, reason))
             continue
         assert case is not None
         if case["id"] in existing_ids:
-            skipped.append({"feedback_id": feedback.feedback_id, "reason": "duplicate_case_id", "case_id": case["id"]})
+            skipped.append(_promotion_skip(feedback, "duplicate_case_id", case_id=case["id"]))
             continue
         existing_ids.add(case["id"])
         cases.append(case)
@@ -352,6 +352,41 @@ def _feedback_to_eval_case(feedback: SearchFeedback) -> tuple[dict[str, Any] | N
         },
         "",
     )
+
+
+def _promotion_skip(feedback: SearchFeedback, reason: str, **extra: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "feedback_id": feedback.feedback_id,
+        "reason": reason,
+        "outcome": feedback.outcome,
+        "query": feedback.query,
+        "message": _promotion_skip_message(reason),
+        "next_action": _promotion_skip_next_action(feedback, reason),
+    }
+    row.update(extra)
+    return row
+
+
+def _promotion_skip_message(reason: str) -> str:
+    if reason == "query_too_short":
+        return "Feedback query is too short to become a stable eval case."
+    if reason == "no_usable_relevant_matcher":
+        return "No usable relevant matcher is available for this feedback."
+    if reason == "duplicate_case_id":
+        return "An eval case with this feedback id already exists at the output path."
+    return "Feedback could not be promoted."
+
+
+def _promotion_skip_next_action(feedback: SearchFeedback, reason: str) -> str:
+    if reason == "query_too_short":
+        return "Capture a fuller user query before promoting this feedback."
+    if reason == "duplicate_case_id":
+        return "Choose append/overwrite intentionally or keep the existing eval case."
+    if reason == "no_usable_relevant_matcher":
+        if feedback.outcome == "helpful":
+            return "Ensure the helpful feedback has selected result references with source_file, header, anchor_key, or manual_id."
+        return "Add expected evidence with source_file, header, anchor_key, text_contains, or metadata before promotion."
+    return "Review the feedback details and add enough evidence to build a matcher."
 
 
 def _expected_to_matcher(ref: FeedbackExpectedRef) -> dict[str, Any]:
