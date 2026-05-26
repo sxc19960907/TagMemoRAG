@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 118
+- **Total Sessions**: 119
 - **Last Active**: 2026-05-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~868 | Active |
+| `journal-3.md` | ~901 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 119 | 2026-05-26 | Browser RAG quick start guide | `718d5aa` | `codex/admin-people-management-ui` |
 | 118 | 2026-05-26 | Browser RAG experience acceptance | `cbd6b34` | `codex/admin-people-management-ui` |
 | 117 | 2026-05-26 | Workbench QA navigation | `c2a4084` | `codex/admin-people-management-ui` |
 | 116 | 2026-05-26 | Unify admin navigation | `cc6dc1b` | `codex/admin-people-management-ui` |

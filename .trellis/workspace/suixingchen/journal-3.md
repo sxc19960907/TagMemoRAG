@@ -866,3 +866,36 @@ Ran the real browser RAG acceptance path, including upload, rebuild, UI navigati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 119: Browser RAG quick start guide
+
+**Date**: 2026-05-26
+**Task**: Browser RAG quick start guide
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a concise browser-first local RAG quick start that uses the offline hashing/noop demo, covers seed, serve, Manual Library, upload/rebuild, and QA, and linked it from README.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `718d5aa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
