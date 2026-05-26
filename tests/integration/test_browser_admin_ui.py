@@ -100,6 +100,14 @@ def test_browser_eval_report_viewer(tmp_path):
             try:
                 page.goto(f"http://127.0.0.1:{port}/admin/eval-report?kb_name=default")
                 page.get_by_role("heading", name="Eval Report", exact=True).wait_for()
+                page.locator("#eval-run-suite").select_option("coffee_smoke")
+                page.locator("#eval-run-start").click()
+                page.locator("#eval-run-status").get_by_text("Open Report").wait_for(timeout=15000)
+                assert "7 cases" in page.locator("#eval-run-status").inner_text()
+                page.locator("#eval-run-load-report").click()
+                page.locator("#eval-report-status").get_by_text("Eval report loaded.").wait_for(timeout=10000)
+                assert "coffee.jsonl" in page.locator("#eval-report-title").inner_text()
+                assert page.locator("#eval-report-count-total").inner_text() == "7"
                 page.locator("#eval-report-recents").get_by_text(report_path.name).wait_for(timeout=10000)
                 page.locator("#eval-report-recents button").filter(has_text=report_path.name).first.click()
                 page.locator("#eval-report-status").get_by_text("Eval report loaded.").wait_for(timeout=10000)

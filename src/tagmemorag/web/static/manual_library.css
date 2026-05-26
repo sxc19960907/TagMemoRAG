@@ -1472,6 +1472,71 @@ dialog {
   min-width: min(520px, 56vw);
 }
 
+.eval-run-pane {
+  margin-bottom: 12px;
+}
+
+.eval-run-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+}
+
+.eval-run-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.eval-run-controls span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.eval-run-controls select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 7px 9px;
+}
+
+.eval-run-status {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+}
+
+.eval-run-status .status-pill {
+  justify-self: start;
+}
+
+.eval-run-status strong,
+.eval-run-status p,
+.eval-run-status small {
+  overflow-wrap: anywhere;
+}
+
+.eval-run-status p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.eval-run-status small {
+  color: var(--muted);
+}
+
+.eval-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .eval-report-recents-pane {
   margin-bottom: 12px;
 }

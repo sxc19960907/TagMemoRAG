@@ -38,6 +38,23 @@
       <main>
         <section class="status-strip" id="eval-report-status" role="status" aria-live="polite"></section>
 
+        <section class="table-pane eval-run-pane" aria-label="Eval run launcher">
+          <div class="pane-header">
+            <div>
+              <h2>Run Evaluation</h2>
+              <p id="eval-run-subtitle">Start a safe predefined eval and open the report when it finishes.</p>
+            </div>
+          </div>
+          <div class="eval-run-controls">
+            <label>
+              <span>Eval suite</span>
+              <select id="eval-run-suite" aria-label="Eval suite"></select>
+            </label>
+            <button id="eval-run-start" type="button" class="primary">Run eval</button>
+          </div>
+          <div id="eval-run-status" class="eval-run-status empty-state">Load suites to run an evaluation.</div>
+        </section>
+
         <section class="table-pane eval-report-recents-pane" aria-label="Recent eval reports">
           <div class="pane-header">
             <div>

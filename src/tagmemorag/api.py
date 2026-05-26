@@ -21,7 +21,7 @@ from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .auth.keygen import generate_api_key_material
 from .cache.lru_ttl import LRUTTLCache
-from . import api_admin, api_eval_report, api_feedback, api_manual_routes, api_search
+from . import api_admin, api_eval_report, api_eval_runs, api_feedback, api_manual_routes, api_search
 from .api_models import (
     AccessKeyGenerateRequest,
     AgenticRequestOverrides,
@@ -29,6 +29,7 @@ from .api_models import (
     AnswerRequest,
     BudgetSpec,
     CacheClearRequest,
+    EvalRunStartRequest,
     FeedbackPromoteRequest,
     FeedbackReviewRequest,
     FeedbackSubmitRequest,
@@ -799,6 +800,32 @@ def list_eval_reports(
     _: None = Depends(rate_limit_dep),
 ):
     return api_eval_report.list_eval_report_candidates(limit=limit)
+
+
+@app.get("/eval/suites")
+def list_eval_suites(
+    _api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_eval_runs.list_eval_suites()
+
+
+@app.post("/eval/runs", status_code=202)
+def start_eval_run(
+    request: EvalRunStartRequest,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_eval_runs.start_eval_run(request.suite_id, settings=settings)
+
+
+@app.get("/eval/runs/{job_id}")
+def get_eval_run(
+    job_id: str,
+    _api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_eval_runs.get_eval_run(job_id)
 
 
 @app.get("/rebuild/{task_id}")

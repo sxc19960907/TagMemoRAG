@@ -176,6 +176,10 @@ class CacheClearRequest(BaseModel):
     kb_name: str | None = None
 
 
+class EvalRunStartRequest(BaseModel):
+    suite_id: str = Field(..., min_length=1, max_length=80)
+
+
 class IndexGenBuildShadowRequest(BaseModel):
     kb_name: str = "default"
     docs_dir: str | None = None

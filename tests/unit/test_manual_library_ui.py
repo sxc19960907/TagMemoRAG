@@ -1,26 +1,40 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from tagmemorag import api
+from tagmemorag import api, api_eval_report, api_eval_runs
 from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.config import ApiKeyConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
-from tagmemorag import api_eval_report
 from tagmemorag.state import AppState
 
 
 def _client(tmp_path, fake_embedder) -> TestClient:
+    api_eval_runs.eval_run_registry.reset_for_tests()
     api.settings = Settings(
         storage=StorageConfig(data_dir=str(tmp_path / "data")),
         manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
-        model={"dim": 64},
+        model={"provider": "hashing", "dim": 64},
     )
     api.embedder = fake_embedder
     api.app_state = AppState()
     return TestClient(api.app)
+
+
+def _wait_for_eval_job(client: TestClient, job_id: str, timeout: float = 10.0) -> dict:
+    deadline = time.time() + timeout
+    body = {}
+    while time.time() < deadline:
+        response = client.get(f"/eval/runs/{job_id}")
+        assert response.status_code == 200
+        body = response.json()
+        if body["status"] not in {"queued", "running"}:
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"eval job did not finish: {body}")
 
 
 def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -206,6 +220,9 @@ def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="eval-report-api-token"' in body
     assert 'id="eval-report-quality"' in body
     assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="eval-run-suite"' in body
+    assert 'id="eval-run-start"' in body
+    assert 'id="eval-run-status"' in body
     assert 'id="eval-report-recents"' in body
     assert 'id="eval-report-refresh"' in body
     assert 'id="eval-report-cases"' in body
@@ -223,6 +240,12 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert js.status_code == 200
     assert "/eval/report?path=" in js.text
     assert "/eval/reports?limit=20" in js.text
+    assert "/eval/suites" in js.text
+    assert "/eval/runs" in js.text
+    assert "startEvalRun" in js.text
+    assert "pollEvalRun" in js.text
+    assert "eval-run-suite" in js.text
+    assert "eval-run-status" in js.text
     assert "eval-report-cases" in js.text
     assert "eval-report-recents" in js.text
     assert "loadRecentReports" in js.text
@@ -239,6 +262,50 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "authHeadersFromToken" in js.text
     assert "/admin/retrieval-quality" in js.text
     assert "/qa?kb_name=" in js.text
+
+
+def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/eval/suites")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "eval_suites.v1"
+    suites = {item["suite_id"]: item for item in body["suites"]}
+    assert "coffee_smoke" in suites
+    assert suites["coffee_smoke"]["suite_path"] == "tests/fixtures/eval/coffee.jsonl"
+    assert suites["coffee_smoke"]["docs_path"] == "tests/fixtures"
+    assert suites["coffee_smoke"]["thresholds"]["min_recall_at_k"] == 0.0
+
+
+def test_eval_run_api_rejects_unknown_suite(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.post("/eval/runs", json={"suite_id": "unknown"})
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["code"] == "INVALID_REQUEST"
+    assert body["detail"]["suite_id"] == "unknown"
+
+
+def test_eval_run_api_starts_job_and_writes_report(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    started = client.post("/eval/runs", json={"suite_id": "coffee_smoke"})
+
+    assert started.status_code == 202
+    job_id = started.json()["job_id"]
+    body = _wait_for_eval_job(client, job_id)
+    assert body["status"] == "passed"
+    assert body["summary"]["passed"] is True
+    assert body["summary"]["cases"] == 7
+    assert body["suite"]["suite_id"] == "coffee_smoke"
+    report_path = Path(body["report_path"])
+    assert report_path.exists()
+    assert ".tmp/eval/browser-runs" in str(report_path)
+    assert body["report_url"].startswith("/admin/eval-report?report_path=")
 
 
 def test_eval_report_list_api_discovers_recent_project_reports(tmp_path, fake_embedder, monkeypatch):

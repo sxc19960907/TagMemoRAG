@@ -6,6 +6,9 @@ const config = JSON.parse(document.getElementById("eval-report-config").textCont
 const state = {
   report: null,
   recentReports: [],
+  suites: [],
+  activeRun: null,
+  runPollTimer: null,
   kbName: config.defaultKbName || "default",
 };
 
@@ -50,6 +53,22 @@ async function requestJson(path) {
   return body;
 }
 
+async function postJson(path, payload) {
+  const response = await fetch(apiPath(path), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...tokenHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || body.code || `HTTP ${response.status}`);
+  }
+  return body;
+}
+
 async function loadReport() {
   const path = reportPath();
   if (!path) {
@@ -64,6 +83,128 @@ async function loadReport() {
   updateLinks();
   renderReport();
   setStatus(t("Eval report loaded."), "success");
+}
+
+async function loadEvalSuites() {
+  const body = await requestJson("/eval/suites");
+  state.suites = Array.isArray(body.suites) ? body.suites : [];
+  renderEvalSuites();
+}
+
+function renderEvalSuites() {
+  const select = $("eval-run-suite");
+  if (!state.suites.length) {
+    select.innerHTML = `<option value="">${t("No eval suites available")}</option>`;
+    $("eval-run-start").disabled = true;
+    $("eval-run-status").className = "eval-run-status empty-state";
+    $("eval-run-status").textContent = t("No eval suites available.");
+    return;
+  }
+  select.innerHTML = state.suites.map((suite) => `
+    <option value="${escapeHtml(suite.suite_id)}">${escapeHtml(t(suite.name || suite.suite_id))}</option>
+  `).join("");
+  $("eval-run-start").disabled = false;
+  renderRunIdle();
+}
+
+async function startEvalRun() {
+  const suiteId = $("eval-run-suite").value;
+  if (!suiteId) {
+    setStatus(t("Select an eval suite first."), "error");
+    return;
+  }
+  $("eval-run-start").disabled = true;
+  renderRunMessage(t("Starting eval run..."));
+  const job = await postJson("/eval/runs", { suite_id: suiteId });
+  state.activeRun = job;
+  renderEvalRun(job);
+  pollEvalRun(job.job_id);
+}
+
+async function pollEvalRun(jobId) {
+  clearRunPoll();
+  const tick = async () => {
+    const job = await requestJson(`/eval/runs/${encodeURIComponent(jobId)}`);
+    state.activeRun = job;
+    renderEvalRun(job);
+    if (["queued", "running"].includes(job.status)) {
+      state.runPollTimer = window.setTimeout(tick, 900);
+      return;
+    }
+    $("eval-run-start").disabled = false;
+    if (job.report_path) {
+      await loadRecentReports().catch(() => {});
+    }
+  };
+  state.runPollTimer = window.setTimeout(tick, 250);
+}
+
+function renderRunIdle() {
+  const suite = selectedSuite();
+  $("eval-run-status").className = "eval-run-status";
+  $("eval-run-status").innerHTML = suite
+    ? `<strong>${escapeHtml(t(suite.name))}</strong><p>${escapeHtml(t(suite.description || ""))}</p><small>${escapeHtml(suite.suite_path || "")}</small>`
+    : t("Select an eval suite first.");
+}
+
+function renderRunMessage(message) {
+  $("eval-run-status").className = "eval-run-status empty-state";
+  $("eval-run-status").textContent = message;
+}
+
+function renderEvalRun(job) {
+  const terminal = !["queued", "running"].includes(job.status);
+  const statusClass = job.status === "passed" ? "good" : terminal ? "needs-review" : "in-progress";
+  const summary = job.summary || {};
+  const reportLink = job.report_path
+    ? `<a class="button-link compact" href="${escapeHtml(job.report_url || `/admin/eval-report?report_path=${encodeURIComponent(job.report_path)}`)}">${t("Open Report")}</a>
+       <button class="button-link compact" type="button" id="eval-run-load-report">${t("Load here")}</button>`
+    : "";
+  const error = job.error ? `<p>${escapeHtml(job.error.message || job.error.type || "")}</p>` : "";
+  $("eval-run-status").className = "eval-run-status";
+  $("eval-run-status").innerHTML = `
+    <span class="status-pill ${statusClass}">${escapeHtml(t(runStatusLabel(job.status)))}</span>
+    <strong>${escapeHtml(t(job.suite?.name || "Eval run"))}</strong>
+    <p>${escapeHtml(runSummaryText(job, summary))}</p>
+    ${error}
+    <div class="eval-run-actions">${reportLink}</div>
+  `;
+  const loadButton = $("eval-run-load-report");
+  if (loadButton) {
+    loadButton.addEventListener("click", () => {
+      $("eval-report-path").value = job.report_path;
+      loadReport().catch((err) => setStatus(err.message, "error"));
+    });
+  }
+}
+
+function selectedSuite() {
+  const suiteId = $("eval-run-suite").value;
+  return state.suites.find((suite) => suite.suite_id === suiteId);
+}
+
+function runStatusLabel(status) {
+  if (status === "queued") return "Queued";
+  if (status === "running") return "Running";
+  if (status === "passed") return "Passed";
+  if (status === "failed") return "Needs review";
+  return "Error";
+}
+
+function runSummaryText(job, summary) {
+  if (job.status === "queued") return t("Eval run is queued.");
+  if (job.status === "running") return t("Eval run is running.");
+  if (job.status === "passed" || job.status === "failed") {
+    return `${Number(summary.cases || 0)} ${t("cases")} · ${t("Recall")} ${metric(summary.recall_at_k)} · ${t("MRR")} ${metric(summary.mrr)} · ${t("Hit")} ${metric(summary.hit_at_k)}`;
+  }
+  return t("Eval run failed.");
+}
+
+function clearRunPoll() {
+  if (state.runPollTimer) {
+    window.clearTimeout(state.runPollTimer);
+    state.runPollTimer = null;
+  }
 }
 
 async function loadRecentReports() {
@@ -328,6 +469,14 @@ $("eval-report-form").addEventListener("submit", (event) => {
 });
 
 $("eval-report-filter").addEventListener("change", renderCases);
+$("eval-run-start").addEventListener("click", () => {
+  startEvalRun().catch((error) => {
+    $("eval-run-start").disabled = false;
+    renderRunMessage(error.message);
+    setStatus(error.message, "error");
+  });
+});
+$("eval-run-suite").addEventListener("change", renderRunIdle);
 $("eval-report-refresh").addEventListener("click", () => {
   loadRecentReports().catch((error) => setStatus(error.message, "error"));
 });
@@ -341,6 +490,10 @@ bindSharedApiToken($("eval-report-api-token"));
 initI18n({ mount: ".top-actions" });
 updateLinks();
 renderEmpty();
+loadEvalSuites().catch((error) => {
+  $("eval-run-start").disabled = true;
+  renderRunMessage(error.message);
+});
 loadRecentReports().catch((error) => {
   $("eval-report-recents-count").textContent = t("Recent reports unavailable");
   $("eval-report-recents").textContent = error.message;
