@@ -800,3 +800,36 @@ Unified cross-page navigation for Manual Library, Retrieval Quality, and People 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 117: Workbench QA navigation
+
+**Date**: 2026-05-26
+**Task**: Workbench QA navigation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added an Ask Q&A link to RAG Workbench and kept it synchronized with the active kb_name so the root browser workflow can jump directly into the user-facing QA page.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2a4084` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
