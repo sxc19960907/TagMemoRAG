@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"backend API and report discovery guidance index"}
+{"file":".trellis/spec/backend/architecture.md","reason":"system boundary and evaluation/reporting contract context"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"module ownership for API helper placement"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"test isolation and bounded report content rules"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"structured API error behavior"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"avoid logging sensitive report contents"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"feature touches API, template, JS, CSS, and browser tests"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse existing report summarization and UI patterns"}
