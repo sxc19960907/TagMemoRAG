@@ -833,3 +833,36 @@ Added an Ask Q&A link to RAG Workbench and kept it synchronized with the active 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 118: Browser RAG experience acceptance
+
+**Date**: 2026-05-26
+**Task**: Browser RAG experience acceptance
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Ran the real browser RAG acceptance path, including upload, rebuild, UI navigation to QA, answer, citations, failure states, insufficient evidence, and follow-up context. All opt-in browser UI integration checks passed without requiring production code changes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cbd6b34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
