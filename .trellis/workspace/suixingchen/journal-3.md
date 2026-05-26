@@ -899,3 +899,36 @@ Added a concise browser-first local RAG quick start that uses the offline hashin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 120: Pre-merge release closure
+
+**Date**: 2026-05-26
+**Task**: Pre-merge release closure
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Completed a full pre-merge closure pass for the browser-first RAG branch: CI-equivalent tests, hashing eval gate, quick-start demo, full opt-in browser UI suite, static JS checks, diff checks, and retained closure report.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96ab4c7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
