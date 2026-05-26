@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate for feedback/eval/UI changes."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify summary fields survive API-to-UI-to-eval usage."}
