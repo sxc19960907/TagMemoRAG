@@ -415,6 +415,9 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "同时按住清洗键和热水键三秒" in answer_text
     sources_text = page.locator("#qa-sources").inner_text()
     assert "demo-service-manual.md" in sources_text
+    assert "Cited manual passage" in sources_text
+    page.locator(".qa-citation-chip").first.click()
+    page.locator(".qa-source-item.active").wait_for()
     _assert_qa_layout(page)
 
 

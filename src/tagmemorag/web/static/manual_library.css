@@ -861,7 +861,7 @@ textarea {
   background: #ffffff;
   padding: 12px;
   scroll-margin: 12px;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
 .qa-source-list.empty-state {
@@ -871,8 +871,35 @@ textarea {
 
 .qa-source-item.active {
   border-color: #6d95c3;
-  background: #f4f8ff;
-  box-shadow: 0 0 0 3px rgb(109 149 195 / 0.18);
+  background: #f5f9ff;
+  box-shadow: 0 0 0 3px rgb(109 149 195 / 0.18), 0 12px 24px rgb(39 93 150 / 0.1);
+}
+
+.qa-source-item.pulse {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 4px rgb(11 107 203 / 0.2), 0 14px 28px rgb(39 93 150 / 0.14);
+}
+
+.qa-source-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.qa-source-card-head strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.qa-source-card-head small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
 }
 
 .qa-source-item p {
@@ -880,14 +907,25 @@ textarea {
 }
 
 .qa-source-section {
+  display: grid;
+  gap: 3px;
+  border-left: 3px solid #d4e3f3;
   color: #41566f;
   font-size: 12px;
   font-weight: 600;
+  padding-left: 8px;
+}
+
+.qa-source-section span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .qa-source-summary,
 .qa-source-full {
   color: var(--ink);
+  line-height: 1.55;
 }
 
 .qa-source-toggle {

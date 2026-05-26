@@ -717,7 +717,7 @@ function splitCitationMarkers(text) {
 
 function renderCitationChip(citationId) {
   const safeCitation = escapeHtml(citationId);
-  return `<button class="qa-citation-chip" type="button" data-citation-target="${safeCitation}" aria-label="Show source ${safeCitation}">${safeCitation}</button>`;
+  return `<button class="qa-citation-chip" type="button" data-citation-target="${safeCitation}" aria-label="${t("Show source {citation}", { citation: safeCitation })}">${safeCitation}</button>`;
 }
 
 function userFacingReason(reason) {
@@ -797,11 +797,14 @@ function renderSourceItem(item) {
   const canExpand = text.length > summary.length;
   return `
     <article id="qa-source-${safeCitation}" class="qa-source-item" data-citation-id="${safeCitation}">
-      <div class="evidence-head">
+      <div class="qa-source-card-head">
         <span class="badge">${safeCitation}</span>
-        <span class="muted">${escapeHtml(source)}</span>
+        <div>
+          <strong>${escapeHtml(source || t("Manual source"))}</strong>
+          <small>${t("Cited manual passage")}</small>
+        </div>
       </div>
-      ${section ? `<p class="qa-source-section">${escapeHtml(section)}</p>` : ""}
+      ${section ? `<p class="qa-source-section"><span>${t("Section")}</span>${escapeHtml(section)}</p>` : ""}
       <p class="qa-source-summary">${escapeHtml(summary)}</p>
       ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>${t("Show more")}</button>` : ""}
     </article>
@@ -844,8 +847,11 @@ function focusSource(citationId) {
   const safeSelector = cssEscape(citationId);
   const source = el.sources.querySelector(`[data-citation-id="${safeSelector}"]`);
   if (!source) return;
-  el.sources.querySelectorAll(".qa-source-item.active").forEach((item) => item.classList.remove("active"));
-  source.classList.add("active");
+  el.sources.querySelectorAll(".qa-source-item.active, .qa-source-item.pulse").forEach((item) => {
+    item.classList.remove("active", "pulse");
+  });
+  source.classList.add("active", "pulse");
+  window.setTimeout(() => source.classList.remove("pulse"), 1400);
   source.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
