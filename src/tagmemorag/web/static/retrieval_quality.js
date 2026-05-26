@@ -368,6 +368,7 @@ function renderRefList(id, cards, emptyText) {
 function renderPromotionSummary(result) {
   const cases = Array.isArray(result?.cases) ? result.cases : [];
   const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+  const summary = result?.summary || {};
   const node = $("quality-promotion-summary");
   if (!cases.length && !skipped.length) {
     node.className = "quality-promotion-summary empty-state";
@@ -375,6 +376,14 @@ function renderPromotionSummary(result) {
     return;
   }
   node.className = "quality-promotion-summary";
+  const summaryCard = `
+    <article class="quality-promotion-card summary">
+      <span>${t("Eval draft")}</span>
+      <strong>${escapeHtml(summary.output_path || result?.output_path || "")}</strong>
+      <small>${escapeHtml(summary.ready_count ?? cases.length)} ${t("ready")} / ${escapeHtml(summary.skipped_count ?? skipped.length)} ${t("skipped")}</small>
+      ${summary.next_command ? `<code>${escapeHtml(summary.next_command)}</code>` : ""}
+    </article>
+  `;
   const caseCards = cases.map((item) => `
     <article class="quality-promotion-card ready">
       <span>${t("Ready")}</span>
@@ -391,7 +400,7 @@ function renderPromotionSummary(result) {
       <small>${escapeHtml(item.next_action || "")}</small>
     </article>
   `);
-  node.innerHTML = [...caseCards, ...skippedCards].join("");
+  node.innerHTML = [summaryCard, ...caseCards, ...skippedCards].join("");
 }
 
 function skipReasonLabel(reason) {

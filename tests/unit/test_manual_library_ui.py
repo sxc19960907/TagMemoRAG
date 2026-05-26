@@ -164,6 +164,8 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderRefList" in js.text
     assert "renderPromotionSummary" in js.text
     assert "skipReasonLabel" in js.text
+    assert "summary.output_path" in js.text
+    assert "summary.next_command" in js.text
     assert "quality-promotion-summary" in js.text
     assert "setExpectedEditor" in js.text
     assert "expectedFromEditor" in js.text

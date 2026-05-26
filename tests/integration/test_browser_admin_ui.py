@@ -457,10 +457,18 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     page.locator("#quality-status").get_by_text("Review saved.").wait_for(timeout=10000)
     assert "同时按住清洗键和热水键三秒" in page.locator("#quality-expected-evidence").inner_text()
     page.locator("#quality-preview").click()
-    page.locator("#quality-promotion-summary").get_by_text("READY").wait_for(timeout=10000)
+    page.locator("#quality-status").get_by_text("Previewed 1 eval cases.").wait_for(timeout=10000)
     ready_text = page.locator("#quality-promotion-summary").inner_text()
     assert "feedback-" in ready_text
     assert "服务模式怎么进入？" in ready_text
+    assert "tagmemorag eval run --suite" in ready_text
+    assert "feedback-" in page.locator("#quality-promotion-preview").inner_text()
+    page.locator("#quality-export").click()
+    page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
+    exported_text = page.locator("#quality-promotion-summary").inner_text()
+    assert "tagmemorag eval run --suite" in exported_text
+    page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
+    assert "promoted" in page.locator("#quality-feedback-rows").inner_text()
 
 
 def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) -> None:

@@ -6,6 +6,7 @@ import pytest
 
 from tagmemorag.config import Settings, StorageConfig
 from tagmemorag.errors import ServiceError
+from tagmemorag.eval.dataset import load_eval_suite
 from tagmemorag.retrieval_feedback import (
     create_feedback,
     export_eval_promotion,
@@ -170,8 +171,17 @@ def test_export_eval_promotion_requires_explicit_existing_file_mode_and_marks_pr
 
     preview = export_eval_promotion("default", [feedback.feedback_id], cfg, output_path=str(output))
     assert preview.cases
+    exported = preview.to_dict()
+    assert exported["summary"]["ready_count"] == 1
+    assert exported["summary"]["skipped_count"] == 0
+    assert exported["summary"]["output_path"] == str(output)
+    assert exported["summary"]["next_command"] == f"tagmemorag eval run --suite {output}"
     rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
     assert rows[0]["id"] == "feedback-fb-1"
+    cases = load_eval_suite(output)
+    assert cases[0].id == "feedback-fb-1"
+    assert cases[0].query == "E05 蒸汽异常怎么处理"
+    assert cases[0].relevant[0].source_file == "coffee.md"
     assert list_feedback("default", cfg, status="promoted")[0].feedback_id == "fb-1"
 
     with pytest.raises(ServiceError) as exists:

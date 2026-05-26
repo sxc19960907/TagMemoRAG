@@ -126,6 +126,12 @@ class EvalPromotionPreview:
             "cases": list(self.cases),
             "skipped": list(self.skipped),
             "output_path": self.output_path,
+            "summary": {
+                "ready_count": len(self.cases),
+                "skipped_count": len(self.skipped),
+                "output_path": self.output_path,
+                "next_command": f"tagmemorag eval run --suite {self.output_path}",
+            },
         }
 
 

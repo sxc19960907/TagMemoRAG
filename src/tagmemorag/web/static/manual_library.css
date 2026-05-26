@@ -1425,6 +1425,11 @@ dialog {
   background: #fff8ec;
 }
 
+.quality-promotion-card.summary {
+  border-color: #c9d7e8;
+  background: #f7fbff;
+}
+
 .quality-promotion-card span {
   color: var(--muted);
   font-size: 11px;
@@ -1440,6 +1445,17 @@ dialog {
 .quality-promotion-card small {
   color: var(--muted);
   line-height: 1.4;
+}
+
+.quality-promotion-card code {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 7px;
 }
 
 .query-cell {
