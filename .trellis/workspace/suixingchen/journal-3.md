@@ -81,6 +81,48 @@ Added a browser-first eval report viewer so operators can load a `tagmemorag eva
 - Continue with report-driven improvement guidance: turn failed eval cases into clear "why it failed / what to fix next" recommendations.
 
 
+## Session 125: Eval report improvement guidance
+
+**Date**: 2026-05-26
+**Task**: Eval report improvement guidance
+**Branch**: `master`
+
+### Summary
+
+Extended the browser eval report viewer with deterministic improvement guidance so failed cases explain likely failure modes and recommended next actions, instead of only showing raw metrics and evidence.
+
+### Main Changes
+
+- Added per-case `primary_issue` and `guidance` to the `/eval/report` UI summary contract.
+- Added top-level `guidance_counts` grouped by issue code.
+- Classified no expected match, partial recall, low rank, negative hits, threshold failures, weak matchers, and unclassified failures.
+- Rendered recommendation cards in the eval report page with bilingual UI strings.
+- Added unit and browser smoke coverage for the new guidance.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cdacfef` | Guide eval report improvements |
+| `d632246` | Record eval report guidance task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer -q -s`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue with workbench flow integration: make the report guidance easier to reach from the main RAG Workbench and Retrieval Quality review loop.
+
+
 ## Session 123: Eval run user guidance
 
 **Date**: 2026-05-26
