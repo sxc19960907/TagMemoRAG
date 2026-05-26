@@ -119,7 +119,14 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "text/html" in response.headers["content-type"]
     body = response.text
     assert "Retrieval Quality" in body
+    assert 'id="quality-summary-needs-review"' in body
+    assert 'id="quality-summary-helpful"' in body
+    assert 'id="quality-summary-not-helpful"' in body
+    assert 'id="quality-summary-promotable"' in body
     assert 'id="quality-feedback-rows"' in body
+    assert 'id="quality-review-guidance"' in body
+    assert 'id="quality-selected-evidence"' in body
+    assert 'id="quality-expected-evidence"' in body
     assert 'id="quality-promotion-preview"' in body
     assert 'id="quality-workbench"' in body
     assert 'href="/admin/rag-workbench?kb_name=ops"' in body
@@ -144,6 +151,13 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "/search/feedback" in js.text
     assert "/search/feedback/promote/preview" in js.text
     assert "quality-feedback-rows" in js.text
+    assert "renderSummary" in js.text
+    assert "quality-summary-needs-review" in js.text
+    assert "sourceLabel" in js.text
+    assert "reviewGuidance" in js.text
+    assert "renderRefList" in js.text
+    assert "selectedRefCards" in js.text
+    assert "expectedRefCards" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
     assert "function updateLinks()" in js.text

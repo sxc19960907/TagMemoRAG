@@ -1205,7 +1205,78 @@ main {
 }
 
 .quality-workspace {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  grid-template-columns: minmax(0, 1fr) minmax(390px, 500px);
+}
+
+.quality-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.quality-summary-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 12px;
+}
+
+.quality-summary-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.quality-summary-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.quality-source-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.quality-source-pill.qa {
+  background: #e6f4ee;
+  color: #176449;
+}
+
+.quality-source-pill.retrieve {
+  background: #eaf2ff;
+  color: #24558f;
+}
+
+.status-pill.good {
+  background: #e6f4ee;
+  color: #176449;
+}
+
+.status-pill.needs-review {
+  background: #fff1e6;
+  color: #8a4b15;
+}
+
+.status-pill.in-progress {
+  background: #eaf2ff;
+  color: #24558f;
+}
+
+.status-pill.neutral {
+  background: #eef2f7;
+  color: #475569;
 }
 
 .table-pane,
@@ -1275,6 +1346,52 @@ dialog {
   background: var(--surface-2);
   padding: 9px;
   white-space: pre-wrap;
+}
+
+.quality-guidance {
+  border: 1px solid #f0d8ab;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #6f4b11;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  padding: 10px 11px;
+}
+
+.quality-ref-list {
+  display: grid;
+  gap: 9px;
+}
+
+.quality-ref-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 10px;
+}
+
+.quality-ref-card strong {
+  display: block;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.quality-ref-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.quality-ref-card p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
 }
 
 .query-cell {

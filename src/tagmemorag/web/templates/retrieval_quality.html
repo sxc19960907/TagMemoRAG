@@ -64,6 +64,25 @@
           <label><span>Limit</span><input id="quality-filter-limit" type="number" min="1" max="500" value="50"></label>
         </section>
 
+        <section class="quality-summary-grid" aria-label="Feedback summary">
+          <article>
+            <span>Needs review</span>
+            <strong id="quality-summary-needs-review">0</strong>
+          </article>
+          <article>
+            <span>Helpful</span>
+            <strong id="quality-summary-helpful">0</strong>
+          </article>
+          <article>
+            <span>Not helpful</span>
+            <strong id="quality-summary-not-helpful">0</strong>
+          </article>
+          <article>
+            <span>Promotion ready</span>
+            <strong id="quality-summary-promotable">0</strong>
+          </article>
+        </section>
+
         <div class="workspace quality-workspace">
           <section class="table-pane" aria-label="Search feedback">
             <div class="pane-header">
@@ -78,11 +97,11 @@
                 <thead>
                   <tr>
                     <th></th>
+                    <th>Source</th>
                     <th>Created</th>
                     <th>Outcome</th>
                     <th>Status</th>
                     <th>Query</th>
-                    <th>Build</th>
                     <th>Refs</th>
                   </tr>
                 </thead>
@@ -100,7 +119,16 @@
               </div>
             </div>
             <section class="quality-detail-block">
+              <div id="quality-review-guidance" class="quality-guidance" hidden></div>
               <dl id="quality-detail-list"></dl>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Selected Evidence</h3>
+              <div id="quality-selected-evidence" class="quality-ref-list empty-state">Select feedback to inspect cited sources.</div>
+            </section>
+            <section class="quality-detail-block">
+              <h3>Expected Evidence</h3>
+              <div id="quality-expected-evidence" class="quality-ref-list empty-state">Add expected references before promoting difficult cases.</div>
             </section>
             <section class="quality-detail-block">
               <h3>Review</h3>

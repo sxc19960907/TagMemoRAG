@@ -67,9 +67,18 @@ async function loadFeedback() {
   const body = await requestJson(`/search/feedback?${params.toString()}`, { method: "GET" });
   state.rows = body.feedback || [];
   state.selectedId = state.rows.some((row) => row.feedback_id === state.selectedId) ? state.selectedId : null;
+  renderSummary();
   renderRows();
   renderDetail();
   setStatus(`Loaded ${state.rows.length} feedback records.`, "success");
+}
+
+function renderSummary() {
+  const rows = state.rows || [];
+  $("quality-summary-needs-review").textContent = String(rows.filter((row) => row.status === "new" && row.outcome !== "helpful").length);
+  $("quality-summary-helpful").textContent = String(rows.filter((row) => row.outcome === "helpful").length);
+  $("quality-summary-not-helpful").textContent = String(rows.filter((row) => row.outcome === "not_helpful").length);
+  $("quality-summary-promotable").textContent = String(rows.filter(isPromotionReady).length);
 }
 
 function renderRows() {
@@ -81,11 +90,11 @@ function renderRows() {
     if (row.feedback_id === state.selectedId) tr.classList.add("selected-row");
     tr.innerHTML = `
       <td><input type="checkbox" data-select-feedback="${escapeHtml(row.feedback_id)}"></td>
+      <td><span class="quality-source-pill ${escapeHtml(sourceKind(row))}">${escapeHtml(sourceLabel(row))}</span></td>
       <td>${escapeHtml((row.created_at || "").slice(0, 19))}</td>
-      <td><span class="status-pill">${escapeHtml(row.outcome)}</span></td>
-      <td><span class="status-pill">${escapeHtml(row.status)}</span></td>
+      <td><span class="status-pill ${escapeHtml(outcomeClass(row.outcome))}">${escapeHtml(outcomeLabel(row.outcome))}</span></td>
+      <td><span class="status-pill ${escapeHtml(statusClass(row.status))}">${escapeHtml(row.status)}</span></td>
       <td class="query-cell">${escapeHtml(row.query)}</td>
-      <td>${escapeHtml(row.build_id || "")}</td>
       <td>${escapeHtml(refSummary(row))}</td>
     `;
     tr.addEventListener("click", (event) => {
@@ -109,22 +118,35 @@ function renderDetail() {
   $("quality-export").disabled = !row;
   if (!row) {
     $("quality-detail-list").innerHTML = "";
+    $("quality-review-guidance").hidden = true;
+    $("quality-review-guidance").textContent = "";
+    $("quality-selected-evidence").className = "quality-ref-list empty-state";
+    $("quality-selected-evidence").textContent = t("Select feedback to inspect cited sources.");
+    $("quality-expected-evidence").className = "quality-ref-list empty-state";
+    $("quality-expected-evidence").textContent = t("Add expected references before promoting difficult cases.");
     $("quality-operator-note").value = "";
     $("quality-promotion-preview").textContent = "";
     return;
   }
   $("quality-review-status").value = row.status;
   $("quality-operator-note").value = row.operator_note || "";
+  renderGuidance(row);
   $("quality-detail-list").innerHTML = `
     <dt>${t("Query")}</dt><dd>${escapeHtml(row.query)}</dd>
-    <dt>${t("Outcome")}</dt><dd>${escapeHtml(row.outcome)}</dd>
+    <dt>${t("Source")}</dt><dd><span class="quality-source-pill ${escapeHtml(sourceKind(row))}">${escapeHtml(sourceLabel(row))}</span></dd>
+    <dt>${t("Outcome")}</dt><dd>${escapeHtml(outcomeLabel(row.outcome))}</dd>
+    <dt>${t("Status")}</dt><dd>${escapeHtml(row.status || "")}</dd>
     <dt>${t("Trace")}</dt><dd>${escapeHtml(row.trace_id || "")}</dd>
     <dt>${t("Search")}</dt><dd>${escapeHtml(row.search_id || "")}</dd>
+    <dt>${t("Retrieve")}</dt><dd>${escapeHtml(row.retrieve_id || "")}</dd>
+    <dt>${t("Plan")}</dt><dd>${escapeHtml(row.plan_id || "")}</dd>
     <dt>${t("Build")}</dt><dd>${escapeHtml(row.build_id || "")}</dd>
+    <dt>${t("Answerable")}</dt><dd>${escapeHtml(answerableLabel(row.answerable))}</dd>
+    <dt>${t("Failure")}</dt><dd>${escapeHtml(row.failure_reason || "")}</dd>
     <dt>${t("Note")}</dt><dd>${escapeHtml(row.note || "")}</dd>
-    <dt>${t("Selected")}</dt><dd><pre>${escapeHtml(JSON.stringify(row.selected_results || [], null, 2))}</pre></dd>
-    <dt>${t("Expected")}</dt><dd><pre>${escapeHtml(JSON.stringify(row.expected || [], null, 2))}</pre></dd>
   `;
+  renderRefList("quality-selected-evidence", selectedRefCards(row), t("No selected retrieval references were captured."));
+  renderRefList("quality-expected-evidence", expectedRefCards(row), t("No expected references yet. Add them before promoting this as a regression case."));
 }
 
 async function saveReview(status = $("quality-review-status").value) {
@@ -140,6 +162,7 @@ async function saveReview(status = $("quality-review-status").value) {
   });
   const index = state.rows.findIndex((item) => item.feedback_id === row.feedback_id);
   state.rows[index] = body.feedback;
+  renderSummary();
   renderRows();
   renderDetail();
   setStatus(t("Review saved."), "success");
@@ -178,6 +201,125 @@ function refSummary(row) {
   const expected = (row.expected || []).length;
   const selected = (row.selected_results || []).length;
   return `${selected} selected / ${expected} expected`;
+}
+
+function sourceKind(row) {
+  const note = String(row.note || "").toLowerCase();
+  if (note.startsWith("q&a feedback")) return "qa";
+  if (row.retrieve_id) return "retrieve";
+  return "search";
+}
+
+function sourceLabel(row) {
+  const kind = sourceKind(row);
+  if (kind === "qa") return "Q&A";
+  if (kind === "retrieve") return "Retrieve";
+  return "Search";
+}
+
+function outcomeLabel(outcome) {
+  if (outcome === "not_helpful") return "Not helpful";
+  if (outcome === "missing_result") return "Missing result";
+  if (outcome === "wrong_manual") return "Wrong manual";
+  if (outcome === "helpful") return "Helpful";
+  return outcome || "";
+}
+
+function outcomeClass(outcome) {
+  if (outcome === "helpful") return "good";
+  if (outcome === "not_helpful" || outcome === "missing_result" || outcome === "wrong_manual") return "needs-review";
+  return "neutral";
+}
+
+function statusClass(status) {
+  if (status === "promoted") return "good";
+  if (status === "dismissed") return "neutral";
+  if (status === "triaged") return "in-progress";
+  return "needs-review";
+}
+
+function answerableLabel(value) {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "";
+}
+
+function isPromotionReady(row) {
+  return row.status !== "dismissed" && ((row.expected || []).length > 0 || (row.outcome === "helpful" && (row.selected_results || []).length > 0));
+}
+
+function renderGuidance(row) {
+  const guidance = $("quality-review-guidance");
+  const text = reviewGuidance(row);
+  guidance.hidden = !text;
+  guidance.textContent = text;
+}
+
+function reviewGuidance(row) {
+  if (row.outcome === "helpful" && (row.selected_results || []).length > 0) {
+    return t("This helpful answer can be promoted as a positive regression sample.");
+  }
+  if (row.outcome === "not_helpful") {
+    return t("Review the cited evidence, then add expected evidence before promoting this negative case.");
+  }
+  if (row.outcome === "missing_result") {
+    return t("Capture the source that should have matched before exporting this case.");
+  }
+  if (row.outcome === "wrong_manual") {
+    return t("Check the selected manual and record the correct manual or section.");
+  }
+  return "";
+}
+
+function selectedRefCards(row) {
+  const evidenceIds = Array.isArray(row.selected_evidence_ids) ? row.selected_evidence_ids : [];
+  const contextIds = Array.isArray(row.selected_context_item_ids) ? row.selected_context_item_ids : [];
+  return (row.selected_results || []).map((ref, index) => ({
+    title: ref.source_file || ref.manual_id || `Selected ${index + 1}`,
+    meta: [
+      ref.header ? `Section: ${ref.header}` : "",
+      ref.rank ? `Rank: ${ref.rank}` : "",
+      ref.node_id !== null && ref.node_id !== undefined ? `Node: ${ref.node_id}` : "",
+      ref.manual_id ? `Manual: ${ref.manual_id}` : "",
+      ref.anchor_key ? `Anchor: ${ref.anchor_key}` : "",
+    ].filter(Boolean),
+    badges: [
+      evidenceIds[index] ? `Evidence ${evidenceIds[index]}` : "",
+      contextIds[index] ? `Context ${contextIds[index]}` : "",
+    ].filter(Boolean),
+  }));
+}
+
+function expectedRefCards(row) {
+  return (row.expected || []).map((ref, index) => ({
+    title: ref.source_file || ref.header || `Expected ${index + 1}`,
+    meta: [
+      ref.header ? `Section: ${ref.header}` : "",
+      ref.anchor_key ? `Anchor: ${ref.anchor_key}` : "",
+      Array.isArray(ref.text_contains) && ref.text_contains.length ? `Must contain: ${ref.text_contains.join(", ")}` : "",
+      ref.metadata && Object.keys(ref.metadata).length ? `Metadata: ${JSON.stringify(ref.metadata)}` : "",
+    ].filter(Boolean),
+    badges: ["Expected"],
+  }));
+}
+
+function renderRefList(id, cards, emptyText) {
+  const node = $(id);
+  if (!cards.length) {
+    node.className = "quality-ref-list empty-state";
+    node.textContent = emptyText;
+    return;
+  }
+  node.className = "quality-ref-list";
+  node.innerHTML = cards.map((card) => `
+    <article class="quality-ref-card">
+      <div>
+        <strong>${escapeHtml(card.title)}</strong>
+        ${card.meta.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
+      </div>
+      ${card.badges.length ? `<p>${card.badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`).join("")}</p>` : ""}
+    </article>
+  `).join("");
 }
 
 function escapeHtml(value) {

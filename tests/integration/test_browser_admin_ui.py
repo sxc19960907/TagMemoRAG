@@ -374,9 +374,13 @@ def _exercise_retrieval_quality(page, port: int) -> None:
     page.locator("#quality-status").wait_for()
     assert "Loaded 1 feedback records." in page.locator("#quality-status").inner_text()
     assert "1 records" in page.locator("#quality-count").inner_text()
+    assert page.locator("#quality-summary-needs-review").inner_text() == "1"
+    assert page.locator("#quality-summary-promotable").inner_text() == "1"
 
     page.get_by_text("washer filter blocked", exact=True).click()
     assert "fb-ui-1" in page.locator("#quality-detail-subtitle").inner_text()
+    assert "Capture the source that should have matched" in page.locator("#quality-review-guidance").inner_text()
+    assert "washer/ui-washer.md" in page.locator("#quality-expected-evidence").inner_text()
     page.locator("#quality-operator-note").fill("Reviewed by browser automation")
     page.locator("#quality-save-review").click()
     page.locator("#quality-status").get_by_text("Review saved.").wait_for()
@@ -427,12 +431,16 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     page.get_by_role("heading", name="Retrieval Quality").wait_for()
     page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
     assert "1 records" in page.locator("#quality-count").inner_text()
+    assert page.locator("#quality-summary-needs-review").inner_text() == "1"
+    assert page.locator("#quality-summary-not-helpful").inner_text() == "1"
     assert "服务模式怎么进入？" in page.locator("#quality-feedback-rows").inner_text()
-    assert "not_helpful" in page.locator("#quality-feedback-rows").inner_text()
+    assert "Not helpful" in page.locator("#quality-feedback-rows").inner_text()
     page.get_by_text("服务模式怎么进入？", exact=True).click()
     detail_text = page.locator("#quality-detail-list").inner_text()
     assert "Q&A feedback: not_helpful" in detail_text
-    assert "demo/demo-service-manual.md" in detail_text
+    assert "Q&A" in detail_text
+    assert "demo/demo-service-manual.md" in page.locator("#quality-selected-evidence").inner_text()
+    assert "Review the cited evidence" in page.locator("#quality-review-guidance").inner_text()
 
 
 def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) -> None:
