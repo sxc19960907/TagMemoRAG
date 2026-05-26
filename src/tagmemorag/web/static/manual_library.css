@@ -176,6 +176,145 @@ textarea {
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
 }
 
+.people-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 430px);
+}
+
+.people-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.people-stat {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 12px;
+}
+
+.people-stat span,
+.people-stat small,
+.people-table small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.people-stat strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.people-table {
+  min-width: 980px;
+}
+
+.people-table td:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.people-table tr[data-key-id] {
+  cursor: pointer;
+}
+
+.people-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.people-detail pre {
+  margin: 0;
+}
+
+.people-generate-form {
+  display: grid;
+  gap: 10px;
+}
+
+.people-generate-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(130px, 1fr);
+  gap: 8px;
+}
+
+.people-generation-result {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #efcf8f;
+  border-radius: 6px;
+  background: #fffaf0;
+  padding: 10px;
+}
+
+.people-generation-result[hidden] {
+  display: none;
+}
+
+.people-result-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.people-generation-result textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.people-lifecycle {
+  display: grid;
+  gap: 10px;
+}
+
+.people-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.people-lifecycle-block {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fbfd;
+  padding: 10px;
+}
+
+.people-lifecycle-block p,
+.people-rotate-plan {
+  margin: 0;
+}
+
+.people-lifecycle textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.people-rotate-plan {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.people-rotate-plan code {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 1px 4px;
+}
+
 .qa-shell {
   min-height: 100vh;
   background: #eef2f6;
@@ -914,6 +1053,7 @@ main {
 .table-pane,
 .detail-pane,
 dialog {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -1338,6 +1478,10 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
+  .people-summary {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
   .top-actions {
     justify-content: flex-start;
   }
@@ -1351,6 +1495,8 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .field-grid,
   .kb-form,
+  .people-generate-row,
+  .people-summary,
   .qa-composer {
     grid-template-columns: 1fr;
   }

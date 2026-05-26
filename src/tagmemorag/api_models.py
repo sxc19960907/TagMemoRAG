@@ -20,6 +20,15 @@ class GhostTagSpec(BaseModel):
     is_core: bool = False
 
 
+class AccessKeyGenerateRequest(BaseModel):
+    id: str = Field(..., min_length=1, max_length=128)
+    label: str = Field(default="", max_length=256)
+    scopes: list[str] = Field(default_factory=lambda: ["search"])
+    kb_allowlist: list[str] = Field(default_factory=lambda: ["*"])
+    rate_limit_per_minute: int | None = Field(default=60, ge=1)
+    prefix: str = Field(default="tmr_live_", min_length=1, max_length=64)
+
+
 class SearchRequest(BaseModel):
     question: str
     top_k: int | None = None

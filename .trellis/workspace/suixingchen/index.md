@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 111
-- **Last Active**: 2026-05-25
+- **Total Sessions**: 120
+- **Last Active**: 2026-05-26
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~637 | Active |
+| `journal-3.md` | ~934 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,15 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 120 | 2026-05-26 | Pre-merge release closure | `96ab4c7` | `codex/admin-people-management-ui` |
+| 119 | 2026-05-26 | Browser RAG quick start guide | `718d5aa` | `codex/admin-people-management-ui` |
+| 118 | 2026-05-26 | Browser RAG experience acceptance | `cbd6b34` | `codex/admin-people-management-ui` |
+| 117 | 2026-05-26 | Workbench QA navigation | `c2a4084` | `codex/admin-people-management-ui` |
+| 116 | 2026-05-26 | Unify admin navigation | `cc6dc1b` | `codex/admin-people-management-ui` |
+| 115 | 2026-05-26 | Shared admin API token | `8b7fa41` | `codex/admin-people-management-ui` |
+| 114 | 2026-05-26 | Access key lifecycle guidance | `4e295fd` | `codex/admin-people-management-ui` |
+| 113 | 2026-05-25 | Browser access key generation | `43287ef` | `codex/admin-people-management-ui` |
+| 112 | 2026-05-25 | People access admin UI | `50b03bc` | `codex/admin-people-management-ui` |
 | 111 | 2026-05-25 | Route root to RAG workbench | `f3ee56b` | `codex/rag-workbench-root-entrypoint` |
 | 110 | 2026-05-25 | Fix PR quality CI failures | `a89a71b` | `codex/agent-loop-driver` |
 | 109 | 2026-05-25 | Manual Library QA navigation | `8979f8a` | `codex/agent-loop-driver` |

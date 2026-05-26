@@ -1,3 +1,5 @@
+import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
+
 const configEl = document.getElementById("rag-workbench-config");
 const config = configEl ? JSON.parse(configEl.textContent || "{}") : {};
 
@@ -27,13 +29,13 @@ const el = {
   results: document.getElementById("workbench-results"),
   manualLibrary: document.getElementById("workbench-manual-library"),
   retrievalQuality: document.getElementById("workbench-retrieval-quality"),
+  people: document.getElementById("workbench-people"),
+  qa: document.getElementById("workbench-qa"),
 };
 
 function headers() {
   const out = { "Content-Type": "application/json" };
-  const token = el.token.value.trim();
-  if (token) out.Authorization = `Bearer ${token}`;
-  return out;
+  return { ...out, ...authHeadersFromToken(el.token.value) };
 }
 
 function setStatus(message, kind = "") {
@@ -54,6 +56,8 @@ function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
+  el.people.href = `/admin/people?kb_name=${kb}`;
+  el.qa.href = `/qa?kb_name=${kb}`;
 }
 
 async function requestAnswer(event) {
@@ -236,4 +240,5 @@ el.kbForm.addEventListener("submit", (event) => {
 });
 
 el.questionForm.addEventListener("submit", requestAnswer);
+bindSharedApiToken(el.token);
 updateLinks();

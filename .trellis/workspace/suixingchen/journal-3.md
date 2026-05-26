@@ -635,3 +635,300 @@ Made the browser root route redirect to the RAG Workbench so users can open the 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 112: People access admin UI
+
+**Date**: 2026-05-25
+**Task**: People access admin UI
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a browser People & Access admin page backed by safe API-key summaries, linked it from RAG Workbench, verified browser layout, and covered shell/static/auth payload behavior with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `50b03bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 113: Browser access key generation
+
+**Date**: 2026-05-25
+**Task**: Browser access key generation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added one-time API key generation to People & Access using a shared auth keygen helper, protected the API with admin scope, verified browser form flow, and covered endpoint/helper/UI behavior with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `43287ef` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 114: Access key lifecycle guidance
+
+**Date**: 2026-05-26
+**Task**: Access key lifecycle guidance
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added People & Access lifecycle guidance for config-backed keys: revoke snippets, rotation plan, and template-prefill action, then verified with focused tests and browser smoke checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e295fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 115: Shared admin API token
+
+**Date**: 2026-05-26
+**Task**: Shared admin API token
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a shared sessionStorage API-token helper and wired Manual Library, RAG Workbench, People & Access, Retrieval Quality, and QA so browser users paste the admin token once per session.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8b7fa41` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 116: Unify admin navigation
+
+**Date**: 2026-05-26
+**Task**: Unify admin navigation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Unified cross-page navigation for Manual Library, Retrieval Quality, and People & Access, preserving kb_name across admin browser pages; verified focused UI tests and JS syntax checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc6dc1b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 117: Workbench QA navigation
+
+**Date**: 2026-05-26
+**Task**: Workbench QA navigation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added an Ask Q&A link to RAG Workbench and kept it synchronized with the active kb_name so the root browser workflow can jump directly into the user-facing QA page.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2a4084` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 118: Browser RAG experience acceptance
+
+**Date**: 2026-05-26
+**Task**: Browser RAG experience acceptance
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Ran the real browser RAG acceptance path, including upload, rebuild, UI navigation to QA, answer, citations, failure states, insufficient evidence, and follow-up context. All opt-in browser UI integration checks passed without requiring production code changes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cbd6b34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 119: Browser RAG quick start guide
+
+**Date**: 2026-05-26
+**Task**: Browser RAG quick start guide
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Added a concise browser-first local RAG quick start that uses the offline hashing/noop demo, covers seed, serve, Manual Library, upload/rebuild, and QA, and linked it from README.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `718d5aa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 120: Pre-merge release closure
+
+**Date**: 2026-05-26
+**Task**: Pre-merge release closure
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Completed a full pre-merge closure pass for the browser-first RAG branch: CI-equivalent tests, hashing eval gate, quick-start demo, full opt-in browser UI suite, static JS checks, diff checks, and retained closure report.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96ab4c7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

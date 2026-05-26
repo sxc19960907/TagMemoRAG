@@ -99,10 +99,12 @@ That command uploads the demo service manual into the managed library, performs 
 To try the same state through the browser:
 
 ```bash
-python -m tagmemorag serve --config examples/config/qa-demo.yaml
+uv run python -m tagmemorag serve --config examples/config/qa-demo.yaml
 ```
 
 Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with two chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `服务模式怎么进入？`, and confirm the answer mentions holding the clean and hot-water buttons for three seconds with `demo-service-manual.md` in the source list.
+
+For the shortest browser-first walkthrough, including upload, rebuild, navigation, and QA, see [`docs/browser-rag-quick-start.md`](docs/browser-rag-quick-start.md).
 
 Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 

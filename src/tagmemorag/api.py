@@ -19,9 +19,11 @@ from .anchor import AnchorSystem
 from .auth.base import ApiKey
 from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
+from .auth.keygen import generate_api_key_material
 from .cache.lru_ttl import LRUTTLCache
 from . import api_admin, api_feedback, api_manual_routes, api_search
 from .api_models import (
+    AccessKeyGenerateRequest,
     AgenticRequestOverrides,
     AnchorRequest,
     AnswerRequest,
@@ -204,6 +206,19 @@ def rag_workbench_admin(request: Request, kb_name: str = "default"):
     )
 
 
+@app.get("/admin/people")
+def people_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "people_admin.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
 @app.get("/qa")
 def qa_page(request: Request, kb_name: str = "default"):
     return templates.TemplateResponse(
@@ -214,6 +229,69 @@ def qa_page(request: Request, kb_name: str = "default"):
             "api_base_path": "",
             "auth_enabled": settings.auth.enabled,
         },
+    )
+
+
+def _safe_access_key(api_key: ApiKey) -> dict[str, object]:
+    scopes = sorted(api_key.scopes)
+    revoked = bool(api_key.revoked)
+    return {
+        "id": api_key.id,
+        "label": api_key.label,
+        "scopes": scopes,
+        "kb_allowlist": list(api_key.kb_allowlist),
+        "rate_limit_per_minute": api_key.rate_limit_per_minute,
+        "created_at": api_key.created_at,
+        "last_used_at": api_key.last_used_at,
+        "revoked": revoked,
+        "status": "revoked" if revoked else "active",
+        "is_admin": "admin" in api_key.scopes,
+    }
+
+
+def _people_access_summary() -> dict[str, object]:
+    store = app_state.auth_store
+    keys = [_safe_access_key(api_key) for api_key in store.list_keys()] if store is not None else []
+    active_keys = sum(1 for item in keys if item["status"] == "active")
+    revoked_keys = sum(1 for item in keys if item["status"] == "revoked")
+    admin_keys = sum(1 for item in keys if item["is_admin"] is True)
+    return {
+        "schema_version": "people_access.v1",
+        "auth_enabled": settings.auth.enabled,
+        "backend": settings.auth.backend,
+        "global_max_rate_limit_per_minute": settings.auth.global_max_rate_limit_per_minute,
+        "public_paths": list(settings.auth.public_paths),
+        "keys": keys,
+        "summary": {
+            "total_keys": len(keys),
+            "active_keys": active_keys,
+            "revoked_keys": revoked_keys,
+            "admin_keys": admin_keys,
+        },
+    }
+
+
+@app.get("/admin/people/access-summary")
+def get_people_access_summary(
+    _: ApiKey = Depends(require_scope("admin")),
+    __: None = Depends(rate_limit_dep),
+):
+    return _people_access_summary()
+
+
+@app.post("/admin/people/access-keys/generate")
+def generate_people_access_key(
+    request: AccessKeyGenerateRequest,
+    _: ApiKey = Depends(require_scope("admin")),
+    __: None = Depends(rate_limit_dep),
+):
+    return generate_api_key_material(
+        key_id=request.id,
+        label=request.label,
+        scopes=request.scopes,
+        kb_allowlist=request.kb_allowlist,
+        rate_limit_per_minute=request.rate_limit_per_minute,
+        prefix=request.prefix,
     )
 
 
