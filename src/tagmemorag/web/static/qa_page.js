@@ -283,6 +283,9 @@ function addConversationTurn(question) {
     body: null,
     errorMessage: "",
     feedbackKind: "",
+    feedbackId: "",
+    feedbackStatus: "",
+    feedbackPending: false,
     usedContext: false,
     contextSummary: [],
   };
@@ -409,6 +412,9 @@ function normalizeSavedTurn(rawTurn) {
     body: rawTurn.body ? sanitizeAnswerBody(rawTurn.body) : null,
     errorMessage: status === "error" ? String(rawTurn.errorMessage || "This answer was interrupted before reload.").slice(0, 300) : "",
     feedbackKind: rawTurn.feedbackKind === "helpful" || rawTurn.feedbackKind === "not-helpful" ? rawTurn.feedbackKind : "",
+    feedbackId: String(rawTurn.feedbackId || "").slice(0, 120),
+    feedbackStatus: rawTurn.feedbackStatus === "saved" || rawTurn.feedbackStatus === "failed" ? rawTurn.feedbackStatus : "",
+    feedbackPending: false,
     usedContext: Boolean(rawTurn.usedContext),
     contextSummary: Array.isArray(rawTurn.contextSummary) ? rawTurn.contextSummary.slice(0, 2) : [],
   };
@@ -439,6 +445,8 @@ function sanitizeTurnForStorage(turn) {
     body: turn.body ? sanitizeAnswerBody(turn.body) : null,
     errorMessage: String(turn.errorMessage || "").slice(0, 300),
     feedbackKind: turn.feedbackKind === "helpful" || turn.feedbackKind === "not-helpful" ? turn.feedbackKind : "",
+    feedbackId: String(turn.feedbackId || "").slice(0, 120),
+    feedbackStatus: turn.feedbackStatus === "saved" || turn.feedbackStatus === "failed" ? turn.feedbackStatus : "",
     usedContext: Boolean(turn.usedContext),
     contextSummary: Array.isArray(turn.contextSummary) ? turn.contextSummary.slice(0, 2) : [],
   };
@@ -450,6 +458,10 @@ function sanitizeAnswerBody(body) {
   const route = body?.route || {};
   return {
     schema_version: body?.schema_version || "qa_answer.v1",
+    build_id: body?.build_id || "",
+    kb_name: body?.kb_name || "",
+    trace_id: body?.trace_id || "",
+    plan_id: body?.plan_id || "",
     question: body?.question || "",
     route: sanitizeRoute(route),
     answer: {
@@ -462,7 +474,15 @@ function sanitizeAnswerBody(body) {
       warnings: Array.isArray(answer.warnings) ? answer.warnings.slice(0, 5) : [],
     },
     retrieve: {
+      build_id: retrieve.build_id || "",
+      kb_name: retrieve.kb_name || "",
+      trace_id: retrieve.trace_id || "",
+      search_id: retrieve.search_id || "",
+      retrieve_id: retrieve.retrieve_id || "",
+      plan_id: retrieve.plan_id || "",
+      results: Array.isArray(retrieve.results) ? retrieve.results.slice(0, 8).map(sanitizeResult) : [],
       evidence: Array.isArray(retrieve.evidence) ? retrieve.evidence.slice(0, 8).map(sanitizeEvidence) : [],
+      context_pack: sanitizeContextPack(retrieve.context_pack),
     },
   };
 }
@@ -480,11 +500,34 @@ function sanitizeEvidence(item) {
   return {
     evidence_id: item?.evidence_id || "",
     citation_id: item?.citation_id || "",
+    context_item_id: item?.context_item_id || "",
+    node_id: typeof item?.node_id === "number" ? item.node_id : null,
     text: String(item?.text || item?.content || "").slice(0, 1800),
     source: item?.source || item?.source_file || "",
+    source_file: item?.source_file || item?.source || "",
     section_path: Array.isArray(item?.section_path) ? item.section_path.slice(0, 6) : [],
     confidence: typeof item?.confidence === "number" ? item.confidence : null,
     retrieval_reason: item?.retrieval_reason || "",
+  };
+}
+
+function sanitizeResult(item) {
+  return {
+    node_id: typeof item?.node_id === "number" ? item.node_id : null,
+    anchor_key: item?.anchor_key || "",
+    source_file: item?.source_file || "",
+    header: item?.header || "",
+    manual_id: item?.manual_id || item?.metadata?.manual_id || "",
+  };
+}
+
+function sanitizeContextPack(contextPack) {
+  const items = Array.isArray(contextPack?.items) ? contextPack.items : [];
+  return {
+    items: items.slice(0, 8).map((item) => ({
+      context_item_id: item?.context_item_id || "",
+      evidence_refs: Array.isArray(item?.evidence_refs) ? item.evidence_refs.slice(0, 8) : [],
+    })),
   };
 }
 
@@ -620,28 +663,60 @@ function buildFollowupQuestions(answerText, citations) {
 function renderFeedback() {
   if (!el.feedback) return;
   setHidden(el.feedback, false);
-  const feedbackKind = activeConversationTurn()?.feedbackKind || "";
+  const turn = activeConversationTurn();
+  const feedbackKind = turn?.feedbackKind || "";
   el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
     const selected = button.dataset.feedback === feedbackKind;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.disabled = Boolean(turn?.feedbackPending);
   });
   if (el.feedbackNote) {
-    el.feedbackNote.textContent = feedbackNoteForKind(feedbackKind);
+    el.feedbackNote.textContent = feedbackNoteForTurn(turn);
   }
 }
 
-function handleFeedback(kind) {
+async function handleFeedback(kind) {
   if (!el.feedback) return;
   const turn = activeConversationTurn();
-  if (turn) updateConversationTurn(turn.id, { feedbackKind: kind });
+  if (!turn || !turn.body) return;
+  if (turn.feedbackPending) return;
+  if (turn.feedbackId && turn.feedbackKind === kind && turn.feedbackStatus === "saved") {
+    renderFeedback();
+    return;
+  }
+  updateConversationTurn(turn.id, { feedbackKind: kind, feedbackPending: true, feedbackStatus: "" });
   el.feedback.querySelectorAll("[data-feedback]").forEach((button) => {
     const selected = button.dataset.feedback === kind;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-pressed", selected ? "true" : "false");
+    button.disabled = true;
   });
   if (el.feedbackNote) {
-    el.feedbackNote.textContent = feedbackNoteForKind(kind);
+    el.feedbackNote.textContent = t("Saving feedback...");
+  }
+  try {
+    const response = await fetch("/search/feedback", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(feedbackPayloadForTurn({ ...turn, feedbackKind: kind })),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || body.detail || `HTTP ${response.status}`);
+    }
+    updateConversationTurn(turn.id, {
+      feedbackId: body.feedback?.feedback_id || "",
+      feedbackPending: false,
+      feedbackStatus: "saved",
+    });
+  } catch (_error) {
+    updateConversationTurn(turn.id, {
+      feedbackPending: false,
+      feedbackStatus: "failed",
+    });
+  } finally {
+    renderFeedback();
   }
 }
 
@@ -649,10 +724,80 @@ function activeConversationTurn() {
   return state.turns.find((turn) => turn.id === state.activeTurnId);
 }
 
+function feedbackNoteForTurn(turn) {
+  if (!turn) return "";
+  if (turn.feedbackPending) return t("Saving feedback...");
+  if (turn.feedbackStatus === "saved") return t("Feedback sent to Retrieval Quality.");
+  if (turn.feedbackStatus === "failed") return t("Feedback could not be saved.");
+  return feedbackNoteForKind(turn.feedbackKind || "");
+}
+
 function feedbackNoteForKind(kind) {
   if (kind === "helpful") return t("Marked helpful for this answer.");
   if (kind === "not-helpful") return t("Marked for review in this page session.");
   return "";
+}
+
+function feedbackPayloadForTurn(turn) {
+  const body = turn.body || {};
+  const retrieve = body.retrieve || {};
+  const answer = body.answer || {};
+  const kind = String(turn.feedbackKind || "");
+  const outcome = kind === "not-helpful" ? "not_helpful" : "helpful";
+  return {
+    kb_name: body.kb_name || retrieve.kb_name || state.kbName || "default",
+    trace_id: body.trace_id || retrieve.trace_id || "",
+    search_id: retrieve.search_id || "",
+    retrieve_id: retrieve.retrieve_id || "",
+    build_id: body.build_id || retrieve.build_id || "",
+    query: turn.question || body.question || "",
+    outcome,
+    selected_results: selectedResultsForFeedback(retrieve),
+    selected_evidence_ids: selectedEvidenceIdsForFeedback(body),
+    selected_context_item_ids: selectedContextItemIdsForFeedback(retrieve),
+    answerable: String(answer.kind || "") === "answer",
+    failure_reason: String(answer.kind || "") === "answer" ? "" : String(answer.refusal_reason || answer.text || "").slice(0, 120),
+    note: `Q&A feedback: ${outcome}`,
+    plan_id: body.plan_id || retrieve.plan_id || null,
+  };
+}
+
+function selectedResultsForFeedback(retrieve) {
+  const results = Array.isArray(retrieve?.results) ? retrieve.results : [];
+  if (results.length > 0) {
+    return results.slice(0, 8).map((item, index) => ({
+      rank: index + 1,
+      node_id: typeof item.node_id === "number" ? item.node_id : null,
+      anchor_key: item.anchor_key || "",
+      source_file: item.source_file || "",
+      header: item.header || "",
+      manual_id: item.manual_id || item.metadata?.manual_id || "",
+    }));
+  }
+  const evidence = Array.isArray(retrieve?.evidence) ? retrieve.evidence : [];
+  return evidence.slice(0, 8).map((item, index) => ({
+    rank: index + 1,
+    node_id: typeof item.node_id === "number" ? item.node_id : null,
+    anchor_key: "",
+    source_file: item.source_file || item.source || "",
+    header: Array.isArray(item.section_path) ? item.section_path.at(-1) || "" : "",
+    manual_id: item.doc_id || "",
+  }));
+}
+
+function selectedEvidenceIdsForFeedback(body) {
+  const answerCitations = Array.isArray(body?.answer?.citations) ? body.answer.citations : [];
+  const evidence = Array.isArray(body?.retrieve?.evidence) ? body.retrieve.evidence : [];
+  const ids = [
+    ...answerCitations.map((item) => item.evidence_id || item.citation_id || item),
+    ...evidence.map((item) => item.evidence_id || item.citation_id || ""),
+  ].filter(Boolean);
+  return [...new Set(ids)].slice(0, 20);
+}
+
+function selectedContextItemIdsForFeedback(retrieve) {
+  const items = Array.isArray(retrieve?.context_pack?.items) ? retrieve.context_pack.items : [];
+  return [...new Set(items.map((item) => item.context_item_id).filter(Boolean))].slice(0, 20);
 }
 
 async function copyAnswer() {

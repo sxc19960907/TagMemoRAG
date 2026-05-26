@@ -482,6 +482,10 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderFollowups" in js.text
     assert "buildFollowupQuestions" in js.text
     assert "handleFeedback" in js.text
+    assert "/search/feedback" in js.text
+    assert "feedbackPayloadForTurn" in js.text
+    assert "selectedResultsForFeedback" in js.text
+    assert "Feedback sent to Retrieval Quality." in js.text
     assert "addConversationTurn" in js.text
     assert "updateConversationTurn" in js.text
     assert "restoreConversationTurn" in js.text
@@ -495,10 +499,9 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "data-citation-target" in js.text
     assert "data-citation-id" in js.text
     assert "scrollIntoView" in js.text
-    assert "kb_name:" not in js.text
     assert "top_k:" not in js.text
     assert "source_k:" not in js.text
     assert "qa-answer" in js.text
     assert "qa-kb-name" not in js.text
-    assert "plan_id" not in js.text
-    assert "build_id" not in js.text
+    assert "plan_id" in js.text
+    assert "build_id" in js.text

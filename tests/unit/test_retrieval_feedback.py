@@ -26,6 +26,7 @@ def _payload(**overrides):
         "search_id": "search-1",
         "retrieve_id": "retrieve-1",
         "build_id": "build-1",
+        "plan_id": "plan-1",
         "query": "E05 蒸汽异常怎么处理",
         "outcome": "missing_result",
         "selected_results": [{"rank": 1, "node_id": 2, "source_file": "coffee.md", "header": "蒸汽", "manual_id": "cm1"}],
@@ -59,8 +60,11 @@ def test_feedback_append_list_and_review_overlay(tmp_path):
     reviewed = review_feedback("default", "fb-1", cfg, status="triaged", operator_note="Good eval candidate.")
     assert reviewed.status == "triaged"
     assert reviewed.operator_note == "Good eval candidate."
+    assert reviewed.plan_id == "plan-1"
     assert list_feedback("default", cfg, status="new") == []
-    assert list_feedback("default", cfg, status="triaged")[0].operator_note == "Good eval candidate."
+    triaged = list_feedback("default", cfg, status="triaged")[0]
+    assert triaged.operator_note == "Good eval candidate."
+    assert triaged.plan_id == "plan-1"
 
 
 def test_feedback_validation_rejects_unsafe_and_oversized_payloads(tmp_path):

@@ -446,6 +446,7 @@ def _apply_overlay(feedback: SearchFeedback, overlay: Mapping[str, Any]) -> Sear
         note=feedback.note,
         status=status,  # type: ignore[arg-type]
         operator_note=operator_note,
+        plan_id=feedback.plan_id,
     )
 
 
