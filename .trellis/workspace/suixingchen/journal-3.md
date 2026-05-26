@@ -767,3 +767,36 @@ Added a shared sessionStorage API-token helper and wired Manual Library, RAG Wor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 116: Unify admin navigation
+
+**Date**: 2026-05-26
+**Task**: Unify admin navigation
+**Branch**: `codex/admin-people-management-ui`
+
+### Summary
+
+Unified cross-page navigation for Manual Library, Retrieval Quality, and People & Access, preserving kb_name across admin browser pages; verified focused UI tests and JS syntax checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cc6dc1b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
