@@ -38,6 +38,49 @@ Opened the next Trellis journal because journal-2.md was near the 2000-line thre
 - None - task complete
 
 
+## Session 124: Eval report browser experience
+
+**Date**: 2026-05-26
+**Task**: Eval report browser experience
+**Branch**: `master`
+
+### Summary
+
+Added a browser-first eval report viewer so operators can load a `tagmemorag eval run --output` JSON report, see pass/fail status, aggregate metrics, review-priority counts, failed cases, expected evidence, actual top results, and run context without reading raw JSON.
+
+### Main Changes
+
+- Added read-only admin endpoint `GET /eval/report?path=...` with structured errors for missing or malformed reports.
+- Added `/admin/eval-report` shell, static UI, shared styling, and Chinese/English UI strings.
+- Linked Retrieval Quality promotion summaries to the report viewer when a `report_path` is available.
+- Added unit and opt-in browser smoke coverage for the report viewer.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `19fad3c` | Add browser eval report viewer |
+| `c1a49b0` | Record eval report viewer task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/retrieval_quality.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/unit/test_retrieval_feedback.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer -q -s`
+- [OK] `git diff --check`
+- [OK] Manual in-app browser visual check of `/admin/eval-report`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue with report-driven improvement guidance: turn failed eval cases into clear "why it failed / what to fix next" recommendations.
+
+
 ## Session 123: Eval run user guidance
 
 **Date**: 2026-05-26
