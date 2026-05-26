@@ -124,6 +124,7 @@ function renderDetail() {
     $("quality-selected-evidence").textContent = t("Select feedback to inspect cited sources.");
     $("quality-expected-evidence").className = "quality-ref-list empty-state";
     $("quality-expected-evidence").textContent = t("Add expected references before promoting difficult cases.");
+    setExpectedEditor(null);
     $("quality-operator-note").value = "";
     $("quality-promotion-summary").className = "quality-promotion-summary empty-state";
     $("quality-promotion-summary").textContent = t("Preview promotion to see export readiness.");
@@ -149,6 +150,7 @@ function renderDetail() {
   `;
   renderRefList("quality-selected-evidence", selectedRefCards(row), t("No selected retrieval references were captured."));
   renderRefList("quality-expected-evidence", expectedRefCards(row), t("No expected references yet. Add them before promoting this as a regression case."));
+  setExpectedEditor(row.expected?.[0] || null);
 }
 
 async function saveReview(status = $("quality-review-status").value) {
@@ -160,6 +162,7 @@ async function saveReview(status = $("quality-review-status").value) {
       kb_name: currentKb(),
       status,
       operator_note: $("quality-operator-note").value,
+      expected: expectedFromEditor(),
     }),
   });
   const index = state.rows.findIndex((item) => item.feedback_id === row.feedback_id);
@@ -168,6 +171,43 @@ async function saveReview(status = $("quality-review-status").value) {
   renderRows();
   renderDetail();
   setStatus(t("Review saved."), "success");
+}
+
+function setExpectedEditor(ref) {
+  $("quality-expected-source").value = ref?.source_file || "";
+  $("quality-expected-header").value = ref?.header || "";
+  $("quality-expected-text").value = Array.isArray(ref?.text_contains) ? ref.text_contains.join(", ") : "";
+  $("quality-expected-manual").value = ref?.metadata?.manual_id || "";
+}
+
+function expectedFromEditor() {
+  const sourceFile = $("quality-expected-source").value.trim();
+  const header = $("quality-expected-header").value.trim();
+  const textContains = $("quality-expected-text").value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const manualId = $("quality-expected-manual").value.trim();
+  if (!sourceFile && !header && textContains.length === 0 && !manualId) return [];
+  return [{
+    source_file: sourceFile,
+    header,
+    text_contains: textContains,
+    metadata: manualId ? { manual_id: manualId } : {},
+  }];
+}
+
+function useSelectedAsExpected() {
+  const row = selectedRow();
+  if (!row) return;
+  const first = (row.selected_results || [])[0];
+  if (!first) return;
+  setExpectedEditor({
+    source_file: first.source_file || "",
+    header: first.header || "",
+    text_contains: [],
+    metadata: first.manual_id ? { manual_id: first.manual_id } : {},
+  });
 }
 
 async function promotion(commit) {
@@ -381,6 +421,8 @@ $("quality-dismiss").addEventListener("click", () => saveReview("dismissed").cat
 $("quality-preview").addEventListener("click", () => promotion(false).catch((error) => setStatus(error.message, "error")));
 $("quality-preview-selected").addEventListener("click", () => promotion(false).catch((error) => setStatus(error.message, "error")));
 $("quality-export").addEventListener("click", () => promotion(true).catch((error) => setStatus(error.message, "error")));
+$("quality-use-selected-expected").addEventListener("click", useSelectedAsExpected);
+$("quality-clear-expected").addEventListener("click", () => setExpectedEditor(null));
 
 bindSharedApiToken($("quality-api-token"));
 initI18n({ mount: ".top-actions" });

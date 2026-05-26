@@ -222,6 +222,7 @@ class FeedbackReviewRequest(BaseModel):
     kb_name: str = "default"
     status: str | None = None
     operator_note: str | None = Field(default=None, max_length=2000)
+    expected: list[dict[str, object]] | None = Field(default=None, max_length=20)
 
 
 class FeedbackPromoteRequest(BaseModel):

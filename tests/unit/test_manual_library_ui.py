@@ -127,6 +127,11 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="quality-review-guidance"' in body
     assert 'id="quality-selected-evidence"' in body
     assert 'id="quality-expected-evidence"' in body
+    assert 'id="quality-use-selected-expected"' in body
+    assert 'id="quality-expected-source"' in body
+    assert 'id="quality-expected-header"' in body
+    assert 'id="quality-expected-text"' in body
+    assert 'id="quality-expected-manual"' in body
     assert 'id="quality-promotion-summary"' in body
     assert 'id="quality-promotion-preview"' in body
     assert 'id="quality-workbench"' in body
@@ -160,6 +165,9 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderPromotionSummary" in js.text
     assert "skipReasonLabel" in js.text
     assert "quality-promotion-summary" in js.text
+    assert "setExpectedEditor" in js.text
+    assert "expectedFromEditor" in js.text
+    assert "useSelectedAsExpected" in js.text
     assert "selectedRefCards" in js.text
     assert "expectedRefCards" in js.text
     assert "bindSharedApiToken" in js.text

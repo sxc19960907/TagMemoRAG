@@ -67,6 +67,41 @@ def test_feedback_append_list_and_review_overlay(tmp_path):
     assert triaged.plan_id == "plan-1"
 
 
+def test_review_overlay_can_add_expected_evidence_for_promotion(tmp_path):
+    cfg = _settings(tmp_path)
+    feedback = create_feedback(
+        "default",
+        _payload(feedback_id="fb-1", expected=[], selected_results=[], outcome="not_helpful"),
+        cfg,
+    )
+    before = preview_eval_promotion("default", [feedback.feedback_id], cfg)
+    assert before.cases == ()
+    assert before.skipped[0]["reason"] == "no_usable_relevant_matcher"
+
+    reviewed = review_feedback(
+        "default",
+        feedback.feedback_id,
+        cfg,
+        status="triaged",
+        expected=[{"source_file": "coffee.md", "header": "服务模式", "text_contains": ["三秒"], "metadata": {"manual_id": "cm1"}}],
+    )
+
+    assert reviewed.expected[0].header == "服务模式"
+    assert reviewed.status == "triaged"
+    rows = list_feedback("default", cfg, status="triaged")
+    assert rows[0].expected[0].text_contains == ("三秒",)
+    after = preview_eval_promotion("default", [feedback.feedback_id], cfg)
+    assert after.skipped == ()
+    assert after.cases[0]["relevant"] == [
+        {
+            "source_file": "coffee.md",
+            "header": "服务模式",
+            "text_contains": ["三秒"],
+            "metadata": {"manual_id": "cm1"},
+        }
+    ]
+
+
 def test_feedback_validation_rejects_unsafe_and_oversized_payloads(tmp_path):
     cfg = _settings(tmp_path)
 

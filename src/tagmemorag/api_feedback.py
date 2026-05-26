@@ -56,6 +56,7 @@ def review_search_feedback(
         settings,
         status=request.status,
         operator_note=request.operator_note,
+        expected=request.expected,
     )
     structlog.get_logger().info(
         "search_feedback_reviewed",

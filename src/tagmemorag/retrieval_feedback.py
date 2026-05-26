@@ -177,6 +177,7 @@ def review_feedback(
     *,
     status: str | None = None,
     operator_note: str | None = None,
+    expected: list[dict[str, object]] | None = None,
 ) -> SearchFeedback:
     feedback_id = _bounded_text(feedback_id, "feedback_id", 120)
     if status is not None and status not in STATUSES:
@@ -191,6 +192,8 @@ def review_feedback(
         current["status"] = status
     if note is not None:
         current["operator_note"] = note
+    if expected is not None:
+        current["expected"] = [ref.to_dict() for ref in _parse_expected_refs(expected)]
     current["updated_at"] = _now_iso()
     overlays[feedback_id] = current
     _write_review_overlay(kb_name, settings, overlays)
@@ -460,6 +463,9 @@ def _write_review_overlay(kb_name: str, settings: Settings, overlays: dict[str, 
 def _apply_overlay(feedback: SearchFeedback, overlay: Mapping[str, Any]) -> SearchFeedback:
     status = str(overlay.get("status") or feedback.status)
     operator_note = str(overlay.get("operator_note") or feedback.operator_note)
+    expected = feedback.expected
+    if "expected" in overlay:
+        expected = _parse_expected_refs(overlay.get("expected", []))
     if status not in STATUSES:
         status = feedback.status
     return SearchFeedback(
@@ -477,7 +483,7 @@ def _apply_overlay(feedback: SearchFeedback, overlay: Mapping[str, Any]) -> Sear
         selected_context_item_ids=feedback.selected_context_item_ids,
         answerable=feedback.answerable,
         failure_reason=feedback.failure_reason,
-        expected=feedback.expected,
+        expected=expected,
         note=feedback.note,
         status=status,  # type: ignore[arg-type]
         operator_note=operator_note,

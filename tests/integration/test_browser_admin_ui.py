@@ -450,6 +450,18 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "No usable relevant matcher" in summary_text
     assert "Add expected evidence" in summary_text
 
+    page.locator("#quality-use-selected-expected").click()
+    assert "demo/demo-service-manual.md" in page.locator("#quality-expected-source").input_value()
+    page.locator("#quality-expected-text").fill("同时按住清洗键和热水键三秒")
+    page.locator("#quality-save-review").click()
+    page.locator("#quality-status").get_by_text("Review saved.").wait_for(timeout=10000)
+    assert "同时按住清洗键和热水键三秒" in page.locator("#quality-expected-evidence").inner_text()
+    page.locator("#quality-preview").click()
+    page.locator("#quality-promotion-summary").get_by_text("READY").wait_for(timeout=10000)
+    ready_text = page.locator("#quality-promotion-summary").inner_text()
+    assert "feedback-" in ready_text
+    assert "服务模式怎么进入？" in ready_text
+
 
 def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) -> None:
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
