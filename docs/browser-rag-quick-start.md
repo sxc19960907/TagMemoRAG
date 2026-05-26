@@ -57,6 +57,8 @@ The root page opens RAG Workbench for `kb_name=default`. From there you can use 
 
 The demo config has auth disabled, so the API token field can stay empty.
 
+Use the **English / 中文** selector to switch the browser UI language. The selection is remembered across the RAG Workbench, Manual Library, Retrieval Quality, People & Access, and Q&A pages.
+
 ## 5. Confirm The Seeded Manual
 
 In Manual Library, confirm that `demo-service-manual` is visible, searchable, and clear of pending rebuild state. Then click **Ask Q&A**.
@@ -69,6 +71,8 @@ Ask:
 
 The answer should mention holding the clean and hot-water buttons for three seconds, and the source list should include `demo-service-manual.md`.
 
+The answer appears in a conversation layout. Click a `cit_###` citation chip in the answer to focus the matching source card. Source cards show the cited manual passage and section context when available.
+
 ## 6. Try Your Own Manual
 
 In Manual Library:
@@ -78,8 +82,10 @@ In Manual Library:
 3. Fill required metadata: `Manual ID`, `Title`, `Source file`, and `Category`.
 4. Keep **Trigger rebuild** checked.
 5. Submit the upload.
-6. Wait until the table shows the manual as searchable and rebuild state as clear.
-7. Click **Ask Q&A** and ask a question that the manual can answer.
+6. Watch the **Next step** panel.
+7. If it says **Manual uploaded, rebuild needed**, click **Rebuild now**.
+8. When it says **Manual is ready for Q&A**, click **Ask in Q&A**.
+9. Ask a question that the manual can answer.
 
 If the page says the KB is not ready, return to Manual Library and run **Rebuild**. If an answer says the evidence is insufficient, try a question that more directly matches the uploaded manual text.
 
