@@ -155,7 +155,9 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="workbench-manual-library"' in body
     assert 'id="workbench-retrieval-quality"' in body
     assert 'id="workbench-people"' in body
+    assert 'id="workbench-qa"' in body
     assert 'href="/admin/people?kb_name=ops"' in body
+    assert 'href="/qa?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/rag_workbench.js" in body
 
@@ -180,6 +182,7 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "workbench-answer" in js.text
     assert "workbench-evidence" in js.text
     assert "/admin/people" in js.text
+    assert "/qa?kb_name=" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
 

@@ -30,6 +30,7 @@ const el = {
   manualLibrary: document.getElementById("workbench-manual-library"),
   retrievalQuality: document.getElementById("workbench-retrieval-quality"),
   people: document.getElementById("workbench-people"),
+  qa: document.getElementById("workbench-qa"),
 };
 
 function headers() {
@@ -56,6 +57,7 @@ function updateLinks() {
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.people.href = `/admin/people?kb_name=${kb}`;
+  el.qa.href = `/qa?kb_name=${kb}`;
 }
 
 async function requestAnswer(event) {
