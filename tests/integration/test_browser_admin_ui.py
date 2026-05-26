@@ -439,6 +439,7 @@ def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) ->
     page.locator("#validate-upload").click()
     page.locator("#upload-messages .message.success").wait_for()
     page.locator("#upload-form button.primary").click()
+    page.locator("#library-next-step").get_by_text("Rebuilding search index").wait_for()
 
     row = page.locator("#manual-rows tr").filter(has_text="browser-upload-service-manual")
     row.wait_for()
@@ -460,6 +461,8 @@ def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) ->
     assert "1" in row_text or "2" in row_text
     assert "clear" in row_text
     assert "browser-upload" in row_text
+    page.locator("#library-next-step").get_by_text("Manual is ready for Q&A").wait_for()
+    assert "Ask in Q&A" in page.locator("#library-next-step").inner_text()
 
     page.locator("#manual-library-qa-link").click()
     page.get_by_role("heading", name="Manual Q&A").wait_for()

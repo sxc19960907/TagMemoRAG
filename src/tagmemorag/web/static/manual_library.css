@@ -1554,6 +1554,58 @@ dialog {
   margin: 10px;
 }
 
+.next-step-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #cfe0f2;
+  border-radius: 8px;
+  background: #f5f9ff;
+  box-shadow: 0 8px 22px rgb(22 38 55 / 0.05);
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+
+.next-step-panel[hidden] {
+  display: none;
+}
+
+.next-step-panel strong {
+  display: block;
+  font-size: 15px;
+  margin-top: 2px;
+}
+
+.next-step-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.next-step-panel.ready {
+  border-color: #b9d8c8;
+  background: #f4fbf7;
+}
+
+.next-step-panel.needsRebuild,
+.next-step-panel.rebuilding {
+  border-color: #e6d1a5;
+  background: #fffaf0;
+}
+
+.next-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.primary-link {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .tag-table-wrap {
   max-height: min(32vh, 330px);
   border-top: 1px solid var(--line);

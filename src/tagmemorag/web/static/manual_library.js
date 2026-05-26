@@ -43,6 +43,7 @@ const fields = [
 
 const el = {
   status: document.getElementById("status-strip"),
+  nextStep: document.getElementById("library-next-step"),
   kbForm: document.getElementById("kb-form"),
   kbName: document.getElementById("kb-name"),
   token: document.getElementById("api-token"),
@@ -178,6 +179,45 @@ function updateLinks() {
   el.retrievalQualityLink.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.peopleLink.href = `/admin/people?kb_name=${kb}`;
   el.qaLink.href = `/qa?kb_name=${kb}`;
+}
+
+function renderNextStep(kind = "", options = {}) {
+  if (!el.nextStep) return;
+  if (!kind) {
+    el.nextStep.hidden = true;
+    el.nextStep.innerHTML = "";
+    return;
+  }
+  const manualId = options.manualId || "";
+  const qaHref = `/qa?kb_name=${encodeURIComponent(state.kbName || "default")}`;
+  const content = {
+    rebuilding: {
+      title: t("Rebuilding search index"),
+      body: t("This manual is being indexed. You can ask questions after rebuild finishes."),
+      actions: `<span class="badge warn">${t("In progress")}</span>`,
+    },
+    needsRebuild: {
+      title: t("Manual uploaded, rebuild needed"),
+      body: t("Run rebuild before this manual becomes searchable in Q&A."),
+      actions: `<button type="button" data-next-step-action="rebuild" class="primary">${t("Rebuild now")}</button>`,
+    },
+    ready: {
+      title: t("Manual is ready for Q&A"),
+      body: manualId ? t("{manualId} is searchable now. Try asking a question from the user Q&A page.", { manualId }) : t("The library is searchable now. Try asking a question from the user Q&A page."),
+      actions: `<a class="button-link primary-link" href="${qaHref}">${t("Ask in Q&A")}</a>`,
+    },
+  }[kind];
+  if (!content) return;
+  el.nextStep.className = `next-step-panel ${kind}`;
+  el.nextStep.innerHTML = `
+    <div>
+      <span class="eyebrow">${t("Next step")}</span>
+      <strong>${content.title}</strong>
+      <p>${content.body}</p>
+    </div>
+    <div class="next-step-actions">${content.actions}</div>
+  `;
+  el.nextStep.hidden = false;
 }
 
 function selectedManual() {
@@ -1168,6 +1208,7 @@ el.uploadForm.addEventListener("submit", async (event) => {
     el.uploadDialog.close();
     el.uploadForm.reset();
     setStatus(body.rebuild_job ? "Manual uploaded and rebuild job queued." : body.rebuild_task ? "Manual uploaded and rebuild started." : "Manual uploaded. Rebuild is required before it is searchable.", "warn");
+    renderNextStep(body.rebuild_job || body.rebuild_task ? "rebuilding" : "needsRebuild", { manualId: metadata.manual_id });
     if (body.rebuild_task) pollRebuild(body.rebuild_task.task_id);
     if (body.rebuild_job) pollRebuildJob(body.rebuild_job.job_id);
     await loadManuals();
@@ -1185,6 +1226,7 @@ el.rebuild.addEventListener("click", async () => {
       headers: headers(),
       body: JSON.stringify({ kb_name: state.kbName, mode: el.rebuildMode.value }),
     });
+    renderNextStep("rebuilding");
     if (response.job_id) pollRebuildJob(response.job_id);
     else pollRebuild(response.task_id);
   } catch (error) {
@@ -1231,6 +1273,16 @@ el.queueRows.addEventListener("click", async (event) => {
   }
 });
 
+if (el.nextStep) {
+  el.nextStep.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-next-step-action]");
+    if (!button) return;
+    if (button.dataset.nextStepAction === "rebuild") {
+      el.rebuild.click();
+    }
+  });
+}
+
 async function pollRebuildJob(jobId) {
   state.rebuildTask = jobId;
   el.rebuild.disabled = true;
@@ -1245,9 +1297,16 @@ async function pollRebuildJob(jobId) {
       }
       el.rebuild.disabled = false;
       state.rebuildTask = null;
-      if (job.status === "succeeded") setStatus(`Rebuild job completed for ${job.kb_name || state.kbName}.`, "success");
-      else if (job.status === "cancelled") setStatus("Rebuild job cancelled. Dirty state remains pending.", "warn");
-      else setStatus(`Rebuild job failed: ${job.error?.message || JSON.stringify(job.error || job)}`, "error");
+      if (job.status === "succeeded") {
+        setStatus(`Rebuild job completed for ${job.kb_name || state.kbName}.`, "success");
+        renderNextStep("ready");
+      } else if (job.status === "cancelled") {
+        setStatus("Rebuild job cancelled. Dirty state remains pending.", "warn");
+        renderNextStep("needsRebuild");
+      } else {
+        setStatus(`Rebuild job failed: ${job.error?.message || JSON.stringify(job.error || job)}`, "error");
+        renderNextStep("needsRebuild");
+      }
       await loadManuals();
     } catch (error) {
       el.rebuild.disabled = false;
@@ -1274,8 +1333,10 @@ async function pollRebuild(taskId) {
       if (task.status === "done") {
         const mode = task.effective_mode ? ` (${task.effective_mode}${task.fallback_reason ? `, fallback: ${task.fallback_reason}` : ""})` : "";
         setStatus(`Rebuild completed for ${task.kb_name || state.kbName}${mode}.`, "success");
+        renderNextStep("ready");
       } else {
         setStatus(`Rebuild failed: ${task.error || JSON.stringify(task)}`, "error");
+        renderNextStep("needsRebuild");
       }
       await loadManuals();
       await loadDiagnostics();
