@@ -29,6 +29,9 @@
           <input id="api-token" type="password" autocomplete="off" placeholder="Bearer token">
         </label>
         <div class="top-actions">
+          <a id="manual-library-workbench" class="button-link" href="/admin/rag-workbench?kb_name={{ default_kb_name }}">RAG Workbench</a>
+          <a id="manual-library-retrieval-quality" class="button-link" href="/admin/retrieval-quality?kb_name={{ default_kb_name }}">Retrieval Quality</a>
+          <a id="manual-library-people" class="button-link" href="/admin/people?kb_name={{ default_kb_name }}">People & Access</a>
           <a id="manual-library-qa-link" class="button-link" href="/qa?kb_name={{ default_kb_name }}">Ask Q&A</a>
           <button id="open-bulk-import" type="button">Bulk Import</button>
           <button id="open-tag-governance" type="button">Tags</button>

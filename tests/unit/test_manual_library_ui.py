@@ -38,6 +38,12 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="verify-blobs"' in body
     assert 'id="queue-job-rows"' in body
     assert 'id="audit-rows"' in body
+    assert 'id="manual-library-workbench"' in body
+    assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="manual-library-retrieval-quality"' in body
+    assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="manual-library-people"' in body
+    assert 'href="/admin/people?kb_name=ops"' in body
     assert 'id="manual-library-qa-link"' in body
     assert 'href="/qa?kb_name=ops"' in body
     assert 'id="open-tag-governance"' in body
@@ -70,6 +76,11 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "acceptAllSuggestions" in js.text
     assert "pollRebuildJob" in js.text
     assert "bindSharedApiToken" in js.text
+    assert "function updateLinks()" in js.text
+    assert "/admin/rag-workbench" in js.text
+    assert "/admin/retrieval-quality" in js.text
+    assert "/admin/people" in js.text
+    assert "/qa?kb_name=" in js.text
 
 
 def test_admin_token_static_asset_is_served(tmp_path, fake_embedder):
@@ -96,6 +107,15 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "Retrieval Quality" in body
     assert 'id="quality-feedback-rows"' in body
     assert 'id="quality-promotion-preview"' in body
+    assert 'id="quality-workbench"' in body
+    assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="quality-manual-library"' in body
+    assert 'href="/admin/manual-library?kb_name=ops"' in body
+    assert 'id="quality-people"' in body
+    assert 'href="/admin/people?kb_name=ops"' in body
+    assert 'id="quality-qa"' in body
+    assert 'href="/qa?kb_name=ops"' in body
+    assert 'id="quality-refresh"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/retrieval_quality.js" in body
     assert 'type="module" src="http://testserver/static/manual-library/retrieval_quality.js"' in body
@@ -112,6 +132,11 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "quality-feedback-rows" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
+    assert "function updateLinks()" in js.text
+    assert "/admin/rag-workbench" in js.text
+    assert "/admin/manual-library" in js.text
+    assert "/admin/people" in js.text
+    assert "/qa?kb_name=" in js.text
 
 
 def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
@@ -175,7 +200,14 @@ def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="people-generate-form"' in body
     assert 'id="people-generation-result"' in body
     assert 'id="people-generate-command"' in body
+    assert 'id="people-workbench"' in body
     assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="people-manual-library"' in body
+    assert 'href="/admin/manual-library?kb_name=ops"' in body
+    assert 'id="people-retrieval-quality"' in body
+    assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="people-qa"' in body
+    assert 'href="/qa?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
     assert "/static/manual-library/people_admin.js" in body
 
@@ -197,6 +229,11 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
     assert "safeLifecycleEntry" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
+    assert "function updateLinks()" in js.text
+    assert "/admin/rag-workbench" in js.text
+    assert "/admin/manual-library" in js.text
+    assert "/admin/retrieval-quality" in js.text
+    assert "/qa?kb_name=" in js.text
 
 
 def test_people_access_summary_returns_safe_payload(tmp_path, fake_embedder):

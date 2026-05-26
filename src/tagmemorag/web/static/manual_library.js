@@ -45,6 +45,10 @@ const el = {
   kbForm: document.getElementById("kb-form"),
   kbName: document.getElementById("kb-name"),
   token: document.getElementById("api-token"),
+  workbenchLink: document.getElementById("manual-library-workbench"),
+  retrievalQualityLink: document.getElementById("manual-library-retrieval-quality"),
+  peopleLink: document.getElementById("manual-library-people"),
+  qaLink: document.getElementById("manual-library-qa-link"),
   rows: document.getElementById("manual-rows"),
   empty: document.getElementById("table-empty"),
   count: document.getElementById("manual-count"),
@@ -165,6 +169,14 @@ function formatDetail(detail) {
 function setStatus(message, kind = "") {
   el.status.className = `status-strip ${kind}`.trim();
   el.status.textContent = message || "";
+}
+
+function updateLinks() {
+  const kb = encodeURIComponent(state.kbName || "default");
+  el.workbenchLink.href = `/admin/rag-workbench?kb_name=${kb}`;
+  el.retrievalQualityLink.href = `/admin/retrieval-quality?kb_name=${kb}`;
+  el.peopleLink.href = `/admin/people?kb_name=${kb}`;
+  el.qaLink.href = `/qa?kb_name=${kb}`;
 }
 
 function selectedManual() {
@@ -932,6 +944,7 @@ el.kbForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.kbName = el.kbName.value.trim() || "default";
   state.selectedManualId = null;
+  updateLinks();
   loadManuals();
   loadDiagnostics();
   loadAuditTimeline(null);
@@ -1279,3 +1292,4 @@ renderBulkPreview();
 loadManuals();
 loadDiagnostics();
 loadAuditTimeline(null);
+updateLinks();

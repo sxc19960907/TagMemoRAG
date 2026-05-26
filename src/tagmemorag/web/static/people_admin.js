@@ -43,6 +43,8 @@ const el = {
   copyConfig: document.getElementById("people-copy-config"),
   workbench: document.getElementById("people-workbench"),
   manualLibrary: document.getElementById("people-manual-library"),
+  retrievalQuality: document.getElementById("people-retrieval-quality"),
+  qa: document.getElementById("people-qa"),
 };
 
 function headers() {
@@ -67,6 +69,8 @@ function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   el.workbench.href = `/admin/rag-workbench?kb_name=${kb}`;
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
+  el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
+  el.qa.href = `/qa?kb_name=${kb}`;
   el.generateCommand.textContent = `python -m tagmemorag auth generate-key --id support-a --scopes search --kb ${state.kbName || "default"} --rate 100`;
   if (!el.newKbs.value.trim()) el.newKbs.value = state.kbName || "default";
 }

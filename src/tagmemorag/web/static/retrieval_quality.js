@@ -43,7 +43,16 @@ function currentKb() {
   return $("quality-kb-name").value.trim() || config.defaultKbName || "default";
 }
 
+function updateLinks() {
+  const kb = encodeURIComponent(currentKb());
+  $("quality-workbench").href = `/admin/rag-workbench?kb_name=${kb}`;
+  $("quality-manual-library").href = `/admin/manual-library?kb_name=${kb}`;
+  $("quality-people").href = `/admin/people?kb_name=${kb}`;
+  $("quality-qa").href = `/qa?kb_name=${kb}`;
+}
+
 async function loadFeedback() {
+  updateLinks();
   const params = new URLSearchParams({ kb_name: currentKb(), limit: $("quality-filter-limit").value || "50" });
   for (const [key, id] of [
     ["status", "quality-filter-status"],
@@ -181,6 +190,7 @@ function escapeHtml(value) {
 
 $("quality-kb-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  updateLinks();
   loadFeedback().catch((error) => setStatus(error.message, "error"));
 });
 $("quality-refresh").addEventListener("click", () => loadFeedback().catch((error) => setStatus(error.message, "error")));
@@ -191,4 +201,5 @@ $("quality-preview-selected").addEventListener("click", () => promotion(false).c
 $("quality-export").addEventListener("click", () => promotion(true).catch((error) => setStatus(error.message, "error")));
 
 bindSharedApiToken($("quality-api-token"));
+updateLinks();
 loadFeedback().catch((error) => setStatus(error.message, "error"));
