@@ -38,6 +38,53 @@ Opened the next Trellis journal because journal-2.md was near the 2000-line thre
 - None - task complete
 
 
+## Session 122: RAG feedback eval closure backfill
+
+**Date**: 2026-05-26
+**Task**: RAG feedback eval closure backfill
+**Branch**: `master`
+
+### Summary
+
+Backfilled Trellis records for the completed browser RAG feedback-to-eval loop after the user asked whether recent work followed Trellis. The implementation itself was completed inline on `master`; this session created and archived a Trellis task that records requirements, design, implementation notes, validation commands, commit range, and follow-up guidance.
+
+### Main Changes
+
+- Created and archived `.trellis/tasks/archive/2026-05/05-26-rag-feedback-eval-closure/`.
+- Documented the completed feedback loop:
+  - Q&A feedback posts to existing retrieval feedback storage.
+  - Retrieval Quality reviews Q&A/Search/Retrieve feedback.
+  - Expected evidence can be edited through the browser.
+  - Promotion preview explains readiness and skipped reasons.
+  - Exported eval drafts are parseable by the existing eval loader.
+- Recorded the relevant commits:
+  - `6c4a40f` Connect QA feedback to retrieval quality
+  - `1c26c6d` Polish retrieval quality review workspace
+  - `09f88fa` Clarify feedback promotion readiness
+  - `1adf7c6` Enable expected evidence editing
+  - `eaf9fc8` Surface exported eval draft guidance
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `pending` | Trellis closure backfill |
+
+### Testing
+
+- [OK] Verified Trellis context: no active task remained after archive.
+- [OK] The archived PRD records prior validation commands, including focused unit/static/browser checks.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Use an active Trellis task before the next substantial implementation.
+- Consider a broader full-suite CI pass before adding more RAG workflow features.
+
+
 ## Session 94: General-web ranking pressure diagnostic
 
 **Date**: 2026-05-24

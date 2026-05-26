@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate expectations and relevant test discipline."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Post-implementation round-trip verification across UI/API/storage/export."}
