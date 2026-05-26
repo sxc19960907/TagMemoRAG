@@ -1225,3 +1225,44 @@ Completed the browser-first eval report discovery pass so admins can open the Ev
 ### Next Steps
 
 - Functional next: add a guided eval run launcher or saved eval suites in the browser, with explicit admin confirmation and safe job status tracking, so users can evaluate RAG quality without leaving the UI.
+
+## Session 123: Browser eval run launcher
+
+**Date**: 2026-05-26
+**Task**: Eval Run Browser Launcher
+**Branch**: `master`
+
+### Summary
+
+Completed the first browser-run evaluation loop. Admins can now choose a safe predefined eval suite from the Eval Report page, launch it as a background job, poll its status, and open or load the generated report without using CLI commands.
+
+### Main Changes
+
+- Added admin-only `GET /eval/suites`, `POST /eval/runs`, and `GET /eval/runs/{job_id}`.
+- Added in-memory background eval run registry with one safe `coffee_smoke` suite, bounded project-local paths, and reports under `.tmp/eval/browser-runs/`.
+- Added Eval Report page launch panel with suite selector, run status, Open Report, and Load Here actions.
+- Added unit and browser coverage for suite listing, invalid suite rejection, real job completion, report generation, and browser launch/open workflow.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9927e68` | Launch eval runs from browser |
+| `f5a4d39` | Record eval run browser launcher task |
+
+### Testing
+
+- [OK] `python3 -m py_compile src/tagmemorag/api_eval_runs.py src/tagmemorag/api.py src/tagmemorag/api_models.py`
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer -q -s`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed and archived**
+
+### Next Steps
+
+- Functional next: add a small eval suite manager so admins can promote Retrieval Quality exports into launchable browser suites, instead of only using checked-in fixture suites.
