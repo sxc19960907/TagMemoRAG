@@ -110,7 +110,7 @@ For trial manuals:
 - Keep **Trigger rebuild** enabled for the simplest path.
 - Watch the Next step panel after upload.
 - If rebuild is needed, click **Rebuild now**.
-- If rebuild fails, keep the old served KB active, inspect the recovery guidance, and rerun rebuild after fixing the reported input/config issue.
+- If rebuild fails, the previous searchable KB remains active when one exists; inspect **Recovery** and **Rebuild Queue**, fix the reported input/config issue, then use **Retry rebuild** or **Rebuild now**.
 
 Do not use image-only scanned PDFs for the local demo trial unless OCR is explicitly enabled and verified.
 

@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Trellis backend/UI entry-point checklist for the single-repo project."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Manual Library API and static assets live at the entry-point layer and must preserve dependency direction."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and review expectations for focused browser-facing hardening."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Rebuild and upload failures must keep structured, safe user-facing errors."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Rebuild failures should preserve low-sensitive lifecycle fields and avoid raw document details."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared cross-layer and reuse guide index."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Upload/rebuild recovery crosses UI, API, queue, state, and storage signals."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing diagnostics/rebuild helpers rather than adding parallel recovery flows."}

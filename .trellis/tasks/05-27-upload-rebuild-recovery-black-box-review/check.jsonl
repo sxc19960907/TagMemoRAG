@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Final focused validation and review checklist."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Confirm failure messaging does not violate structured error and leakage rules."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check browser-visible recovery guidance matches backend status signals."}

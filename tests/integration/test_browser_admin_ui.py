@@ -791,6 +791,10 @@ def _exercise_rag_failure_states(page, port: int, upload_path: Path) -> None:
     assert "required" in row_text
     assert "pending-rebuild" in row_text
     assert "1 dirty manual" in page.locator("#dirty-summary").inner_text()
+    next_step_text = page.locator("#library-next-step").inner_text()
+    assert "Manual uploaded, rebuild needed" in next_step_text
+    assert "Run rebuild before this manual becomes searchable in Q&A." in next_step_text
+    assert "Rebuild now" in next_step_text
 
 
 def _exercise_qa_insufficient_evidence_refusal(page, port: int, upload_path: Path) -> None:

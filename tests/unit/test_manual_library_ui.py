@@ -98,6 +98,10 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "dirtyManualCount" in js.text
     assert "acceptAllSuggestions" in js.text
     assert "pollRebuildJob" in js.text
+    assert "rebuildFailed" in js.text
+    assert 'renderNextStep("rebuildFailed")' in js.text
+    assert "The previous searchable KB remains active" in js.text
+    assert "Retry rebuild" in js.text
     assert "bindSharedApiToken" in js.text
     assert "function updateLinks()" in js.text
     assert "/admin/rag-workbench" in js.text

@@ -203,6 +203,11 @@ function renderNextStep(kind = "", options = {}) {
       body: t("Run rebuild before this manual becomes searchable in Q&A."),
       actions: `<button type="button" data-next-step-action="rebuild" class="primary">${t("Rebuild now")}</button>`,
     },
+    rebuildFailed: {
+      title: t("Rebuild needs attention"),
+      body: t("The previous searchable KB remains active when one exists. Review Recovery and Rebuild Queue, fix the reported issue, then retry rebuild."),
+      actions: `<button type="button" data-next-step-action="rebuild" class="primary">${t("Retry rebuild")}</button>`,
+    },
     ready: {
       title: t("Manual is ready for Q&A"),
       body: manualId ? t("{manualId} is searchable now. Try asking a question from the user Q&A page.", { manualId }) : t("The library is searchable now. Try asking a question from the user Q&A page."),
@@ -1307,7 +1312,7 @@ async function pollRebuildJob(jobId) {
         renderNextStep("needsRebuild");
       } else {
         setStatus(`Rebuild job failed: ${job.error?.message || JSON.stringify(job.error || job)}`, "error");
-        renderNextStep("needsRebuild");
+        renderNextStep("rebuildFailed");
       }
       await loadManuals();
     } catch (error) {
@@ -1338,7 +1343,7 @@ async function pollRebuild(taskId) {
         renderNextStep("ready");
       } else {
         setStatus(`Rebuild failed: ${task.error || JSON.stringify(task)}`, "error");
-        renderNextStep("needsRebuild");
+        renderNextStep("rebuildFailed");
       }
       await loadManuals();
       await loadDiagnostics();
