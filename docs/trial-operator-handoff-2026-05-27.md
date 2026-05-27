@@ -9,6 +9,7 @@ This is the current starting point for a small local TagMemoRAG trial after the 
 - The local deterministic demo does not require API keys, Qdrant, S3, or external model services.
 - The retained pilot command can include browser QA readiness in the same report.
 - Report retention and GitHub CI handoff are summarized in `docs/trial-report-ci-handoff.md`.
+- Final local readiness review is summarized in `docs/trial-readiness-final-review-2026-05-27.md`.
 
 ## Start A Local Trial
 
@@ -128,6 +129,7 @@ Do not use image-only scanned PDFs for the local demo trial unless OCR is explic
 - [Browser RAG Quick Start](browser-rag-quick-start.md)
 - [Production Pilot Runbook](production-pilot-runbook.md)
 - [Trial Report And CI Handoff](trial-report-ci-handoff.md)
+- [Trial Readiness Final Review - 2026-05-27](trial-readiness-final-review-2026-05-27.md)
 - [RAG Quality Gates](rag-quality-gates.md)
 - [Production Provider Smoke Runbook](production-provider-smoke-runbook.md)
 - [Production Deployment Operations](production-deployment-operations.md)

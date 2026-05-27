@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_trial_report_ci_handoff_documents_retention_and_ci_boundary():
     handoff = (ROOT / "docs" / "trial-report-ci-handoff.md").read_text(encoding="utf-8")
+    final_review = (ROOT / "docs" / "trial-readiness-final-review-2026-05-27.md").read_text(encoding="utf-8")
     quality = (ROOT / "docs" / "rag-quality-gates.md").read_text(encoding="utf-8")
     trial = (ROOT / "docs" / "trial-operator-handoff-2026-05-27.md").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -20,4 +21,7 @@ def test_trial_report_ci_handoff_documents_retention_and_ci_boundary():
 
     assert "trial-report-ci-handoff.md" in quality
     assert "trial-report-ci-handoff.md" in trial
+    assert "trial-readiness-final-review-2026-05-27.md" in trial
     assert "docs/trial-report-ci-handoff.md" in readme
+    assert "browser QA readiness: `passed`" in final_review
+    assert "GitHub Actions as authoritative" in final_review
