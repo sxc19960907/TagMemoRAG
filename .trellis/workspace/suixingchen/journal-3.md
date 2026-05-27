@@ -1873,3 +1873,36 @@ Added People & Access scope guidance, clearer admin-token error mapping, i18n/CS
 ### Next Steps
 
 - None - task complete
+
+
+## Session 139: Trial Report CI Handoff
+
+**Date**: 2026-05-27
+**Task**: Trial Report CI Handoff
+**Branch**: `master`
+
+### Summary
+
+Added retained trial report and GitHub CI handoff documentation with links and a focused docs regression test.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `22b223f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
