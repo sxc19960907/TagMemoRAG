@@ -231,6 +231,8 @@ Optional environment:
 
 Recommended automated release command set:
 
+For the current tiered local quality gates, including browser-first QA readiness and live-provider boundaries, see [RAG Quality Gates](rag-quality-gates.md). The commands below remain the lower-level system-test examples behind that gate matrix.
+
 ```bash
 uv run pytest tests/unit tests/e2e
 ```

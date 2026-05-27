@@ -148,6 +148,8 @@ python -m tagmemorag readiness browser-qa --full
 
 The focused browser QA gate runs the normal-user library-to-QA Playwright flow: seed a demo manual, start the local server, open Manual Library, switch into Q&A, ask the first-run troubleshooting question, verify cited sources, and round-trip feedback into Retrieval Quality. Use `--full` before release-style checks to run the complete browser UI integration suite.
 
+For the full local gate matrix, including when to run unit, eval, browser, release, and live-provider checks, see [`docs/rag-quality-gates.md`](docs/rag-quality-gates.md).
+
 For deployment profiles, backup/restore, Qdrant/S3 operations, diagnostics, and rollback playbooks, see [`docs/production-deployment-operations.md`](docs/production-deployment-operations.md). For the first production-like verification pass and retained evidence checklist, see [`docs/production-environment-verification.md`](docs/production-environment-verification.md).
 
 ## API Reference
