@@ -1266,3 +1266,46 @@ Completed the first browser-run evaluation loop. Admins can now choose a safe pr
 ### Next Steps
 
 - Functional next: add a small eval suite manager so admins can promote Retrieval Quality exports into launchable browser suites, instead of only using checked-in fixture suites.
+
+## Session 124: Feedback eval suite launcher
+
+**Date**: 2026-05-27
+**Task**: Feedback Eval Suite Launcher
+**Branch**: `master`
+
+### Summary
+
+Completed the feedback-to-eval browser loop. Retrieval Quality exported drafts are now discoverable by the Eval Report launcher, can be auto-selected from the export summary, and can be run in the browser against the currently built KB.
+
+### Main Changes
+
+- Extended browser eval suite metadata with kind, reuse mode, case count, and modified time.
+- Added safe discovery for `eval_drafts/**/*.jsonl` under the configured storage-adjacent draft root.
+- Feedback draft suite runs use `reuse_built_kb=True`, matching the existing CLI command from Retrieval Quality export.
+- Added a Retrieval Quality `Run in browser` action that opens Eval Report with the exported suite preselected.
+- Extended unit and browser tests for discovering, selecting, and running feedback draft eval suites.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b40c4e3` | Run feedback eval drafts from browser |
+| `3078312` | Record feedback eval suite launcher task |
+
+### Testing
+
+- [OK] `node --check src/tagmemorag/web/static/eval_report.js`
+- [OK] `node --check src/tagmemorag/web/static/retrieval_quality.js`
+- [OK] `node --check src/tagmemorag/web/static/i18n.js`
+- [OK] `python3 -m py_compile src/tagmemorag/api_eval_runs.py src/tagmemorag/api.py`
+- [OK] `uv run pytest tests/unit/test_manual_library_ui.py tests/unit/test_retrieval_feedback.py tests/e2e/test_eval_cli.py -q`
+- [OK] `TAGMEMORAG_RUN_BROWSER_UI=1 uv run pytest tests/integration/test_browser_admin_ui.py::test_browser_eval_report_viewer tests/integration/test_browser_admin_ui.py::test_browser_manual_library_to_qa_user_flow -q -s`
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed and archived**
+
+### Next Steps
+
+- Functional next: add a small suite history/management panel for feedback drafts so admins can see all exported drafts, last run status, and archive stale drafts without leaving the browser.
