@@ -36,3 +36,36 @@ Rolled over the active Trellis journal so new work starts in a fresh journal fil
 ### Next Steps
 
 - None - task complete
+
+
+## Session 143: QA first-run guidance
+
+**Date**: 2026-05-27
+**Task**: QA first-run guidance
+**Branch**: `master`
+
+### Summary
+
+Added QA first-run upload guidance, upload-derived suggestions, and recovery links with focused browser verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `171b6ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 142
+- **Total Sessions**: 143
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~38 | Active |
+| `journal-4.md` | ~71 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 143 | 2026-05-27 | QA first-run guidance | `171b6ae` | `master` |
 | 142 | 2026-05-27 | Journal rollover | - | `master` |
 | 141 | 2026-05-27 | QA Page Manual Intake | `f680460` | `master` |
 | 140 | 2026-05-27 | Trial Readiness Hardening Closure | `4800c02` | `master` |
