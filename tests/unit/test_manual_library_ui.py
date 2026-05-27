@@ -1057,6 +1057,7 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'aria-label="Ask question"' in body
     assert 'aria-label="Q&A question"' in body
     assert 'id="qa-answer"' in body
+    assert 'class="qa-flow-guide"' in body
     assert 'id="qa-suggestions"' in body
     assert 'id="qa-copy-answer"' in body
     assert 'id="qa-followups"' in body
@@ -1071,7 +1072,8 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert "Check KB state before troubleshooting." in body
     assert "Product manual support" in body
     assert "Try asking" in body
-    assert "Ask about a symptom, task, or error." in body
+    assert "Ask about a symptom, task, model, or error." in body
+    assert "Answers will cite the manual passages used on the right." in body
     assert "Knowledge base" not in body
     assert "Use KB" not in body
     assert 'id="qa-kb-name"' not in body
@@ -1116,8 +1118,19 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "navigator.clipboard.writeText" in js.text
     assert "loadingStages" in js.text
     assert "startLoadingStages" in js.text
+    assert "renderLoadingState" in js.text
+    assert "qa-progress-card" in js.text
+    assert "Checking manuals" in js.text
+    assert "Finding cited passages" in js.text
+    assert "Retrieving manual evidence..." in js.text
+    assert "renderRecoveryState" in js.text
+    assert "qa-recovery-card" in js.text
+    assert "Could not complete this answer" in js.text
+    assert "Check readiness" in js.text
     assert "renderFollowups" in js.text
     assert "buildFollowupQuestions" in js.text
+    assert "Suggested follow-ups" in js.text
+    assert "These will continue from the current answer when useful." in js.text
     assert "handleFeedback" in js.text
     assert "/search/feedback" in js.text
     assert "/admin/rag-readiness" in js.text
@@ -1132,6 +1145,8 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "bindSourceToggles" in js.text
     assert "qa-source-summary" in js.text
     assert "qa-source-toggle" in js.text
+    assert "qa-source-placeholder" in js.text
+    assert "Click a citation in the answer to focus a source" in js.text
     assert "qa-citation-chip" in js.text
     assert 'normalized === "no results"' in js.text
     assert "data-citation-target" in js.text

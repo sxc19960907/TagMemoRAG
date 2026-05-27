@@ -722,6 +722,48 @@ textarea {
     #f7fafc;
 }
 
+.qa-flow-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 900px;
+  margin-bottom: 16px;
+}
+
+.qa-flow-guide div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: start;
+  border: 1px solid #d9e4ef;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.qa-flow-guide span {
+  grid-row: span 2;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e8f2ff;
+  color: #24517f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qa-flow-guide strong {
+  font-size: 13px;
+}
+
+.qa-flow-guide small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .qa-answer-message {
   max-width: 900px;
   min-height: 220px;
@@ -824,6 +866,37 @@ textarea {
   color: var(--muted);
 }
 
+.qa-progress-card,
+.qa-recovery-card,
+.qa-source-placeholder {
+  display: grid;
+  gap: 8px;
+}
+
+.qa-progress-card strong,
+.qa-recovery-card strong,
+.qa-source-placeholder strong {
+  font-size: 14px;
+}
+
+.qa-progress-card ol,
+.qa-recovery-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 22px;
+  color: #41566f;
+}
+
+.qa-progress-card li,
+.qa-recovery-card li {
+  padding-left: 2px;
+}
+
+.qa-recovery-card .button-link {
+  margin-top: 2px;
+}
+
 .qa-answer-steps {
   display: grid;
   gap: 10px;
@@ -909,6 +982,12 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.qa-followups p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .qa-followup-chip {
@@ -1016,6 +1095,10 @@ textarea {
 .qa-source-list.empty-state {
   color: var(--muted);
   font-size: 13px;
+}
+
+.qa-source-placeholder p {
+  margin: 0;
 }
 
 .qa-source-item.active {
@@ -2481,6 +2564,10 @@ dialog::backdrop {
 
   .qa-answer-scroll {
     padding: 18px 14px;
+  }
+
+  .qa-flow-guide {
+    grid-template-columns: 1fr;
   }
 
   .qa-message-bubble {

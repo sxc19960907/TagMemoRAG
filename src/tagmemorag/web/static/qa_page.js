@@ -174,12 +174,17 @@ function renderPending(question = "") {
   resetPostAnswerUi();
   state.lastAnswerText = "";
   el.answer.className = "qa-answer-message";
-  el.answer.innerHTML = renderConversationShell(question, `<p class="qa-loading-stage">${t("Understanding the question...")}</p>`);
-  el.answerMeta.textContent = t("Preparing answer");
+  el.answer.innerHTML = renderConversationShell(question, renderLoadingState());
+  el.answerMeta.textContent = t("Checking manuals");
   if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
-  el.sources.textContent = t("Finding sources...");
-  el.sourceMeta.textContent = t("Cited source snippets will appear here.");
+  el.sources.innerHTML = `
+    <div class="qa-source-placeholder">
+      <strong>${t("Finding cited passages")}</strong>
+      <p>${t("Sources will appear here as soon as the answer is ready.")}</p>
+    </div>
+  `;
+  el.sourceMeta.textContent = t("Retrieving manual evidence...");
   startLoadingStages();
 }
 
@@ -189,11 +194,16 @@ function renderError(error) {
   state.lastAnswerText = "";
   el.answer.className = "qa-answer-message error";
   const question = activeConversationTurn()?.question || "";
-  el.answer.innerHTML = renderConversationShell(question, `<p>${escapeHtml(userFacingError(error.message))}</p>`);
+  el.answer.innerHTML = renderConversationShell(question, renderRecoveryState(userFacingError(error.message)));
   el.answerMeta.textContent = t("Request failed");
   if (el.copyAnswer) el.copyAnswer.disabled = true;
   el.sources.className = "qa-source-list empty-state";
-  el.sources.textContent = t("No sources available.");
+  el.sources.innerHTML = `
+    <div class="qa-source-placeholder">
+      <strong>${t("No sources available.")}</strong>
+      <p>${t("Sources are shown after a successful grounded answer.")}</p>
+    </div>
+  `;
   el.sourceMeta.textContent = t("Sources unavailable.");
 }
 
@@ -254,6 +264,35 @@ function renderConversationShell(question, answerHtml) {
           ${answerHtml}
         </div>
       </section>
+    </div>
+  `;
+}
+
+function renderLoadingState() {
+  return `
+    <div class="qa-progress-card" aria-live="polite">
+      <strong>${t("Working on your answer")}</strong>
+      <p class="qa-loading-stage">${t("Understanding the question...")}</p>
+      <ol>
+        <li>${t("Match the question to the active knowledge base.")}</li>
+        <li>${t("Retrieve the most relevant manual passages.")}</li>
+        <li>${t("Draft an answer with citations you can inspect.")}</li>
+      </ol>
+    </div>
+  `;
+}
+
+function renderRecoveryState(message) {
+  return `
+    <div class="qa-recovery-card">
+      <strong>${t("Could not complete this answer")}</strong>
+      <p>${escapeHtml(t(message))}</p>
+      <ul>
+        <li>${t("Try asking again with the product model, symptom, or error code.")}</li>
+        <li>${t("Use Ask as new if the previous context is confusing the question.")}</li>
+        <li>${t("Check RAG Readiness if this keeps failing.")}</li>
+      </ul>
+      <a class="button-link compact" href="/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}">${t("Check readiness")}</a>
     </div>
   `;
 }
@@ -639,7 +678,8 @@ function renderFollowups(answerText, citations) {
     return;
   }
   el.followups.innerHTML = `
-    <span class="eyebrow">${t("Follow up")}</span>
+    <span class="eyebrow">${t("Suggested follow-ups")}</span>
+    <p>${t("These will continue from the current answer when useful.")}</p>
     <div class="qa-followup-list">
       ${questions.map((question) => `<button class="qa-followup-chip" type="button" data-followup="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}
     </div>
@@ -914,13 +954,18 @@ function renderSources(citations, evidence) {
 
   if (items.length === 0) {
     el.sources.className = "qa-source-list empty-state";
-    el.sources.textContent = t("No cited sources returned.");
+    el.sources.innerHTML = `
+      <div class="qa-source-placeholder">
+        <strong>${t("No cited sources returned.")}</strong>
+        <p>${t("Try a more specific product, symptom, task, or error code.")}</p>
+      </div>
+    `;
     el.sourceMeta.textContent = t("No sources available.");
     return;
   }
 
   el.sources.className = "qa-source-list";
-  el.sourceMeta.textContent = t("{count} source{plural} cited", { count: items.length, plural: items.length === 1 ? "" : "s" });
+  el.sourceMeta.textContent = t("{count} source{plural} cited. Click a citation in the answer to focus a source.", { count: items.length, plural: items.length === 1 ? "" : "s" });
   el.sources.innerHTML = items.map(renderSourceItem).join("");
   bindSourceToggles();
   bindCitationLinks();
