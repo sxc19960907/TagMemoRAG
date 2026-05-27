@@ -1309,3 +1309,36 @@ Completed the feedback-to-eval browser loop. Retrieval Quality exported drafts a
 ### Next Steps
 
 - Functional next: add a small suite history/management panel for feedback drafts so admins can see all exported drafts, last run status, and archive stale drafts without leaving the browser.
+
+
+## Session 122: Eval Suite History Panel
+
+**Date**: 2026-05-27
+**Task**: Eval Suite History Panel
+**Branch**: `master`
+
+### Summary
+
+Added a browser-first Eval Suite History panel, enriched /eval/suites with latest browser report metadata, and verified with targeted tests plus browser smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `59d3ad7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

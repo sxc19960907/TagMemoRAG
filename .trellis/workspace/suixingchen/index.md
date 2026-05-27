@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 121
-- **Last Active**: 2026-05-26
+- **Total Sessions**: 122
+- **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~967 | Active |
+| `journal-3.md` | ~1344 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 122 | 2026-05-27 | Eval Suite History Panel | `59d3ad7` | `master` |
 | 121 | 2026-05-26 | Post-merge product handoff closure | `09de6cd` | `master` |
 | 120 | 2026-05-26 | Pre-merge release closure | `96ab4c7` | `codex/admin-people-management-ui` |
 | 119 | 2026-05-26 | Browser RAG quick start guide | `718d5aa` | `codex/admin-people-management-ui` |
