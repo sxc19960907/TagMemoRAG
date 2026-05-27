@@ -168,3 +168,36 @@ Added managed .docx intake by converting readable OpenXML text to Markdown for M
 ### Next Steps
 
 - None - task complete
+
+
+## Session 147: PDF parser quality summary
+
+**Date**: 2026-05-27
+**Task**: PDF parser quality summary
+**Branch**: `master`
+
+### Summary
+
+Added bounded PDF parser quality metadata, diagnostics API/UI surfacing, and tests for text pages, missing-text pages, OCR-created pages, and parser warning counts without changing retrieval behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c02f334` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
