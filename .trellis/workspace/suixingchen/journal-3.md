@@ -1640,3 +1640,36 @@ Completed the deployment/pilot readiness child task: pilot run now optionally in
 ### Next Steps
 
 - None - task complete
+
+
+## Session 132: Final RAG black-box acceptance
+
+**Date**: 2026-05-27
+**Task**: Final RAG black-box acceptance
+**Branch**: `master`
+
+### Summary
+
+Completed the integrated black-box user acceptance review for the RAG UX program: seeded demo KB, reviewed QA in the browser, verified three grounded questions, citations, language switching, feedback handoff, retained pilot with browser QA, and browser readiness.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `52111e0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
