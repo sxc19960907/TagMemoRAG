@@ -195,13 +195,14 @@ def retrieval_quality_admin(request: Request, kb_name: str = "default"):
 
 
 @app.get("/admin/eval-report")
-def eval_report_admin(request: Request, kb_name: str = "default", report_path: str = ""):
+def eval_report_admin(request: Request, kb_name: str = "default", report_path: str = "", suite_path: str = ""):
     return templates.TemplateResponse(
         request,
         "eval_report.html",
         {
             "default_kb_name": kb_name or "default",
             "default_report_path": report_path or "",
+            "default_suite_path": suite_path or "",
             "api_base_path": "",
             "auth_enabled": settings.auth.enabled,
         },
@@ -807,7 +808,7 @@ def list_eval_suites(
     _api_key: ApiKey = Depends(require_scope("admin")),
     _: None = Depends(rate_limit_dep),
 ):
-    return api_eval_runs.list_eval_suites()
+    return api_eval_runs.list_eval_suites(settings=settings)
 
 
 @app.post("/eval/runs", status_code=202)

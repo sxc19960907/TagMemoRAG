@@ -546,11 +546,34 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "--output" in ready_text
     assert "Report:" in ready_text
     assert "currently built KB" in ready_text
+    assert "Run in browser" in ready_text
     assert "feedback-" in page.locator("#quality-promotion-preview").inner_text()
     page.locator("#quality-export").click()
     page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
     exported_text = page.locator("#quality-promotion-summary").inner_text()
     assert "tagmemorag eval run --suite" in exported_text
+    assert "Run in browser" in exported_text
+    run_href = page.locator("#quality-promotion-summary a").filter(has_text="Run in browser").first.get_attribute("href")
+    assert run_href is not None
+    assert "/admin/eval-report?" in run_href
+    assert "suite_path=" in run_href
+    page.goto(f"http://127.0.0.1:{port}{run_href}")
+    page.get_by_role("heading", name="Eval Report", exact=True).wait_for()
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('#eval-run-suite option')].some((option) => option.textContent.includes('Feedback draft'))",
+        timeout=10000,
+    )
+    selected_label = page.locator("#eval-run-suite").evaluate(
+        "(select) => select.options[select.selectedIndex]?.textContent || ''"
+    )
+    assert "Feedback draft" in selected_label
+    assert "1 cases" in selected_label
+    assert "Uses current KB" in page.locator("#eval-run-status").inner_text()
+    page.locator("#eval-run-start").click()
+    page.locator("#eval-run-status").get_by_text("Open Report").wait_for(timeout=15000)
+    assert "1 cases" in page.locator("#eval-run-status").inner_text()
+    page.goto(f"http://127.0.0.1:{port}/admin/retrieval-quality?kb_name=default")
+    page.get_by_role("heading", name="Retrieval Quality").wait_for()
     page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
     assert "promoted" in page.locator("#quality-feedback-rows").inner_text()
 

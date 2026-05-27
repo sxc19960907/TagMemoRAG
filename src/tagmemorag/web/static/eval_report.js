@@ -101,8 +101,12 @@ function renderEvalSuites() {
     return;
   }
   select.innerHTML = state.suites.map((suite) => `
-    <option value="${escapeHtml(suite.suite_id)}">${escapeHtml(t(suite.name || suite.suite_id))}</option>
+    <option value="${escapeHtml(suite.suite_id)}">${escapeHtml(suiteOptionLabel(suite))}</option>
   `).join("");
+  const preferred = state.suites.find((suite) => suite.suite_path === config.defaultSuitePath);
+  if (preferred) {
+    select.value = preferred.suite_id;
+  }
   $("eval-run-start").disabled = false;
   renderRunIdle();
 }
@@ -143,7 +147,12 @@ function renderRunIdle() {
   const suite = selectedSuite();
   $("eval-run-status").className = "eval-run-status";
   $("eval-run-status").innerHTML = suite
-    ? `<strong>${escapeHtml(t(suite.name))}</strong><p>${escapeHtml(t(suite.description || ""))}</p><small>${escapeHtml(suite.suite_path || "")}</small>`
+    ? `
+      <strong>${escapeHtml(t(suite.name))}</strong>
+      <p>${escapeHtml(t(suite.description || ""))}</p>
+      <small>${escapeHtml(suiteMetaText(suite))}</small>
+      <small>${escapeHtml(suite.suite_path || "")}</small>
+    `
     : t("Select an eval suite first.");
 }
 
@@ -181,6 +190,29 @@ function renderEvalRun(job) {
 function selectedSuite() {
   const suiteId = $("eval-run-suite").value;
   return state.suites.find((suite) => suite.suite_id === suiteId);
+}
+
+function suiteOptionLabel(suite) {
+  const count = Number(suite.case_count || 0);
+  const suffix = count ? ` · ${count} ${t("cases")}` : "";
+  return `${t(suite.name || suite.suite_id)}${suffix}`;
+}
+
+function suiteMetaText(suite) {
+  const parts = [];
+  parts.push(t(suite.kind === "feedback_draft" ? "Feedback draft" : "Fixture suite"));
+  if (suite.reuse_built_kb) {
+    parts.push(t("Uses current KB"));
+  } else if (suite.docs_path) {
+    parts.push(t("Builds from docs"));
+  }
+  if (suite.case_count) {
+    parts.push(`${Number(suite.case_count)} ${t("cases")}`);
+  }
+  if (suite.modified_at) {
+    parts.push(`${t("Updated")} ${formatModified(suite.modified_at)}`);
+  }
+  return parts.join(" · ");
 }
 
 function runStatusLabel(status) {

@@ -385,6 +385,7 @@ function renderPromotionSummary(result) {
       ${summary.next_command ? `<code>${escapeHtml(summary.next_command)}</code>` : ""}
       ${summary.command_note ? `<small>${escapeHtml(summary.command_note)}</small>` : ""}
       ${summary.report_path ? `<a class="button-link compact" href="${escapeHtml(reportViewerHref(summary.report_path))}">${t("Open report")}</a>` : ""}
+      ${summary.suite_path ? `<a class="button-link compact" href="${escapeHtml(evalLauncherHref(summary.suite_path))}">${t("Run in browser")}</a>` : ""}
     </article>
   `;
   const caseCards = cases.map((item) => `
@@ -415,6 +416,11 @@ function skipReasonLabel(reason) {
 
 function reportViewerHref(reportPath) {
   const params = new URLSearchParams({ kb_name: currentKb(), report_path: reportPath });
+  return `/admin/eval-report?${params.toString()}`;
+}
+
+function evalLauncherHref(suitePath) {
+  const params = new URLSearchParams({ kb_name: currentKb(), suite_path: suitePath });
   return `/admin/eval-report?${params.toString()}`;
 }
 

@@ -189,8 +189,10 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "summary.next_command" in js.text
     assert "summary.command_note" in js.text
     assert "reportViewerHref" in js.text
+    assert "evalLauncherHref" in js.text
     assert "/admin/eval-report" in js.text
     assert "Open report" in js.text
+    assert "Run in browser" in js.text
     assert "quality-promotion-summary" in js.text
     assert "setExpectedEditor" in js.text
     assert "expectedFromEditor" in js.text
@@ -209,7 +211,7 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
 def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     client = _client(tmp_path, fake_embedder)
 
-    response = client.get("/admin/eval-report?kb_name=ops&report_path=.tmp/report.json")
+    response = client.get("/admin/eval-report?kb_name=ops&report_path=.tmp/report.json&suite_path=.tmp/suite.jsonl")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -229,6 +231,7 @@ def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="eval-report-config-snapshot"' in body
     assert '"defaultKbName": "ops"' in body
     assert '"defaultReportPath": ".tmp/report.json"' in body
+    assert '"defaultSuitePath": ".tmp/suite.jsonl"' in body
     assert "/static/manual-library/eval_report.js" in body
 
 
@@ -246,6 +249,10 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "pollEvalRun" in js.text
     assert "eval-run-suite" in js.text
     assert "eval-run-status" in js.text
+    assert "suiteMetaText" in js.text
+    assert "defaultSuitePath" in js.text
+    assert "Feedback draft" in js.text
+    assert "Uses current KB" in js.text
     assert "eval-report-cases" in js.text
     assert "eval-report-recents" in js.text
     assert "loadRecentReports" in js.text
@@ -276,7 +283,45 @@ def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder):
     assert "coffee_smoke" in suites
     assert suites["coffee_smoke"]["suite_path"] == "tests/fixtures/eval/coffee.jsonl"
     assert suites["coffee_smoke"]["docs_path"] == "tests/fixtures"
+    assert suites["coffee_smoke"]["kind"] == "fixture"
+    assert suites["coffee_smoke"]["reuse_built_kb"] is False
     assert suites["coffee_smoke"]["thresholds"]["min_recall_at_k"] == 0.0
+
+
+def test_eval_suites_api_discovers_feedback_drafts(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    draft = tmp_path / "eval_drafts" / "default" / "feedback-20260526.jsonl"
+    draft.parent.mkdir(parents=True)
+    draft.write_text(
+        json.dumps(
+            {
+                "id": "feedback-fb-1",
+                "query": "washer filter blocked",
+                "kb_name": "default",
+                "relevant": [{"source_file": "washer.md", "text_contains": ["filter"]}],
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    malformed = draft.with_name("bad.jsonl")
+    malformed.write_text("{bad\n", encoding="utf-8")
+
+    response = client.get("/eval/suites")
+
+    assert response.status_code == 200
+    body = response.json()
+    drafts = [item for item in body["suites"] if item["kind"] == "feedback_draft"]
+    assert len(drafts) == 1
+    suite = drafts[0]
+    assert suite["suite_id"].startswith("feedback_draft:default_feedback_20260526:")
+    assert suite["name"] == "Feedback draft: default/feedback-20260526"
+    assert suite["suite_path"] == str(draft)
+    assert suite["docs_path"] is None
+    assert suite["reuse_built_kb"] is True
+    assert suite["case_count"] == 1
+    assert suite["thresholds"]["min_recall_at_k"] == 0.0
 
 
 def test_eval_run_api_rejects_unknown_suite(tmp_path, fake_embedder):
@@ -306,6 +351,53 @@ def test_eval_run_api_starts_job_and_writes_report(tmp_path, fake_embedder):
     assert report_path.exists()
     assert ".tmp/eval/browser-runs" in str(report_path)
     assert body["report_url"].startswith("/admin/eval-report?report_path=")
+
+
+def test_eval_run_api_runs_discovered_feedback_draft_against_built_kb(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    docs = tmp_path / "draft-docs"
+    docs.mkdir()
+    (docs / "washer.md").write_text("# Filter\nwasher filter blocked recovery steps\n", encoding="utf-8")
+    build = client.post("/rebuild", json={"docs_dir": str(docs), "kb_name": "default"})
+    assert build.status_code == 202
+    task_id = build.json()["task_id"]
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        task = client.get(f"/rebuild/{task_id}").json()
+        if task["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert task["status"] in {"done", "succeeded"}
+
+    draft = tmp_path / "eval_drafts" / "default" / "feedback-20260526.jsonl"
+    draft.parent.mkdir(parents=True)
+    draft.write_text(
+        json.dumps(
+            {
+                "id": "feedback-fb-1",
+                "query": "washer filter blocked",
+                "kb_name": "default",
+                "relevant": [{"source_file": "washer.md", "text_contains": ["filter blocked"]}],
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    suites = client.get("/eval/suites").json()["suites"]
+    suite_id = next(item["suite_id"] for item in suites if item["kind"] == "feedback_draft")
+
+    started = client.post("/eval/runs", json={"suite_id": suite_id})
+
+    assert started.status_code == 202
+    body = _wait_for_eval_job(client, started.json()["job_id"])
+    assert body["status"] == "passed"
+    assert body["suite"]["suite_id"] == suite_id
+    assert body["suite"]["reuse_built_kb"] is True
+    assert body["summary"]["cases"] == 1
+    report = json.loads(Path(body["report_path"]).read_text(encoding="utf-8"))
+    assert report["config_snapshot"]["reuse_built_kb"] is True
+    assert report["cases"][0]["id"] == "feedback-fb-1"
 
 
 def test_eval_report_list_api_discovers_recent_project_reports(tmp_path, fake_embedder, monkeypatch):
