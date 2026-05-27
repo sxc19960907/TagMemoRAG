@@ -135,3 +135,36 @@ Validated real product PDF intake quality, documented the current Doc/Docx bound
 ### Next Steps
 
 - None - task complete
+
+
+## Session 146: Docx direct manual intake
+
+**Date**: 2026-05-27
+**Task**: Docx direct manual intake
+**Branch**: `master`
+
+### Summary
+
+Added managed .docx intake by converting readable OpenXML text to Markdown for Manual Library, QA uploads, and bulk import; preserved original-source metadata; updated UI hints, docs, specs, and focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `159e6b0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
