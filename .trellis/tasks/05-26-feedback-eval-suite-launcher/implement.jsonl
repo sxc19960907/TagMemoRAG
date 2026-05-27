@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/index.md","reason":"backend API/report task guidance index"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"API helper placement and dependency direction"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"test isolation and report safety rules"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"structured errors for invalid suite/job state"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"avoid logging raw queries/snippets/secrets"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"API to UI to browser flow"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse Retrieval Quality export and eval runner contracts"}
