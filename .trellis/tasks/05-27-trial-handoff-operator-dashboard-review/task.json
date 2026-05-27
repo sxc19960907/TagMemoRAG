@@ -1,9 +1,9 @@
 {
-  "id": "rag-trial-operations-feedback-hardening",
-  "name": "rag-trial-operations-feedback-hardening",
-  "title": "RAG Trial Operations And Feedback Hardening",
+  "id": "trial-handoff-operator-dashboard-review",
+  "name": "trial-handoff-operator-dashboard-review",
+  "title": "Trial Handoff And Operator Dashboard Review",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -18,10 +18,8 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [
-    "05-27-trial-handoff-operator-dashboard-review"
-  ],
-  "parent": null,
+  "children": [],
+  "parent": "05-27-rag-trial-operations-feedback-hardening",
   "relatedFiles": [],
   "notes": "",
   "meta": {}

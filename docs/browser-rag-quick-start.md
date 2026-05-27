@@ -2,6 +2,8 @@
 
 This guide is the shortest local path for trying TagMemoRAG as a browser user. It uses hashing embeddings, local NPZ vectors, the managed manual library, and the noop answer provider, so it does not need API keys, Qdrant, S3, or external model services.
 
+For a trial operator view with dashboard links, retained pilot reports, and feedback triage, start with [Trial Operator Handoff - 2026-05-27](trial-operator-handoff-2026-05-27.md).
+
 ## 1. Install
 
 From the repository root:

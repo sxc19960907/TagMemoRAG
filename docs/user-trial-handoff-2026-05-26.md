@@ -2,6 +2,8 @@
 
 This handoff summarizes the browser-first RAG experience now merged into `master` by PR #26 plus the post-merge browser polish commits through `ca0dd70`.
 
+For the current post-acceptance trial operator guide, use [Trial Operator Handoff - 2026-05-27](trial-operator-handoff-2026-05-27.md). This page is preserved as historical context for the PR #26 handoff.
+
 ## Entry Point
 
 Start the local offline demo:

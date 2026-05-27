@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Check docs against project documentation conventions."}
+{"file": "docs/browser-rag-quick-start.md", "reason": "Ensure cross-links remain coherent."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Ensure pilot command references stay aligned."}
