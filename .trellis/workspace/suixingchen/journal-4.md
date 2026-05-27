@@ -102,3 +102,36 @@ Aligned quick-start and trial handoff docs with QA first-run upload guidance and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 145: Real PDF and document intake test
+
+**Date**: 2026-05-27
+**Task**: Real PDF and document intake test
+**Branch**: `master`
+
+### Summary
+
+Validated real product PDF intake quality, documented the current Doc/Docx boundary, and protected both with focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5522934` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
