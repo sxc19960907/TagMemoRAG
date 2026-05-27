@@ -1441,3 +1441,36 @@ Hardened the browser QA page with a clearer ask-read-verify flow, improved loadi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 126: QA Browser Regression Smoke
+
+**Date**: 2026-05-27
+**Task**: QA Browser Regression Smoke
+**Branch**: `master`
+
+### Summary
+
+Added browser regression assertions for the QA first screen, loading guidance, source/follow-up/feedback affordances, and not-ready recovery guidance; fixed non-answer QA responses to show recovery actions.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ade0a23` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
