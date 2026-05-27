@@ -315,15 +315,23 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     client = _client(tmp_path, fake_embedder)
 
     js = client.get("/static/manual-library/rag_readiness.js")
+    i18n = client.get("/static/manual-library/i18n.js")
 
     assert js.status_code == 200
     assert "/admin/rag-readiness/summary?kb_name=" in js.text
     assert "readiness-cards" in js.text
     assert "renderRecommendations" in js.text
+    assert "primary_action" in js.text
+    assert "action_label" in js.text
+    assert "button-link compact" in js.text
     assert "/admin/rag-workbench" in js.text
     assert "/admin/manual-library" in js.text
     assert "/admin/eval-report" in js.text
     assert "/qa?kb_name=" in js.text
+    assert i18n.status_code == 200
+    assert "Start Q&A" in i18n.text
+    assert "Review manuals" in i18n.text
+    assert "Open latest report" in i18n.text
 
 
 def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fake_embedder):
@@ -337,10 +345,18 @@ def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fak
     assert body["schema_version"] == "rag_readiness.v1"
     assert body["kb_name"] == "missing"
     assert body["status"] == "not_ready"
+    assert body["primary_action"] == {
+        "label": "Manual Library",
+        "href": "/admin/manual-library?kb_name=missing",
+        "kind": "warning",
+    }
     cards = {item["id"]: item for item in body["cards"]}
     assert cards["kb"]["status"] == "not_ready"
     assert cards["qa"]["status"] == "not_ready"
-    assert any(item["code"] == "load_kb" for item in body["recommendations"])
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["load_kb"]["href"] == "/admin/manual-library?kb_name=missing"
+    assert recommendations["load_kb"]["action_label"] == "Manual Library"
+    assert recommendations["try_qa_after_ready"]["href"] == "/qa?kb_name=missing"
 
 
 def test_rag_readiness_summary_reports_review_when_eval_missing(tmp_path, fake_embedder, monkeypatch):
@@ -361,6 +377,68 @@ def test_rag_readiness_summary_reports_review_when_eval_missing(tmp_path, fake_e
     assert cards["manuals"]["status"] == "ready"
     assert cards["eval"]["status"] == "needs_review"
     assert cards["qa"]["status"] == "ready"
+    assert body["primary_action"] == {
+        "label": "Open Eval Report",
+        "href": "/admin/eval-report?kb_name=default",
+        "kind": "warning",
+    }
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["run_eval"]["action_label"] == "Open Eval Report"
+    assert recommendations["run_eval"]["href"] == "/admin/eval-report?kb_name=default"
+
+
+def test_rag_readiness_summary_links_failed_latest_eval_report(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    report_path = tmp_path / ".tmp" / "eval" / "browser-runs" / "coffee-report.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(json.dumps(_eval_report_payload(str(fixture.resolve()), passed=False), ensure_ascii=False), encoding="utf-8")
+    os.utime(report_path, (1_700_000_000, 1_700_000_000))
+    client = _client(tmp_path, fake_embedder)
+    graph = nx.Graph()
+    graph.add_node(1, text="ready")
+    api.app_state.mark_embedder_ready()
+    api.app_state.swap_kb("default", GraphState(graph=graph, vectors=np.zeros((1, 64), dtype=np.float32), build_id="build-ready", kb_name="default"))
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_review"
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["review_eval"]["action_label"] == "Open latest report"
+    assert recommendations["review_eval"]["href"].startswith("/admin/eval-report?kb_name=default&report_path=")
+    assert ".tmp%2Feval%2Fbrowser-runs%2Fcoffee-report.json" in recommendations["review_eval"]["href"]
+    assert body["primary_action"] == {
+        "label": "Open latest report",
+        "href": recommendations["review_eval"]["href"],
+        "kind": "warning",
+    }
+
+
+def test_rag_readiness_summary_primary_action_starts_qa_when_ready(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    report_path = tmp_path / ".tmp" / "eval" / "browser-runs" / "coffee-report.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(json.dumps(_eval_report_payload(str(fixture.resolve()), passed=True), ensure_ascii=False), encoding="utf-8")
+    client = _client(tmp_path, fake_embedder)
+    graph = nx.Graph()
+    graph.add_node(1, text="ready")
+    api.app_state.mark_embedder_ready()
+    api.app_state.swap_kb("default", GraphState(graph=graph, vectors=np.zeros((1, 64), dtype=np.float32), build_id="build-ready", kb_name="default"))
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["primary_action"] == {"label": "Start Q&A", "href": "/qa?kb_name=default", "kind": "primary"}
+    assert body["recommendations"] == []
 
 
 def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder, monkeypatch):
@@ -988,7 +1066,9 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-clear-history"' in body
     assert 'id="qa-sources"' in body
     assert 'id="qa-readiness-link"' in body
+    assert 'class="qa-readiness-link"' in body
     assert 'href="/admin/rag-readiness?kb_name=ops"' in body
+    assert "Check KB state before troubleshooting." in body
     assert "Product manual support" in body
     assert "Try asking" in body
     assert "Ask about a symptom, task, or error." in body

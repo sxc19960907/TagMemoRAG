@@ -80,18 +80,25 @@ function renderSummary(body) {
   el.state.textContent = t(statusLabel(status));
   el.title.textContent = `${t("RAG Readiness")} · ${body.kb_name || state.kbName}`;
   el.summary.textContent = t(body.summary || "");
-  renderActions(body.actions || []);
+  renderActions(body.primary_action || null, body.actions || []);
   renderCards(body.cards || []);
   renderRecommendations(body.recommendations || []);
 }
 
-function renderActions(actions) {
-  if (!Array.isArray(actions) || !actions.length) {
+function renderActions(primaryAction, actions) {
+  const items = [];
+  if (primaryAction?.href) {
+    items.push({ ...primaryAction, primary: true });
+  }
+  if (Array.isArray(actions)) {
+    items.push(...actions.filter((action) => action?.href && action.href !== primaryAction?.href));
+  }
+  if (!items.length) {
     el.actions.innerHTML = "";
     return;
   }
-  el.actions.innerHTML = actions.map((action) => `
-    <a class="button-link ${action.kind === "primary" ? "primary-link" : ""}" href="${escapeHtml(action.href || "#")}">${escapeHtml(t(action.label || "Open"))}</a>
+  el.actions.innerHTML = items.map((action) => `
+    <a class="button-link ${action.primary || action.kind === "primary" ? "primary-link" : ""}" href="${escapeHtml(action.href || "#")}">${escapeHtml(t(action.label || "Open"))}</a>
   `).join("");
 }
 
@@ -133,7 +140,10 @@ function renderRecommendations(recommendations) {
   el.recommendations.innerHTML = items.map((item) => `
     <article class="readiness-recommendation ${escapeHtml(item.severity || "info")}">
       <span class="status-pill ${item.severity === "error" ? "needs-review" : item.severity === "warning" ? "in-progress" : "neutral"}">${escapeHtml(t(item.severity || "info"))}</span>
-      <p>${escapeHtml(t(item.label || ""))}</p>
+      <div>
+        <p>${escapeHtml(t(item.label || ""))}</p>
+        ${item.href ? `<a class="button-link compact" href="${escapeHtml(item.href)}">${escapeHtml(t(item.action_label || "Open"))}</a>` : ""}
+      </div>
     </article>
   `).join("");
 }

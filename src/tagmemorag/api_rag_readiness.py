@@ -39,7 +39,8 @@ def rag_readiness_summary(
     cards.append(qa_card)
 
     status = _overall_status(cards)
-    recommendations = _recommendations(cards)
+    recommendations = _recommendations(cards, kb)
+    primary_action = _primary_action(status, recommendations, kb)
     return {
         "schema_version": SCHEMA_VERSION,
         "kb_name": kb,
@@ -47,6 +48,7 @@ def rag_readiness_summary(
         "summary": _status_summary(status),
         "cards": cards,
         "actions": actions,
+        "primary_action": primary_action,
         "recommendations": recommendations,
     }
 
@@ -199,21 +201,85 @@ def _overall_status(cards: list[dict[str, Any]]) -> str:
     return STATUS_READY
 
 
-def _recommendations(cards: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _recommendations(cards: list[dict[str, Any]], kb_name: str) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = []
     for card in cards:
         status = str(card.get("status") or "")
         if status == STATUS_READY:
             continue
+        detail = _safe_dict(card.get("detail"))
         if card.get("id") == "kb":
-            recommendations.append({"code": "load_kb", "label": "Build or load this KB before using Q&A.", "severity": "error"})
+            recommendations.append(_recommendation(
+                "load_kb",
+                "Build or load this KB before using Q&A.",
+                "error",
+                "Manual Library",
+                _kb_href("manual-library", kb_name),
+                "warning",
+            ))
         elif card.get("id") == "manuals":
-            recommendations.append({"code": "review_manuals", "label": "Open Manual Library and resolve pending rebuild or blob issues.", "severity": "warning"})
+            recommendations.append(_recommendation(
+                "review_manuals",
+                "Open Manual Library and resolve pending rebuild or blob issues.",
+                "warning",
+                "Review manuals",
+                _kb_href("manual-library", kb_name),
+                "warning",
+            ))
         elif card.get("id") == "eval":
-            recommendations.append({"code": "run_eval", "label": "Open Eval Report and run or review the browser eval suite.", "severity": "warning"})
+            report_path = str(detail.get("report_path") or "")
+            recommendations.append(_recommendation(
+                "run_eval" if not detail.get("has_latest_report") else "review_eval",
+                "Open Eval Report and run or review the browser eval suite.",
+                "warning",
+                "Open latest report" if report_path else "Open Eval Report",
+                _report_href(report_path, kb_name),
+                "warning",
+            ))
         elif card.get("id") == "qa":
-            recommendations.append({"code": "try_qa_after_ready", "label": "Open Q&A after the KB is ready.", "severity": "info"})
+            recommendations.append(_recommendation(
+                "try_qa_after_ready",
+                "Open Q&A after the KB is ready.",
+                "info",
+                "Open Q&A",
+                str(detail.get("href") or ""),
+                "secondary",
+            ))
     return recommendations
+
+
+def _recommendation(code: str, label: str, severity: str, action_label: str, href: str, kind: str) -> dict[str, str]:
+    return {
+        "code": code,
+        "label": label,
+        "severity": severity,
+        "action_label": action_label,
+        "href": href,
+        "kind": kind,
+    }
+
+
+def _primary_action(status: str, recommendations: list[dict[str, str]], kb_name: str) -> dict[str, str]:
+    if status == STATUS_READY:
+        return {"label": "Start Q&A", "href": f"/qa?{urlencode({'kb_name': kb_name})}", "kind": "primary"}
+    if recommendations:
+        first = recommendations[0]
+        return {
+            "label": first.get("action_label") or "Review next step",
+            "href": first.get("href") or f"/admin/rag-readiness?{urlencode({'kb_name': kb_name})}",
+            "kind": first.get("kind") or "secondary",
+        }
+    return {"label": "Refresh readiness", "href": f"/admin/rag-readiness?{urlencode({'kb_name': kb_name})}", "kind": "secondary"}
+
+
+def _kb_href(page: str, kb_name: str) -> str:
+    return f"/admin/{page}?{urlencode({'kb_name': kb_name or 'default'})}"
+
+
+def _report_href(report_path: str, kb_name: str) -> str:
+    if report_path:
+        return f"/admin/eval-report?{urlencode({'kb_name': kb_name or 'default', 'report_path': report_path})}"
+    return f"/admin/eval-report?{urlencode({'kb_name': kb_name or 'default'})}"
 
 
 def _base_actions(kb_name: str) -> list[dict[str, str]]:

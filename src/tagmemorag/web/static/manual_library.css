@@ -181,6 +181,32 @@ textarea {
   margin-top: 4px;
 }
 
+.qa-readiness-link {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 9px;
+  text-decoration: none;
+}
+
+.qa-readiness-link:hover,
+.qa-readiness-link:focus-visible {
+  border-color: #7ca7d8;
+  box-shadow: 0 0 0 3px rgba(124, 167, 216, 0.18);
+  outline: none;
+}
+
+.qa-readiness-link span {
+  font-weight: 800;
+}
+
+.qa-readiness-link small {
+  color: var(--muted);
+}
+
 .language-switcher select {
   min-height: 32px;
   padding: 5px 8px;
