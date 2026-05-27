@@ -1574,3 +1574,36 @@ Added visible QA knowledge-base selection, loaded available KBs from the existin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 130: QA feedback eval handoff
+
+**Date**: 2026-05-27
+**Task**: QA feedback eval handoff
+**Branch**: `master`
+
+### Summary
+
+Completed the feedback-to-eval loop smoothing child task: QA saved feedback now links directly to Retrieval Quality with kb_name and feedback_id, Retrieval Quality auto-selects the linked record, and browser readiness verifies the full QA feedback to eval draft path.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6af01dc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
