@@ -1939,3 +1939,36 @@ Closed the seven-part RAG trial operations hardening track after final readiness
 ### Next Steps
 
 - None - task complete
+
+
+## Session 141: QA Page Manual Intake
+
+**Date**: 2026-05-27
+**Task**: QA Page Manual Intake
+**Branch**: `master`
+
+### Summary
+
+Added a QA-page manual upload/index flow that reuses manual-library APIs, with browser coverage for upload to grounded answer.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f680460` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
