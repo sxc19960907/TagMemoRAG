@@ -50,19 +50,18 @@ These warnings do not block the current build or eval pass. They are still impor
 
 The project already has a limited `.docx` OpenXML text extractor in `scripts/seed_multiformat_real_knowledge.py`. That path converts `.docx` content into Markdown before indexing and preserves original-source metadata such as `source_format=docx`.
 
-Direct `.doc` and `.docx` intake through Manual Library/source suffix validation is not currently supported by the native parser or the LangChain parser provider.
+As of the direct `.docx` intake work, Manual Library and Q&A uploads accept `.docx` through the OpenXML-to-Markdown extractor and materialize Markdown for indexing. The native parser and LangChain parser provider still do not parse `.docx` directly.
 
 Current supported direct source suffixes:
 
 - native parser: `.md`, `.pdf`, `.txt`
 - LangChain parser: `.htm`, `.html`, `.md`, `.pdf`, `.txt`
 
-The supported workaround for `.docx` today is that existing conversion path: extract OpenXML text, materialize a `.md` document, then index the Markdown. The multiformat fixture covers this path while preserving `source_format=docx` metadata.
+The supported `.docx` path extracts OpenXML text, materializes a `.md` document, then indexes the Markdown. The multiformat fixture covers this path while preserving `source_format=docx` metadata.
 
 ## Recommendation
 
 Next implementation should be one of these, in order:
 
 1. Add operator-facing parser warning summarization for real PDFs, especially rotated text.
-2. Promote the existing `.docx` OpenXML-to-Markdown extractor into an explicit Manual Library import path that materializes Markdown and preserves original-source metadata.
-3. Consider `.doc` only after `.docx` is stable, because legacy binary Word files need a different dependency/tooling decision.
+2. Consider `.doc` only after `.docx` is stable, because legacy binary Word files need a different dependency/tooling decision.

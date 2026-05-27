@@ -4,6 +4,7 @@ from io import BytesIO
 import json
 from pathlib import Path
 import time
+import zipfile
 
 import numpy as np
 import pytest
@@ -117,6 +118,19 @@ def _metadata(source_file: str = "coffee/cm1.md", manual_id: str = "cm1") -> dic
     }
 
 
+def _docx_bytes(*paragraphs: str) -> bytes:
+    body = "".join(f"<w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>" for paragraph in paragraphs)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return out.getvalue()
+
+
 def _persist_qdrant_baseline(state, cfg) -> None:
     from tagmemorag.chunk_identity import build_chunk_identity_map, identity_path, save_chunk_identity
     from tagmemorag.state import save_kb
@@ -139,11 +153,58 @@ def test_safe_source_path_rejects_traversal_and_unsupported_suffix(library_confi
         safe_source_path("default", "coffee/manual.html", library_config)
     assert native_html.value.code == "INVALID_INPUT"
 
-    for suffix in (".doc", ".docx"):
-        with pytest.raises(ServiceError) as office_doc:
-            safe_source_path("default", f"coffee/manual{suffix}", library_config)
-        assert office_doc.value.code == "INVALID_INPUT"
-        assert office_doc.value.detail["supported_suffixes"] == [".md", ".pdf", ".txt"]
+    with pytest.raises(ServiceError) as office_doc:
+        safe_source_path("default", "coffee/manual.doc", library_config)
+    assert office_doc.value.code == "INVALID_INPUT"
+    assert office_doc.value.detail["supported_suffixes"] == [".md", ".pdf", ".txt"]
+
+
+def test_upsert_docx_converts_to_markdown_and_preserves_source_format(library_config):
+    metadata = _metadata("coffee/service-guide.docx", "service-guide")
+    metadata["title"] = "Service Guide"
+
+    record = upsert_manual(
+        "default",
+        metadata,
+        _docx_bytes("Steam pressure troubleshooting", "Clean the nozzle and refill the tank."),
+        library_config,
+    )
+
+    root = library_root("default", library_config)
+    source = root / "coffee" / "service-guide.md"
+    sidecar = root / "coffee" / "service-guide.metadata.json"
+    assert record.source_file == "coffee/service-guide.md"
+    assert record.metadata.extra["source_format"] == "docx"
+    assert record.metadata.extra["remote_id"] == "coffee/service-guide.docx"
+    assert "Converted from DOCX" in record.metadata.notes
+    assert "Original DOCX: coffee/service-guide.docx" in source.read_text(encoding="utf-8")
+    assert "Clean the nozzle" in source.read_text(encoding="utf-8")
+    sidecar_data = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert sidecar_data["source_file"] == "coffee/service-guide.md"
+    assert sidecar_data["source_format"] == "docx"
+    assert sidecar_data["remote_id"] == "coffee/service-guide.docx"
+
+    state = build_kb(root, "default", library_config, embedder=KeywordEmbedder())
+    assert any("Clean the nozzle" in node["text"] for _, node in state.graph.nodes(data=True))
+
+
+def test_validate_metadata_accepts_docx_by_rewriting_to_markdown(library_config):
+    result = validate_metadata("default", _metadata("coffee/service-guide.docx", "service-guide"), library_config, mode="create")
+
+    assert result.valid is True
+    assert result.normalized is not None
+    assert result.normalized.source_file == "coffee/service-guide.md"
+    assert result.normalized.extra["source_format"] == "docx"
+    assert result.normalized.extra["remote_id"] == "coffee/service-guide.docx"
+
+
+def test_malformed_docx_upload_fails_clearly(library_config):
+    with pytest.raises(ServiceError) as exc:
+        upsert_manual("default", _metadata("coffee/bad.docx", "bad-docx"), b"not a zip", library_config)
+
+    assert exc.value.code == "INVALID_INPUT"
+    assert "Could not extract readable text" in exc.value.message
+    assert exc.value.detail["source_file"] == "coffee/bad.docx"
 
 
 def test_safe_source_path_allows_html_when_langchain_provider_enabled(library_config):

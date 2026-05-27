@@ -97,7 +97,7 @@ Expected behavior:
 If the active KB has no searchable manual content, open `/qa?kb_name=default` and start on the Q&A page:
 
 1. Confirm the answer area says **Start by adding a manual**.
-2. Use the left-side **Add manual** form to upload a `.md`, `.txt`, or text-based `.pdf` manual.
+2. Use the left-side **Add manual** form to upload a `.md`, `.txt`, text-based `.pdf`, or readable `.docx` manual.
 3. Wait for **Manual is indexed. Ask a question about it below.**
 4. Use the generated suggested questions or type a manual-specific question.
 5. Confirm cited sources appear on the right.
@@ -122,7 +122,7 @@ When a user marks an answer **Not helpful**:
 
 For trial manuals:
 
-- Use Manual Library upload for `.md`, `.txt`, or text-based `.pdf` files.
+- Use Manual Library upload for `.md`, `.txt`, text-based `.pdf`, or readable `.docx` files.
 - Keep **Trigger rebuild** enabled for the simplest path.
 - Watch the Next step panel after upload.
 - If rebuild is needed, click **Rebuild now**.

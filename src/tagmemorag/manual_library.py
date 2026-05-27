@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .config import Settings
+from .docx_intake import converted_docx_source_file, docx_to_markdown, is_docx_source
 from .epa_basis import mark_epa_basis_dirty
 from .errors import ErrorCode, ServiceError
 from .manual_blob_store import BlobRef, create_blob_store, guess_content_type
@@ -288,6 +289,7 @@ def validate_metadata(
     tag_policy: Any | None = None,
 ) -> MetadataValidationResult:
     messages: list[ValidationMessage] = []
+    data = _metadata_with_docx_source_rewritten(data)
     try:
         metadata = ManualMetadata.from_dict(data)
     except ServiceError as exc:
@@ -357,6 +359,7 @@ def upsert_manual(
 ) -> ManualLibraryRecord:
     if registry_enabled(cfg):
         return _upsert_manual_registry(kb_name, metadata_data, file_bytes, cfg, overwrite=overwrite)
+    metadata_data, file_bytes = _convert_docx_intake(metadata_data, file_bytes)
     validation = validate_metadata(kb_name, metadata_data, cfg, mode="upsert")
     if not validation.valid or validation.normalized is None:
         _raise_validation_error(validation)
@@ -449,9 +452,12 @@ def replace_manual_file(
     existing = find_record_by_manual_id(kb_name, manual_id, cfg)
     if existing is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    metadata_data = metadata_to_dict(existing.metadata) or {}
+    if existing.metadata.extra.get("source_format") == "docx":
+        metadata_data, file_bytes = _convert_docx_intake(metadata_data, file_bytes)
     source_path = safe_source_path(kb_name, existing.source_file, cfg)
     checksum = hashlib.sha256(file_bytes).hexdigest()
-    metadata = replace(existing.metadata, checksum=checksum, uploaded_at=_now())
+    metadata = replace(ManualMetadata.from_dict(metadata_data), checksum=checksum, uploaded_at=_now())
     tmp_path = source_path.parent / f".{source_path.name}.upload.tmp"
     try:
         tmp_path.write_bytes(file_bytes)
@@ -672,7 +678,9 @@ def materialize_registry_build_source(kb_name: str, cfg: Settings):
 def metadata_to_dict(metadata: ManualMetadata | None) -> dict[str, Any] | None:
     if metadata is None:
         return None
-    return {field: getattr(metadata, field) if field != "tags" else list(metadata.tags) for field in MANUAL_METADATA_FIELDS}
+    data = {field: getattr(metadata, field) if field != "tags" else list(metadata.tags) for field in MANUAL_METADATA_FIELDS}
+    data.update(metadata.extra)
+    return data
 
 
 def is_active_status(status: str) -> bool:
@@ -875,6 +883,7 @@ def _upsert_manual_registry(
     *,
     overwrite: bool,
 ) -> ManualLibraryRecord:
+    metadata_data, file_bytes = _convert_docx_intake(metadata_data, file_bytes)
     validation = validate_metadata(kb_name, metadata_data, cfg, mode="upsert")
     if not validation.valid or validation.normalized is None:
         _raise_validation_error(validation)
@@ -934,18 +943,51 @@ def _replace_manual_file_registry(kb_name: str, manual_id: str, file_bytes: byte
     current = registry.get(kb_name, manual_id)
     if current is None:
         raise ServiceError(ErrorCode.INVALID_REQUEST, "Manual not found.", {"manual_id": manual_id, "kb_name": kb_name})
+    metadata_data = metadata_to_dict(current.metadata) or {}
+    if current.metadata.extra.get("source_format") == "docx":
+        metadata_data, file_bytes = _convert_docx_intake(metadata_data, file_bytes)
+    metadata = ManualMetadata.from_dict(metadata_data)
     checksum = hashlib.sha256(file_bytes).hexdigest()
-    metadata = replace(current.metadata, checksum=checksum, uploaded_at=_now())
+    metadata = replace(metadata, checksum=checksum, uploaded_at=_now())
     blob_ref = create_blob_store(cfg).put(
         kb_name,
         manual_id,
-        current.source_file,
+        metadata.source_file,
         file_bytes,
-        {"content_type": guess_content_type(current.source_file), "version": current.version + 1},
+        {"content_type": guess_content_type(metadata.source_file), "version": current.version + 1},
     )
     updated = registry.upsert(kb_name, metadata, blob_ref, operation="file_replace")
-    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=current.source_file, operation="file_replace", checksum=checksum)
+    mark_dirty(kb_name, cfg, manual_id=manual_id, source_file=metadata.source_file, operation="file_replace", checksum=checksum)
     return _record_from_registry(updated, load_manifest(kb_name, cfg), graph_state=None)
+
+
+def _metadata_with_docx_source_rewritten(metadata_data: dict[str, Any]) -> dict[str, Any]:
+    source_file = str(metadata_data.get("source_file") or "").strip()
+    if not is_docx_source(source_file):
+        return dict(metadata_data)
+    updated = dict(metadata_data)
+    updated["source_file"] = converted_docx_source_file(source_file)
+    updated.setdefault("source_format", "docx")
+    updated.setdefault("remote_id", source_file)
+    return updated
+
+
+def _convert_docx_intake(metadata_data: dict[str, Any], file_bytes: bytes) -> tuple[dict[str, Any], bytes]:
+    source_file = str(metadata_data.get("source_file") or "").strip()
+    original_source_file = str(metadata_data.get("remote_id") or source_file).strip()
+    if not is_docx_source(source_file) and not (
+        str(metadata_data.get("source_format") or "").strip().lower() == "docx" and is_docx_source(original_source_file)
+    ):
+        return dict(metadata_data), file_bytes
+    updated = _metadata_with_docx_source_rewritten(metadata_data)
+    if not is_docx_source(source_file):
+        updated.setdefault("source_format", "docx")
+        updated.setdefault("remote_id", original_source_file)
+    title = str(updated.get("title") or Path(original_source_file).stem)
+    markdown = docx_to_markdown(file_bytes, title=title, source_file=original_source_file)
+    if not str(updated.get("notes") or "").strip():
+        updated["notes"] = "Converted from DOCX during manual intake."
+    return updated, markdown
 
 
 def _disable_manual_registry(kb_name: str, manual_id: str, cfg: Settings, *, archived: bool) -> ManualLibraryRecord:

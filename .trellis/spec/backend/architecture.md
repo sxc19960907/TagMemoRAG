@@ -593,6 +593,8 @@ their expected labels.
 
 **Multi-format real knowledge slice.** As of 2026-05-24, `scripts/seed_multiformat_real_knowledge.py` materializes an opt-in real-source corpus that covers HTML-derived Markdown, a text-based public PDF, and DOCX-derived Markdown. DOCX is handled as source materialization, not as a new native parser suffix: the script safely reads OpenXML text from the zipped `word/document.xml`, writes Markdown plus metadata, and then the normal `.md/.pdf` build path indexes the corpus. Metadata sidecars preserve `source_format` (`html`, `pdf`, `docx`) along with `domain`, `doc_type`, `remote_id`, and `url`, so eval cases can verify both content and format lineage. Run it with:
 
+As of 2026-05-27, managed Manual Library, bulk import, and QA upload intake use the same boundary for direct `.docx` uploads: convert readable OpenXML paragraphs into Markdown before storage, rewrite the managed `source_file` from `.docx` to `.md`, and preserve `source_format=docx` plus `remote_id=<original .docx source_file>`. The native parser still does not list `.docx` as a supported suffix; `.doc` remains unsupported.
+
 ```text
 .venv/bin/python scripts/seed_multiformat_real_knowledge.py \
   --output-dir .tmp/multiformat-real-knowledge \

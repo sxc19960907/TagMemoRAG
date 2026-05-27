@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -183,10 +183,12 @@ def preview_bulk_import(
     file_by_name = {file.normalized_name: file for file in uploaded_files}
     matched_files = {candidate.uploaded_filename for candidate in candidates if candidate.uploaded_filename}
 
+    normalized_candidates: list[BulkImportCandidate] = []
     for candidate in candidates:
         for message in candidate.parse_errors:
             issues.append(_issue_from_message(candidate, message))
         if candidate.metadata is None:
+            normalized_candidates.append(candidate)
             continue
         validation = validate_metadata(
             kb_name,
@@ -197,9 +199,18 @@ def preview_bulk_import(
         )
         for message in validation.messages:
             issues.append(_issue_from_message(candidate, message))
-        _append_file_issues(kb_name, candidate, cfg, issues)
-        _append_existing_conflicts(kb_name, candidate, cfg, mode=mode, overwrite=overwrite, issues=issues)
+        effective_candidate = candidate
+        if validation.normalized is not None:
+            effective_candidate = replace(
+                candidate,
+                source_file=validation.normalized.source_file,
+                metadata=validation.normalized,
+            )
+        normalized_candidates.append(effective_candidate)
+        _append_file_issues(kb_name, effective_candidate, cfg, issues)
+        _append_existing_conflicts(kb_name, effective_candidate, cfg, mode=mode, overwrite=overwrite, issues=issues)
 
+    candidates = tuple(normalized_candidates)
     _append_duplicate_issues(candidates, "manual_id", issues)
     _append_duplicate_issues(candidates, "source_file", issues)
     _append_conflicting_status_issues(candidates, issues)

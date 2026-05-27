@@ -43,6 +43,16 @@ def test_real_pdf_document_intake_report_records_current_boundary():
     assert "recall@k" in report
     assert "0.966667" in report
     assert "limited `.docx` OpenXML text extractor" in report
-    assert "Direct `.doc` and `.docx` intake through Manual Library" in report
+    assert "Manual Library and Q&A uploads accept `.docx`" in report
     assert "OpenXML-to-Markdown extractor" in report
     assert "parser warning summarization" in report
+
+
+def test_docx_direct_intake_is_documented_for_browser_users():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    quick_start = (ROOT / "docs" / "browser-rag-quick-start.md").read_text(encoding="utf-8")
+    trial = (ROOT / "docs" / "trial-operator-handoff-2026-05-27.md").read_text(encoding="utf-8")
+
+    assert "uploads also accept `.docx`" in readme
+    assert "readable `.docx` manual" in quick_start
+    assert "readable `.docx` files" in trial

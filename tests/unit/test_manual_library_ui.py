@@ -1102,6 +1102,8 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert "Add manual" in body
     assert 'id="qa-upload-form"' in body
     assert 'id="qa-upload-file"' in body
+    assert ".docx" in body
+    assert "application/vnd.openxmlformats-officedocument.wordprocessingml.document" in body
     assert 'id="qa-upload-submit"' in body
     assert 'id="qa-manual-library-link"' in body
     assert 'href="/admin/manual-library?kb_name=ops"' in body

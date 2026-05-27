@@ -85,7 +85,7 @@ Use this path when the KB is empty or when you want the shortest normal-user flo
 
 1. Open `http://127.0.0.1:8000/qa?kb_name=default`.
 2. In the answer area, confirm the page says **Start by adding a manual**.
-3. Use the left-side **Add manual** form to choose a `.md`, `.txt`, or text-based `.pdf` manual.
+3. Use the left-side **Add manual** form to choose a `.md`, `.txt`, text-based `.pdf`, or readable `.docx` manual.
 4. Fill or confirm the title, source file, category, language, and tags.
 5. Click **Add and index**.
 6. Wait for **Manual is indexed. Ask a question about it below.**
@@ -99,7 +99,7 @@ If indexing fails, use the recovery links shown on the Q&A page: **Check readine
 Use this path when you want the operator view of metadata, searchable state, and rebuild status:
 
 1. Click **Upload**.
-2. Choose a `.md`, `.txt`, or text-based `.pdf` manual.
+2. Choose a `.md`, `.txt`, text-based `.pdf`, or readable `.docx` manual.
 3. Fill required metadata: `Manual ID`, `Title`, `Source file`, and `Category`.
 4. Keep **Trigger rebuild** checked.
 5. Submit the upload.

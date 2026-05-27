@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from io import BytesIO
 import json
+import zipfile
 
 import pytest
 
@@ -33,6 +35,19 @@ def _row(manual_id: str = "cm1", source_file: str = "coffee/cm1.md") -> dict[str
         "language": "zh-CN",
         "tags": ["Maintenance Task"],
     }
+
+
+def _docx_bytes(*paragraphs: str) -> bytes:
+    body = "".join(f"<w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>" for paragraph in paragraphs)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return out.getvalue()
 
 
 def test_parse_metadata_supports_json_jsonl_and_csv():
@@ -171,6 +186,33 @@ def test_commit_creates_valid_manuals_and_marks_pending(library_config):
     root = library_root("default", library_config)
     assert (root / "coffee" / "cm1.md").exists()
     assert {record.manual_id for record in list_records("default", library_config)} == {"cm1", "cm2"}
+
+
+def test_bulk_import_accepts_docx_and_materializes_markdown(library_config):
+    result = commit_bulk_import(
+        "default",
+        json.dumps([_row("docx-guide", "coffee/service-guide.docx")]),
+        "json",
+        [BulkUploadedFile("service-guide.docx", _docx_bytes("Steam wand pressure", "Clean the nozzle weekly."))],
+        library_config,
+    )
+
+    assert result.imported_count == 1
+    assert result.failed_count == 0
+    assert result.preview is not None
+    assert result.preview.error_count == 0
+    normalized = result.preview.candidates[0]
+    assert normalized.source_file == "coffee/service-guide.md"
+    assert normalized.uploaded_filename == "service-guide.docx"
+
+    root = library_root("default", library_config)
+    source = root / "coffee" / "service-guide.md"
+    sidecar = json.loads((root / "coffee" / "service-guide.metadata.json").read_text(encoding="utf-8"))
+    assert source.exists()
+    assert "Clean the nozzle weekly." in source.read_text(encoding="utf-8")
+    assert sidecar["source_file"] == "coffee/service-guide.md"
+    assert sidecar["source_format"] == "docx"
+    assert sidecar["remote_id"] == "coffee/service-guide.docx"
 
 
 def test_commit_allows_selected_row_with_metadata_info_hint(library_config):

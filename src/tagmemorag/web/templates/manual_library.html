@@ -218,7 +218,7 @@
             <section class="file-actions">
               <h3>Source File</h3>
               <p class="muted">Large content changes may leave anchors unresolved until the next rebuild.</p>
-              <input id="replace-file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf">
+              <input id="replace-file" type="file" accept=".md,.txt,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
               <button type="button" id="replace-file-button">Replace file</button>
             </section>
 
@@ -267,7 +267,7 @@
           <h2>Upload Manual</h2>
           <button type="button" id="close-upload" aria-label="Close upload dialog">x</button>
         </div>
-        <label><span>File</span><input name="file" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" required></label>
+        <label><span>File</span><input name="file" type="file" accept=".md,.txt,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label>
         <div class="field-grid">
           <label><span>Manual ID</span><input name="manual_id" required></label>
           <label><span>Title</span><input name="title" required></label>
@@ -325,7 +325,7 @@
         </div>
         <label><span>Metadata file</span><input name="metadata_file" type="file" accept=".csv,.json,.jsonl,text/csv,application/json"></label>
         <label><span>Metadata text</span><textarea name="metadata" rows="8" spellcheck="false" placeholder="manual_id,title,source_file,product_category,language,tags"></textarea></label>
-        <label><span>Documents</span><input name="files" type="file" accept=".md,.txt,.pdf,text/plain,text/markdown,application/pdf" multiple></label>
+        <label><span>Documents</span><input name="files" type="file" accept=".md,.txt,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple></label>
         <div class="toggles">
           <label><input name="overwrite" type="checkbox"> Approve overwrite/upsert</label>
           <label><input name="trigger_rebuild" type="checkbox"> Trigger rebuild after import</label>

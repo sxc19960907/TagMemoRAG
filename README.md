@@ -22,7 +22,7 @@ pip install -e ".[dev]"
 python -m tagmemorag build --docs docs/ --kb default --config config.yaml
 ```
 
-`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). PDF support extracts embedded text and uses a parser profile to split section-like chunks when headings are visible; the default `product_manual` profile preserves current product-manual heading hints, while `generic` uses only structural heading cues plus optional `parser.pdf_heading_hints`. Scanned image-only PDFs still need OCR before indexing.
+`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). Managed Manual Library and Q&A uploads also accept `.docx` by converting readable OpenXML text into Markdown before indexing. PDF support extracts embedded text and uses a parser profile to split section-like chunks when headings are visible; the default `product_manual` profile preserves current product-manual heading hints, while `generic` uses only structural heading cues plus optional `parser.pdf_heading_hints`. Scanned image-only PDFs still need OCR before indexing.
 
 Manual metadata can live next to each source file as `<manual>.metadata.json`:
 

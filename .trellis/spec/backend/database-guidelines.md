@@ -94,7 +94,7 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 - Successful managed-library rebuilds may write `data/{kb_name}/chunk_identity.json` and `data/{kb_name}/rebuild_impact.json`. The identity map is a built artifact with `schema_version`, `kb_name`, `build_id`, parser settings, stable chunk identity keys, text hashes, node ids, vector rows, and metadata hashes. The impact report is operational metadata with counts and hashes/ids only; it must not include raw chunk text.
 - When `vector_store.provider=qdrant`, new points store safe payload fields only: `kb_name`, `node_id`, `build_id`, `chunk_identity_key`, `manual_id`, `source_file`, and `text_hash`. Raw chunk text, secrets, and embedding arrays outside the Qdrant vector itself must not be payload fields. Older Qdrant collections that only have `kb_name` and `node_id` payloads remain load-compatible.
 - `source_file` must be relative, non-empty, path traversal free, and resolve under the KB library root.
-- Supported source suffixes remain `.md`, `.txt`, and `.pdf`.
+- Supported parser source suffixes remain `.md`, `.txt`, and `.pdf`. Managed Manual Library and bulk/QA upload intake may accept readable `.docx` files only by converting OpenXML text to Markdown before storage; the stored `source_file` must use a `.md` suffix, while sidecar metadata preserves `source_format=docx` and `remote_id=<original .docx source_file>`.
 - Write sidecars and manifests with `atomic_write()`. Uploaded source files must replace through a temp file in the target directory.
 - Metadata/status truth lives in sidecars. Manifest tracks only KB-level pending/build state.
 - `status=disabled` and `status=archived` manuals stay listed but are skipped by `build_kb()`.
@@ -107,6 +107,7 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 
 - Unsafe `source_file` -> `INVALID_INPUT`.
 - Unsupported suffix -> `INVALID_INPUT`.
+- Malformed or unreadable `.docx` intake -> `INVALID_INPUT` with sanitized detail containing the original `source_file` and failure class, never raw document text.
 - Malformed metadata JSON/form field -> `INVALID_INPUT`.
 - Duplicate `manual_id` during create validation -> validation message `DUPLICATE_MANUAL_ID`.
 - Duplicate create/upload without overwrite -> `INVALID_REQUEST`.
@@ -119,12 +120,14 @@ Incremental methods such as `add_nodes`, `remove_nodes`, `delete`, and `update` 
 ### 5. Good/Base/Bad Cases
 
 - Good: upload source + valid sidecar, list shows `rebuild_required=true`, library rebuild succeeds, list shows `searchable=true` and pending clears.
+- Good: upload `coffee/service-guide.docx`; intake writes `coffee/service-guide.md`, sidecar keeps `source_format=docx` and `remote_id=coffee/service-guide.docx`, and rebuild indexes the materialized Markdown.
 - Base: a KB with regular filesystem sidecars can still be built directly through CLI or `POST /rebuild`.
-- Bad: writing a source file outside the library root, accepting `.exe`, or clearing pending before rebuild success.
+- Bad: writing a source file outside the library root, accepting `.exe`, storing raw `.docx` as a parser source, or clearing pending before rebuild success.
 
 ### 6. Tests Required
 
 - Unit: safe path traversal, unsupported suffix, metadata normalization, duplicate manual id, manifest pending, create/update/delete/list.
+- Unit: `.docx` intake conversion, original-source metadata preservation, malformed `.docx` error, and bulk import preview/commit matching where metadata names `.docx` but the stored source becomes `.md`.
 - Build: disabled sidecar is skipped while no-sidecar fallback remains active.
 - API: validate, upload conflict, metadata update, soft delete, hard delete admin requirement, library listing, library rebuild.
 - Regression: existing graph-derived `GET /manuals` and explicit `POST /rebuild {docs_dir}` stay compatible.
