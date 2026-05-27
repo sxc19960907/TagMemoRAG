@@ -1774,3 +1774,36 @@ Added a Retrieval Quality triage next-action panel, quick Mark Triaged flow, i18
 ### Next Steps
 
 - None - task complete
+
+
+## Session 136: Upload Rebuild Recovery Hardening
+
+**Date**: 2026-05-27
+**Task**: Upload Rebuild Recovery Hardening
+**Branch**: `master`
+
+### Summary
+
+Clarified Manual Library rebuild failure recovery with a dedicated failed next-step state, preserved old-KB guidance, updated browser failure-state coverage, and refreshed trial handoff docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7203594` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

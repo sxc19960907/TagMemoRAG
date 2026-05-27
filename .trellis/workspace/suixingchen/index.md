@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 135
+- **Total Sessions**: 136
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1776 | Active |
+| `journal-3.md` | ~1809 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 136 | 2026-05-27 | Upload Rebuild Recovery Hardening | `7203594` | `master` |
 | 135 | 2026-05-27 | Feedback Triage Workflow Hardening | `6a156a3` | `master` |
 | 134 | 2026-05-27 | Trial operator handoff | `b1f63b9` | `master` |
 | 133 | 2026-05-27 | RAG UX program closure | `52111e0`, `7450f84`, `6af01dc` | `master` |
