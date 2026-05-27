@@ -8,7 +8,7 @@
 - [x] Create and complete child task 4: user-facing KB selection and multi-KB clarity.
 - [x] Create and complete child task 5: feedback-to-eval loop smoothing.
 - [x] Create and complete child task 6: deployment/pilot readiness pass.
-- [ ] Create and complete child task 7: integrated black-box user acceptance review.
+- [x] Create and complete child task 7: integrated black-box user acceptance review.
 
 ## Validation Pattern
 

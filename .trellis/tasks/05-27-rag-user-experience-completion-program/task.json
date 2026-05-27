@@ -24,7 +24,8 @@
     "05-27-test-tier-quality-gate-documentation",
     "05-27-user-facing-kb-selection-multi-kb-clarity",
     "05-27-feedback-to-eval-loop-smoothing",
-    "05-27-deployment-pilot-readiness-pass"
+    "05-27-deployment-pilot-readiness-pass",
+    "05-27-integrated-black-box-user-acceptance-review"
   ],
   "parent": null,
   "relatedFiles": [],

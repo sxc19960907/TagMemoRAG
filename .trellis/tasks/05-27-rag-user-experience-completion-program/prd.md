@@ -37,20 +37,20 @@ TagMemoRAG should feel usable from the browser without requiring command-line kn
 
 ## Cross-Child Acceptance Criteria
 
-- [ ] A new user can open `/qa?kb_name=default` and get useful grounded answers for at least three realistic suggested questions.
-- [ ] QA answers show clear source evidence or clear recovery actions when evidence is insufficient.
-- [ ] Browser tests cover the most important normal-user QA journey.
-- [ ] Admin/workbench flows remain compatible with user-facing QA changes.
-- [ ] Test commands and readiness checks are documented enough for future sessions to continue reliably.
-- [ ] Completed child tasks are archived and journaled.
-- [ ] The final program includes a black-box browser acceptance pass from the user perspective.
+- [x] A new user can open `/qa?kb_name=default` and get useful grounded answers for at least three realistic suggested questions.
+- [x] QA answers show clear source evidence or clear recovery actions when evidence is insufficient.
+- [x] Browser tests cover the most important normal-user QA journey.
+- [x] Admin/workbench flows remain compatible with user-facing QA changes.
+- [x] Test commands and readiness checks are documented enough for future sessions to continue reliably.
+- [x] Completed child tasks are archived and journaled.
+- [x] The final program includes a black-box browser acceptance pass from the user perspective.
 
 ## Acceptance Criteria
 
-- [ ] All roadmap child tasks are completed or deliberately deferred with a written reason.
-- [ ] The user-facing QA experience is stable enough for a normal browser-based RAG trial.
-- [ ] The final verification suite passes locally, including the relevant browser UI checks.
-- [ ] Network-dependent GitHub push remains deferred unless explicitly resumed by the user.
+- [x] All roadmap child tasks are completed or deliberately deferred with a written reason.
+- [x] The user-facing QA experience is stable enough for a normal browser-based RAG trial.
+- [x] The final verification suite passes locally, including the relevant browser UI checks.
+- [x] Network-dependent GitHub push remains deferred unless explicitly resumed by the user.
 
 ## Notes
 
