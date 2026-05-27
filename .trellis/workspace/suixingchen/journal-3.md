@@ -1474,3 +1474,37 @@ Added browser regression assertions for the QA first screen, loading guidance, s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 127: RAG UX completion program progress
+
+**Date**: 2026-05-27
+**Task**: RAG UX completion program progress
+**Branch**: `master`
+
+### Summary
+
+Started the RAG user experience completion parent program, stabilized the first-run QA demo around the browser suggested troubleshooting question, and added a browser QA readiness CLI gate that runs the normal-user Playwright path.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `adc48d9` | (see git log) |
+| `cf14eec` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
