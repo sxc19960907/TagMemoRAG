@@ -98,6 +98,7 @@ function renderEvalSuites() {
     $("eval-run-start").disabled = true;
     $("eval-run-status").className = "eval-run-status empty-state";
     $("eval-run-status").textContent = t("No eval suites available.");
+    renderSuiteHistory();
     return;
   }
   select.innerHTML = state.suites.map((suite) => `
@@ -109,6 +110,7 @@ function renderEvalSuites() {
   }
   $("eval-run-start").disabled = false;
   renderRunIdle();
+  renderSuiteHistory();
 }
 
 async function startEvalRun() {
@@ -125,6 +127,18 @@ async function startEvalRun() {
   pollEvalRun(job.job_id);
 }
 
+function selectSuite(suiteId) {
+  if (!suiteId) return;
+  $("eval-run-suite").value = suiteId;
+  renderRunIdle();
+  renderSuiteHistory();
+}
+
+async function runSuite(suiteId) {
+  selectSuite(suiteId);
+  await startEvalRun();
+}
+
 async function pollEvalRun(jobId) {
   clearRunPoll();
   const tick = async () => {
@@ -137,6 +151,7 @@ async function pollEvalRun(jobId) {
     }
     $("eval-run-start").disabled = false;
     if (job.report_path) {
+      await loadEvalSuites().catch(() => {});
       await loadRecentReports().catch(() => {});
     }
   };
@@ -154,6 +169,76 @@ function renderRunIdle() {
       <small>${escapeHtml(suite.suite_path || "")}</small>
     `
     : t("Select an eval suite first.");
+}
+
+function renderSuiteHistory() {
+  const node = $("eval-suite-history");
+  const suites = state.suites || [];
+  $("eval-suite-history-count").textContent = suites.length
+    ? `${suites.length} ${t("suites")}`
+    : t("No eval suites available.");
+  if (!suites.length) {
+    node.className = "eval-suite-history empty-state";
+    node.textContent = t("No eval suites available.");
+    return;
+  }
+  node.className = "eval-suite-history";
+  node.innerHTML = suites.map(renderSuiteHistoryCard).join("");
+}
+
+function renderSuiteHistoryCard(suite) {
+  const selected = selectedSuite()?.suite_id === suite.suite_id;
+  const latest = suite.latest_report || null;
+  const latestClass = latest
+    ? latest.passed === true
+      ? "good"
+      : latest.passed === false
+        ? "needs-review"
+        : "neutral"
+    : "neutral";
+  const latestLabel = latest
+    ? latest.passed === true
+      ? t("Latest passed")
+      : latest.passed === false
+        ? t("Latest needs review")
+        : t("Latest ready")
+    : t("Not run yet");
+  const latestMeta = latest
+    ? `${Number(latest.cases || 0)} ${t("cases")} · ${Number(latest.failed || 0)} ${t("failed")} · ${formatModified(latest.modified_at)}`
+    : t("Run this suite to create a browser report.");
+  const latestActions = latest?.path
+    ? `
+      <a class="button-link compact" href="/admin/eval-report?report_path=${encodeURIComponent(latest.path)}">${t("Open latest")}</a>
+      <button class="button-link compact" type="button" data-load-suite-report="${escapeHtml(suite.suite_id)}">${t("Load latest")}</button>
+    `
+    : "";
+  return `
+    <article class="eval-suite-card ${selected ? "selected" : ""}">
+      <header>
+        <div>
+          <span class="status-pill ${latestClass}">${escapeHtml(latestLabel)}</span>
+          <h3>${escapeHtml(t(suite.name || suite.suite_id))}</h3>
+          <p>${escapeHtml(t(suite.description || ""))}</p>
+        </div>
+        <button class="button-link compact" type="button" data-select-suite="${escapeHtml(suite.suite_id)}">${selected ? t("Selected") : t("Select")}</button>
+      </header>
+      <dl class="eval-suite-meta">
+        <dt>${t("Type")}</dt><dd>${escapeHtml(t(suite.kind === "feedback_draft" ? "Feedback draft" : "Fixture suite"))}</dd>
+        <dt>${t("Cases")}</dt><dd>${Number(suite.case_count || 0) || "-"}</dd>
+        <dt>${t("Mode")}</dt><dd>${escapeHtml(t(suite.reuse_built_kb ? "Uses current KB" : "Builds from docs"))}</dd>
+        <dt>${t("Updated")}</dt><dd>${escapeHtml(suite.modified_at ? formatModified(suite.modified_at) : "-")}</dd>
+      </dl>
+      <div class="eval-suite-latest">
+        <strong>${t("Latest report")}</strong>
+        <small>${escapeHtml(latestMeta)}</small>
+        ${latest?.relative_path ? `<small>${escapeHtml(latest.relative_path)}</small>` : ""}
+      </div>
+      <div class="eval-run-actions">
+        <button class="primary compact" type="button" data-run-suite="${escapeHtml(suite.suite_id)}">${t("Run eval")}</button>
+        ${latestActions}
+      </div>
+    </article>
+  `;
 }
 
 function renderRunMessage(message) {
@@ -292,6 +377,17 @@ function loadRecentReport(index) {
   const item = state.recentReports[index];
   if (!item?.path) return;
   $("eval-report-path").value = item.path;
+  loadReport().catch((error) => {
+    renderEmpty();
+    setStatus(error.message, "error");
+  });
+}
+
+function loadSuiteLatestReport(suiteId) {
+  const suite = state.suites.find((item) => item.suite_id === suiteId);
+  const path = suite?.latest_report?.path;
+  if (!path) return;
+  $("eval-report-path").value = path;
   loadReport().catch((error) => {
     renderEmpty();
     setStatus(error.message, "error");
@@ -516,6 +612,26 @@ $("eval-report-recents").addEventListener("click", (event) => {
   const card = event.target.closest("[data-report-index]");
   if (!card) return;
   loadRecentReport(Number(card.dataset.reportIndex));
+});
+$("eval-suite-history").addEventListener("click", (event) => {
+  const selectButton = event.target.closest("[data-select-suite]");
+  if (selectButton) {
+    selectSuite(selectButton.dataset.selectSuite);
+    return;
+  }
+  const runButton = event.target.closest("[data-run-suite]");
+  if (runButton) {
+    runSuite(runButton.dataset.runSuite).catch((error) => {
+      $("eval-run-start").disabled = false;
+      renderRunMessage(error.message);
+      setStatus(error.message, "error");
+    });
+    return;
+  }
+  const loadButton = event.target.closest("[data-load-suite-report]");
+  if (loadButton) {
+    loadSuiteLatestReport(loadButton.dataset.loadSuiteReport);
+  }
 });
 
 bindSharedApiToken($("eval-report-api-token"));

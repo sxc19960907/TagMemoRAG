@@ -1464,6 +1464,11 @@ dialog {
   padding: 6px 10px;
 }
 
+.primary.compact {
+  min-height: 30px;
+  padding: 6px 10px;
+}
+
 .eval-report-form {
   grid-template-columns: minmax(360px, 1fr) auto;
 }
@@ -1535,6 +1540,95 @@ dialog {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
+}
+
+.eval-suite-history-pane {
+  margin-bottom: 12px;
+}
+
+.eval-suite-history {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.eval-suite-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.eval-suite-card.selected {
+  border-color: #5487bd;
+  box-shadow: 0 0 0 3px rgba(84, 135, 189, 0.16);
+}
+
+.eval-suite-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.eval-suite-card h3,
+.eval-suite-card p {
+  margin: 0;
+}
+
+.eval-suite-card h3 {
+  margin-top: 7px;
+  font-size: 15px;
+}
+
+.eval-suite-card p,
+.eval-suite-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.eval-suite-card p {
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+.eval-suite-card .status-pill {
+  justify-self: start;
+}
+
+.eval-suite-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.eval-suite-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.eval-suite-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.eval-suite-latest {
+  display: grid;
+  gap: 4px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 9px;
+}
+
+.eval-suite-latest strong {
+  font-size: 13px;
 }
 
 .eval-report-recents-pane {

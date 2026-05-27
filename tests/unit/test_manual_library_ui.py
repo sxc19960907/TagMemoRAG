@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -225,6 +226,8 @@ def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="eval-run-suite"' in body
     assert 'id="eval-run-start"' in body
     assert 'id="eval-run-status"' in body
+    assert 'id="eval-suite-history"' in body
+    assert 'id="eval-suite-history-count"' in body
     assert 'id="eval-report-recents"' in body
     assert 'id="eval-report-refresh"' in body
     assert 'id="eval-report-cases"' in body
@@ -249,6 +252,11 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "pollEvalRun" in js.text
     assert "eval-run-suite" in js.text
     assert "eval-run-status" in js.text
+    assert "eval-suite-history" in js.text
+    assert "renderSuiteHistory" in js.text
+    assert "latest_report" in js.text
+    assert "Open latest" in js.text
+    assert "Load latest" in js.text
     assert "suiteMetaText" in js.text
     assert "defaultSuitePath" in js.text
     assert "Feedback draft" in js.text
@@ -271,7 +279,13 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "/qa?kb_name=" in js.text
 
 
-def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder):
+def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    docs = tmp_path / "tests" / "fixtures"
+    docs.mkdir(parents=True, exist_ok=True)
     client = _client(tmp_path, fake_embedder)
 
     response = client.get("/eval/suites")
@@ -286,6 +300,84 @@ def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder):
     assert suites["coffee_smoke"]["kind"] == "fixture"
     assert suites["coffee_smoke"]["reuse_built_kb"] is False
     assert suites["coffee_smoke"]["thresholds"]["min_recall_at_k"] == 0.0
+    assert suites["coffee_smoke"]["latest_report"] is None
+
+
+def test_eval_suites_api_includes_latest_matching_report(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    client = _client(tmp_path, fake_embedder)
+    report_dir = tmp_path / ".tmp" / "eval" / "browser-runs"
+    report_dir.mkdir(parents=True)
+    older = report_dir / "older-report.json"
+    older.write_text(json.dumps(_eval_report_payload("tests/fixtures/eval/coffee.jsonl", passed=False), ensure_ascii=False), encoding="utf-8")
+    newer = report_dir / "newer-report.json"
+    newer.write_text(json.dumps(_eval_report_payload(str((tmp_path / "tests/fixtures/eval/coffee.jsonl").resolve()), passed=True), ensure_ascii=False), encoding="utf-8")
+    older_time = 1_700_000_000
+    newer_time = 1_700_000_100
+    os.utime(older, (older_time, older_time))
+    os.utime(newer, (newer_time, newer_time))
+
+    response = client.get("/eval/suites")
+
+    assert response.status_code == 200
+    suites = {item["suite_id"]: item for item in response.json()["suites"]}
+    latest = suites["coffee_smoke"]["latest_report"]
+    assert latest["relative_path"] == ".tmp/eval/browser-runs/newer-report.json"
+    assert latest["passed"] is True
+    assert latest["cases"] == 2
+    assert latest["failed"] == 0
+
+
+def test_eval_suites_api_matches_latest_report_beyond_recent_report_limit(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    client = _client(tmp_path, fake_embedder)
+    report_dir = tmp_path / ".tmp" / "eval"
+    report_dir.mkdir(parents=True)
+    matched = report_dir / "browser-runs" / "coffee-report.json"
+    matched.parent.mkdir()
+    matched.write_text(json.dumps(_eval_report_payload(str(fixture.resolve()), passed=True), ensure_ascii=False), encoding="utf-8")
+    os.utime(matched, (1_700_000_000, 1_700_000_000))
+    for index in range(api_eval_report.MAX_REPORT_LIST_LIMIT + 1):
+        noise = report_dir / f"noise-{index}-report.json"
+        noise.write_text(json.dumps(_eval_report_payload("tests/fixtures/eval/general_web.jsonl", passed=True), ensure_ascii=False), encoding="utf-8")
+        newer = 1_800_000_000 + index
+        os.utime(noise, (newer, newer))
+
+    response = client.get("/eval/suites")
+
+    assert response.status_code == 200
+    suites = {item["suite_id"]: item for item in response.json()["suites"]}
+    assert suites["coffee_smoke"]["latest_report"]["relative_path"] == ".tmp/eval/browser-runs/coffee-report.json"
+
+
+def test_eval_suites_api_prefers_browser_run_report_over_newer_matching_report(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fixture = tmp_path / "tests" / "fixtures" / "eval" / "coffee.jsonl"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text("{}\n", encoding="utf-8")
+    client = _client(tmp_path, fake_embedder)
+    browser_report = tmp_path / ".tmp" / "eval" / "browser-runs" / "coffee-report.json"
+    browser_report.parent.mkdir(parents=True)
+    browser_report.write_text(json.dumps(_eval_report_payload(str(fixture.resolve()), passed=True), ensure_ascii=False), encoding="utf-8")
+    other_report = tmp_path / ".tmp" / "production-provider-verification" / "eval-coffee.json"
+    other_report.parent.mkdir(parents=True)
+    other_report.write_text(json.dumps(_eval_report_payload(str(fixture.resolve()), passed=False), ensure_ascii=False), encoding="utf-8")
+    os.utime(browser_report, (1_700_000_000, 1_700_000_000))
+    os.utime(other_report, (1_800_000_000, 1_800_000_000))
+
+    response = client.get("/eval/suites")
+
+    assert response.status_code == 200
+    suites = {item["suite_id"]: item for item in response.json()["suites"]}
+    latest = suites["coffee_smoke"]["latest_report"]
+    assert latest["relative_path"] == ".tmp/eval/browser-runs/coffee-report.json"
+    assert latest["passed"] is True
 
 
 def test_eval_suites_api_discovers_feedback_drafts(tmp_path, fake_embedder):
@@ -880,16 +972,16 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "build_id" in js.text
 
 
-def _eval_report_payload() -> dict:
+def _eval_report_payload(suite: str = ".tmp/feedback.jsonl", *, passed: bool = False) -> dict:
     return {
-        "suite": ".tmp/feedback.jsonl",
+        "suite": suite,
         "docs": None,
         "kb_names": ["default"],
         "top_k": 5,
         "thresholds": {"min_recall_at_k": 0.8, "min_mrr": 0.75, "min_hit_at_k": 0.8},
         "summary": {
             "cases": 2,
-            "passed": False,
+            "passed": passed,
             "precision_at_k": 0.4,
             "recall_at_k": 0.5,
             "mrr": 0.5,
@@ -913,12 +1005,12 @@ def _eval_report_payload() -> dict:
                 "query": "steam is weak",
                 "kb_name": "default",
                 "top_k": 5,
-                "passed": False,
+                "passed": passed,
                 "metrics": {"precision_at_k": 0.0, "recall_at_k": 0.0, "mrr": 0.0, "hit_at_k": 0.0},
                 "thresholds": {},
                 "expected": [{"source_file": "coffee.md", "text_contains": ["steam"]}],
                 "actual_top_k": [{"rank": 1, "source_file": "coffee.md", "matched_expected_indexes": [0]}],
-                "failures": ["case recall_at_k 0.000000 < 0.800000"],
+                "failures": [] if passed else ["case recall_at_k 0.000000 < 0.800000"],
             },
         ],
         "config_snapshot": {"reuse_built_kb": True},

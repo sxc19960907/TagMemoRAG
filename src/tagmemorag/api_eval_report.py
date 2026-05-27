@@ -39,19 +39,24 @@ def load_eval_report_view(report_path: str | Path) -> dict[str, Any]:
 def list_eval_report_candidates(*, project_root: str | Path | None = None, limit: int = DEFAULT_REPORT_LIST_LIMIT) -> dict[str, Any]:
     root = Path(project_root or Path.cwd()).resolve()
     bounded_limit = max(1, min(int(limit or DEFAULT_REPORT_LIST_LIMIT), MAX_REPORT_LIST_LIMIT))
-    candidates: dict[Path, dict[str, Any]] = {}
-    for path in _discover_report_paths(root):
-        candidate = _candidate_summary(path, root)
-        if candidate is None:
-            continue
-        candidates[path] = candidate
-    reports = sorted(candidates.values(), key=lambda item: (-float(item["modified_at"]), str(item["path"])))
+    reports = discover_eval_report_candidates(project_root=root)
     return {
         "schema_version": LIST_SCHEMA_VERSION,
         "project_root": str(root),
         "count": min(len(reports), bounded_limit),
         "reports": reports[:bounded_limit],
     }
+
+
+def discover_eval_report_candidates(*, project_root: str | Path | None = None) -> list[dict[str, Any]]:
+    root = Path(project_root or Path.cwd()).resolve()
+    candidates: dict[Path, dict[str, Any]] = {}
+    for path in _discover_report_paths(root):
+        candidate = _candidate_summary(path, root)
+        if candidate is None:
+            continue
+        candidates[path] = candidate
+    return sorted(candidates.values(), key=lambda item: (-float(item["modified_at"]), str(item["path"])))
 
 
 def summarize_eval_report_payload(payload: Any, *, report_path: str = "") -> dict[str, Any]:
@@ -83,13 +88,14 @@ def summarize_eval_report_payload(payload: Any, *, report_path: str = "") -> dic
 
 
 def _discover_report_paths(project_root: Path) -> list[Path]:
-    roots = [project_root / ".tmp"]
+    roots = [project_root / ".tmp" / "eval" / "browser-runs", project_root / ".tmp"]
     for value in DEFAULT_REPORT_PATHS.values():
         path = (project_root / value).resolve()
         if _is_within(path, project_root):
             roots.append(path.parent)
 
     discovered: list[Path] = []
+    seen_paths: set[Path] = set()
     seen_roots: set[Path] = set()
     for root in roots:
         resolved_root = root.resolve()
@@ -97,7 +103,8 @@ def _discover_report_paths(project_root: Path) -> list[Path]:
             continue
         seen_roots.add(resolved_root)
         if resolved_root.is_file():
-            if _looks_like_report_path(resolved_root):
+            if _looks_like_report_path(resolved_root) and resolved_root not in seen_paths:
+                seen_paths.add(resolved_root)
                 discovered.append(resolved_root)
             continue
         if not resolved_root.is_dir():
@@ -110,13 +117,18 @@ def _discover_report_paths(project_root: Path) -> list[Path]:
             if len(path.relative_to(resolved_root).parts) > MAX_DISCOVERY_DEPTH:
                 continue
             if _looks_like_report_path(path):
-                discovered.append(path.resolve())
+                resolved_path = path.resolve()
+                if resolved_path in seen_paths:
+                    continue
+                seen_paths.add(resolved_path)
+                discovered.append(resolved_path)
     return discovered
 
 
 def _looks_like_report_path(path: Path) -> bool:
     name = path.name.lower()
-    return path.suffix.lower() == ".json" and ("report" in name or "eval" in name or path.parent.name.lower() == "eval")
+    parent = path.parent.name.lower()
+    return path.suffix.lower() == ".json" and ("report" in name or "eval" in name or parent in {"eval", "browser-runs"})
 
 
 def _candidate_summary(path: Path, project_root: Path) -> dict[str, Any] | None:

@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlencode
 from uuid import uuid4
 
+from . import api_eval_report
 from .config import Settings
 from .errors import ErrorCode, ServiceError
 from .eval.dataset import EvalSuiteError, EvalThresholds
@@ -207,6 +208,7 @@ def list_eval_suites(*, settings: Settings) -> dict[str, Any]:
         for suite in eval_run_registry._all_suites(root, settings=settings).values()
         if _suite_paths_exist(root, suite)
     ]
+    _attach_latest_reports(suites, root)
     return {"schema_version": SUITES_SCHEMA_VERSION, "suites": sorted(suites, key=lambda item: (str(item["kind"]), str(item["name"])))}
 
 
@@ -216,6 +218,58 @@ def start_eval_run(suite_id: str, *, settings: Settings) -> dict[str, Any]:
 
 def get_eval_run(job_id: str) -> dict[str, Any]:
     return eval_run_registry.get_run(job_id)
+
+
+def _attach_latest_reports(suites: list[dict[str, Any]], project_root: Path) -> None:
+    if not suites:
+        return
+    candidates = api_eval_report.discover_eval_report_candidates(project_root=project_root)
+    valid_reports = [report for report in candidates if report.get("valid") is True and report.get("suite")]
+    for suite in suites:
+        suite["latest_report"] = _latest_report_for_suite(suite, valid_reports, project_root)
+
+
+def _latest_report_for_suite(suite: dict[str, Any], reports: list[dict[str, Any]], project_root: Path) -> dict[str, Any] | None:
+    suite_keys = _suite_report_keys(suite, project_root)
+    matches = [report for report in reports if _normalize_report_path(str(report.get("suite") or ""), project_root) in suite_keys]
+    if not matches:
+        return None
+    browser_matches = [report for report in matches if str(report.get("relative_path") or "").startswith(f"{REPORT_DIR.as_posix()}/")]
+    latest = max(browser_matches or matches, key=lambda item: (float(item.get("modified_at") or 0.0), str(item.get("path") or "")))
+    return {
+        "path": str(latest.get("path") or ""),
+        "relative_path": str(latest.get("relative_path") or ""),
+        "modified_at": latest.get("modified_at"),
+        "passed": latest.get("passed"),
+        "cases": int(latest.get("cases") or 0),
+        "failed": int(latest.get("failed") or 0),
+    }
+
+
+def _suite_report_keys(suite: dict[str, Any], project_root: Path) -> set[str]:
+    keys: set[str] = set()
+    for value in (suite.get("suite_path"),):
+        if not value:
+            continue
+        keys.add(_normalize_report_path(str(value), project_root))
+        try:
+            keys.add(_normalize_report_path(str((project_root / str(value)).resolve()), project_root))
+        except (OSError, RuntimeError):
+            continue
+    return {key for key in keys if key}
+
+
+def _normalize_report_path(value: str, project_root: Path) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = project_root / path
+    try:
+        return str(path.resolve())
+    except (OSError, RuntimeError):
+        return str(path)
 
 
 def _suite_for_id(suite_id: str, *, settings: Settings, project_root: Path) -> BrowserEvalSuite:
