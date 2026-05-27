@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Check future trial operations changes against project quality rules."}
+{"file": "docs/rag-quality-gates.md", "reason": "Use documented gate tiers for each child task."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Ensure trial report changes align with pilot runbook."}
