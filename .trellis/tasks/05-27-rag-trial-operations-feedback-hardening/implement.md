@@ -7,7 +7,7 @@
 - [x] Create and complete child task 3: upload/rebuild failure recovery black-box review.
 - [x] Create and complete child task 4: eval promotion quality review from real feedback.
 - [x] Create and complete child task 5: auth and role boundary trial review.
-- [ ] Create and complete child task 6: trial report retention and CI handoff.
+- [x] Create and complete child task 6: trial report retention and CI handoff.
 - [ ] Create and complete child task 7: final trial readiness review and GitHub/CI follow-up.
 
 ## Validation Pattern

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Final docs/test validation."}
+{"file": "docs/rag-quality-gates.md", "reason": "Ensure CI handoff remains consistent with the quality gate matrix."}

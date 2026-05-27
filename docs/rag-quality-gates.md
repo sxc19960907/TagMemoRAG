@@ -79,4 +79,4 @@ See:
 
 ## GitHub And CI
 
-Local gates are the developer-side signal. CI remains authoritative once changes are pushed. For the current long-running RAG UX program, GitHub push is deferred until network conditions recover or the user explicitly asks to retry.
+Local gates are the developer-side signal. CI remains authoritative once changes are pushed. Default GitHub CI runs unit/e2e tests plus the hashing eval baseline; browser QA and pilot browser stages remain local opt-in. For retained trial evidence and CI handoff details, see [`docs/trial-report-ci-handoff.md`](trial-report-ci-handoff.md).

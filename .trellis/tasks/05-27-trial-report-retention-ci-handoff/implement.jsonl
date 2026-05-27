@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Project documentation/task process rules."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused validation expectations."}
+{"file": "docs/production-pilot-runbook.md", "reason": "Existing production pilot report and browser QA stage contract."}
+{"file": "docs/rag-quality-gates.md", "reason": "Existing local/CI quality gate matrix."}

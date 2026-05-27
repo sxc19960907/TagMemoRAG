@@ -104,7 +104,7 @@ uv run python -m tagmemorag serve --config examples/config/qa-demo.yaml
 
 Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with several chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `蒸汽很小怎么办？`, and confirm the answer mentions cleaning the nozzle with `demo-service-manual.md` in the source list.
 
-For the shortest browser-first walkthrough, including upload, rebuild, navigation, and QA, see [`docs/browser-rag-quick-start.md`](docs/browser-rag-quick-start.md). For trial operators who need dashboard links, retained pilot reports, and feedback triage, see [`docs/trial-operator-handoff-2026-05-27.md`](docs/trial-operator-handoff-2026-05-27.md).
+For the shortest browser-first walkthrough, including upload, rebuild, navigation, and QA, see [`docs/browser-rag-quick-start.md`](docs/browser-rag-quick-start.md). For trial operators who need dashboard links, retained pilot reports, feedback triage, and CI handoff, see [`docs/trial-operator-handoff-2026-05-27.md`](docs/trial-operator-handoff-2026-05-27.md) and [`docs/trial-report-ci-handoff.md`](docs/trial-report-ci-handoff.md).
 
 Filtered search narrows retrieval before local ranking and any enabled graph propagation:
 
