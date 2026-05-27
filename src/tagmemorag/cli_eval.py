@@ -11,6 +11,7 @@ from .eval.answer_quality import run_answer_quality_diagnostics
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.runner import run_eval
 from .logging_setup import configure_logging
+from .browser_qa_readiness import run_browser_qa_readiness
 from .production_pilot import run_production_pilot, write_pilot_report
 from .readiness import run_readiness_smoke
 
@@ -24,6 +25,12 @@ def run_eval_command(args) -> int:
         report = run_readiness_smoke(workdir=args.workdir, keep_workdir=args.keep_workdir)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
         return 0 if report.status == "passed" else 1
+    if args.command == "readiness" and args.readiness_command == "browser-qa":
+        report = run_browser_qa_readiness(full=args.full)
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        if report.status == "passed":
+            return 0
+        return 2 if report.status == "error" else 1
     if args.command == "pilot" and args.pilot_command == "run":
         return _run_pilot(args)
     if args.command == "epa" and args.epa_command == "rebuild":

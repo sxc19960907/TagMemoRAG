@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+from types import SimpleNamespace
 
 from tagmemorag import cli
 from tagmemorag import cli_basic
@@ -11,6 +13,12 @@ from tagmemorag import cli_provider
 from tagmemorag import cli_source_import
 from tagmemorag.demo import summarize_demo_qa_response
 from tagmemorag import readiness
+from tagmemorag.browser_qa_readiness import (
+    BrowserQaReadinessReport,
+    FOCUSED_BROWSER_QA_TARGET,
+    FULL_BROWSER_QA_TARGET,
+    run_browser_qa_readiness,
+)
 from tagmemorag.manualslib_opencli_import import ManualslibOpenCLIError
 from tagmemorag.public_web_import import PublicWebDocument, PublicWebImportReport
 
@@ -468,6 +476,113 @@ def test_cli_readiness_smoke_failure_is_bounded(monkeypatch, capsys):
     serialized = json.dumps(body)
     assert "storage_key" not in serialized
     assert "checksum" not in serialized
+
+
+def test_cli_browser_qa_readiness_runs_focused_gate(monkeypatch, capsys):
+    captured = {}
+
+    def _fake_browser_qa(*, full=False):
+        captured["full"] = full
+        return BrowserQaReadinessReport(
+            status="passed",
+            mode="focused",
+            target=FOCUSED_BROWSER_QA_TARGET,
+            command=("python", "-m", "pytest", FOCUSED_BROWSER_QA_TARGET, "-q"),
+            return_code=0,
+            duration_seconds=1.2345,
+        )
+
+    monkeypatch.setattr(cli_eval, "run_browser_qa_readiness", _fake_browser_qa)
+
+    exit_code = cli.main(["readiness", "browser-qa"])
+
+    assert exit_code == 0
+    assert captured["full"] is False
+    body = json.loads(capsys.readouterr().out)
+    assert body["schema_version"] == "browser_qa_readiness.v1"
+    assert body["status"] == "passed"
+    assert body["mode"] == "focused"
+    assert body["target"] == FOCUSED_BROWSER_QA_TARGET
+    assert body["duration_seconds"] == 1.234
+
+
+def test_cli_browser_qa_readiness_full_failure_returns_one(monkeypatch, capsys):
+    def _fake_browser_qa(*, full=False):
+        return BrowserQaReadinessReport(
+            status="failed",
+            mode="full" if full else "focused",
+            target=FULL_BROWSER_QA_TARGET,
+            command=("python", "-m", "pytest", FULL_BROWSER_QA_TARGET, "-q"),
+            return_code=1,
+            duration_seconds=2.0,
+        )
+
+    monkeypatch.setattr(cli_eval, "run_browser_qa_readiness", _fake_browser_qa)
+
+    exit_code = cli.main(["readiness", "browser-qa", "--full"])
+
+    assert exit_code == 1
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "failed"
+    assert body["mode"] == "full"
+    assert body["target"] == FULL_BROWSER_QA_TARGET
+
+
+def test_cli_browser_qa_readiness_launch_error_returns_two(monkeypatch, capsys):
+    def _fake_browser_qa(*, full=False):
+        return BrowserQaReadinessReport(
+            status="error",
+            mode="focused",
+            target=FOCUSED_BROWSER_QA_TARGET,
+            command=("python", "-m", "pytest", FOCUSED_BROWSER_QA_TARGET, "-q"),
+            return_code=None,
+            duration_seconds=0.1,
+            error={"type": "OSError", "reason": "pytest unavailable"},
+        )
+
+    monkeypatch.setattr(cli_eval, "run_browser_qa_readiness", _fake_browser_qa)
+
+    exit_code = cli.main(["readiness", "browser-qa"])
+
+    assert exit_code == 2
+    body = json.loads(capsys.readouterr().out)
+    assert body["status"] == "error"
+    assert body["error"]["reason"] == "pytest unavailable"
+
+
+def test_browser_qa_readiness_runner_sets_browser_env(monkeypatch):
+    captured = {}
+    monkeypatch.delenv("TAGMEMORAG_RUN_BROWSER_UI", raising=False)
+
+    def _fake_run(command, cwd=None, env=None):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("tagmemorag.browser_qa_readiness.subprocess.run", _fake_run)
+
+    report = run_browser_qa_readiness()
+
+    assert report.status == "passed"
+    assert report.mode == "focused"
+    assert report.target == FOCUSED_BROWSER_QA_TARGET
+    assert captured["command"][-2:] == (FOCUSED_BROWSER_QA_TARGET, "-q")
+    assert captured["env"]["TAGMEMORAG_RUN_BROWSER_UI"] == "1"
+    assert os.environ.get("TAGMEMORAG_RUN_BROWSER_UI") != "1"
+
+
+def test_browser_qa_readiness_runner_full_mode(monkeypatch):
+    monkeypatch.setattr(
+        "tagmemorag.browser_qa_readiness.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    report = run_browser_qa_readiness(full=True)
+
+    assert report.status == "passed"
+    assert report.mode == "full"
+    assert report.target == FULL_BROWSER_QA_TARGET
 
 
 def test_cli_pilot_run_outputs_json_file(monkeypatch, tmp_path, capsys):

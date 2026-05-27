@@ -294,6 +294,8 @@ def build_parser() -> argparse.ArgumentParser:
     readiness_smoke = readiness_sub.add_parser("smoke")
     readiness_smoke.add_argument("--workdir", default=None)
     readiness_smoke.add_argument("--keep-workdir", action="store_true", default=False)
+    readiness_browser_qa = readiness_sub.add_parser("browser-qa")
+    readiness_browser_qa.add_argument("--full", action="store_true", default=False)
 
     pilot = sub.add_parser("pilot")
     pilot_sub = pilot.add_subparsers(dest="pilot_command", required=True)

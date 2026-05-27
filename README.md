@@ -139,6 +139,15 @@ python -m tagmemorag readiness smoke --keep-workdir
 
 The smoke command builds an isolated temporary KB with the offline hashing embedder, runs retrieve plus noop answer generation, verifies QueryPlan persistence, and round-trips a managed-library bundle. It is a local MVP composition check; it does not validate live traffic, Qdrant, S3, remote model providers, or multi-replica coordination.
 
+Browser QA readiness check:
+
+```bash
+python -m tagmemorag readiness browser-qa
+python -m tagmemorag readiness browser-qa --full
+```
+
+The focused browser QA gate runs the normal-user library-to-QA Playwright flow: seed a demo manual, start the local server, open Manual Library, switch into Q&A, ask the first-run troubleshooting question, verify cited sources, and round-trip feedback into Retrieval Quality. Use `--full` before release-style checks to run the complete browser UI integration suite.
+
 For deployment profiles, backup/restore, Qdrant/S3 operations, diagnostics, and rollback playbooks, see [`docs/production-deployment-operations.md`](docs/production-deployment-operations.md). For the first production-like verification pass and retained evidence checklist, see [`docs/production-environment-verification.md`](docs/production-environment-verification.md).
 
 ## API Reference
