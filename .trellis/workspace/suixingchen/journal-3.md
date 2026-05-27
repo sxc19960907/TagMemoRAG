@@ -1342,3 +1342,36 @@ Added a browser-first Eval Suite History panel, enriched /eval/suites with lates
 ### Next Steps
 
 - None - task complete
+
+
+## Session 123: RAG User Readiness Dashboard
+
+**Date**: 2026-05-27
+**Task**: RAG User Readiness Dashboard
+**Branch**: `master`
+
+### Summary
+
+Added a browser-first RAG readiness dashboard and summary API, linked it from user/admin pages, and verified with unit tests plus browser smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `07906f5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
