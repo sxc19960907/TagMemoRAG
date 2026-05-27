@@ -94,7 +94,7 @@ python -m tagmemorag demo library-qa \
   --output .tmp/tagmemorag-qa-demo/library-qa-response.json
 ```
 
-That command uploads the demo service manual into the managed library, performs an incremental rebuild, confirms the manual is searchable, then asks `服务模式怎么进入？`. A passing report has `status: "passed"`, `manual.searchable: true`, `manual.chunk_count` greater than zero, and a cited source ending in `demo/demo-service-manual.md`.
+That command uploads the demo coffee-machine troubleshooting manual into the managed library, performs an incremental rebuild, confirms the manual is searchable, then asks `蒸汽很小怎么办？`. A passing report has `status: "passed"`, `manual.searchable: true`, `manual.chunk_count` greater than zero, and a cited source ending in `demo/demo-service-manual.md`.
 
 To try the same state through the browser:
 
@@ -102,7 +102,7 @@ To try the same state through the browser:
 uv run python -m tagmemorag serve --config examples/config/qa-demo.yaml
 ```
 
-Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with two chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `服务模式怎么进入？`, and confirm the answer mentions holding the clean and hot-water buttons for three seconds with `demo-service-manual.md` in the source list.
+Open `http://127.0.0.1:8000/admin/manual-library?kb_name=default` and confirm `demo-service-manual` is searchable with several chunks and no pending rebuild. Then open `http://127.0.0.1:8000/qa?kb_name=default`, ask `蒸汽很小怎么办？`, and confirm the answer mentions cleaning the nozzle with `demo-service-manual.md` in the source list.
 
 For the shortest browser-first walkthrough, including upload, rebuild, navigation, and QA, see [`docs/browser-rag-quick-start.md`](docs/browser-rag-quick-start.md).
 

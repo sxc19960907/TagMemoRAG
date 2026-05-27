@@ -66,10 +66,10 @@ In Manual Library, confirm that `demo-service-manual` is visible, searchable, an
 Ask:
 
 ```text
-服务模式怎么进入？
+蒸汽很小怎么办？
 ```
 
-The answer should mention holding the clean and hot-water buttons for three seconds, and the source list should include `demo-service-manual.md`.
+The answer should mention cleaning the nozzle, checking the water tank, or descaling, and the source list should include `demo-service-manual.md`.
 
 The answer appears in a conversation layout. Click a `cit_###` citation chip in the answer to focus the matching source card. Source cards show the cited manual passage and section context when available.
 

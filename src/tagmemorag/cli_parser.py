@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo_library_qa.add_argument("--kb", default="default")
     demo_library_qa.add_argument("--config", default="examples/config/qa-demo.yaml")
     demo_library_qa.add_argument("--manual-id", default="demo-service-manual")
-    demo_library_qa.add_argument("--question", default="服务模式怎么进入？")
+    demo_library_qa.add_argument("--question", default="蒸汽很小怎么办？")
     demo_library_qa.add_argument("--output", default=None)
     demo_library_qa.add_argument("--no-overwrite", action="store_true")
 

@@ -1,0 +1,28 @@
+{
+  "id": "rag-user-experience-completion-program",
+  "name": "rag-user-experience-completion-program",
+  "title": "RAG User Experience Completion Program",
+  "description": "Long-running task tree to bring TagMemoRAG from admin-ready to a stable browser-first RAG experience for normal users.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "suixingchen",
+  "assignee": "suixingchen",
+  "createdAt": "2026-05-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-27-first-run-demo-experience-stabilization"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

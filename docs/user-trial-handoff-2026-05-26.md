@@ -44,7 +44,7 @@ The local demo config has auth disabled, so the API token field can stay empty. 
 3. Use top navigation to open Manual Library.
 4. Confirm `demo-service-manual` is searchable and has no pending rebuild.
 5. Click **Ask Q&A**.
-6. Ask `服务模式怎么进入？`.
+6. Ask `蒸汽很小怎么办？`.
 7. Confirm the answer appears as a conversation-style user question and manual answer.
 8. Confirm the source list cites `demo-service-manual.md`.
 9. Click a `cit_###` citation in the answer and confirm the matching source card is focused.

@@ -483,7 +483,7 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     row_text = row.inner_text()
     assert "demo/demo-service-manual.md" in row_text
     assert "yes" in row_text
-    assert "2" in row_text
+    assert "5" in row_text
     assert "clear" in row_text
 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
@@ -492,15 +492,15 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     page.locator("#ui-language-switcher select").select_option("zh")
     page.get_by_text("手册问答", exact=True).wait_for()
     page.locator("#ui-language-switcher select").select_option("en")
-    page.get_by_role("textbox", name="Q&A question").fill("服务模式怎么进入？")
+    page.get_by_role("textbox", name="Q&A question").fill("蒸汽很小怎么办？")
     page.get_by_role("button", name="Ask question").click()
     _assert_qa_loading_guidance_or_ready(page)
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
     assert "YOUR QUESTION" in answer_text
     assert "MANUAL ANSWER" in answer_text
-    assert "服务模式怎么进入？" in answer_text
-    assert "同时按住清洗键和热水键三秒" in answer_text
+    assert "蒸汽很小怎么办？" in answer_text
+    assert "清洗喷嘴" in answer_text
     assert page.locator("#qa-copy-answer").is_enabled()
     sources_text = page.locator("#qa-sources").inner_text()
     assert "demo-service-manual.md" in sources_text
@@ -526,9 +526,9 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "1 records" in page.locator("#quality-count").inner_text()
     assert page.locator("#quality-summary-needs-review").inner_text() == "1"
     assert page.locator("#quality-summary-not-helpful").inner_text() == "1"
-    assert "服务模式怎么进入？" in page.locator("#quality-feedback-rows").inner_text()
+    assert "蒸汽很小怎么办？" in page.locator("#quality-feedback-rows").inner_text()
     assert "Not helpful" in page.locator("#quality-feedback-rows").inner_text()
-    page.get_by_text("服务模式怎么进入？", exact=True).click()
+    page.get_by_text("蒸汽很小怎么办？", exact=True).click()
     detail_text = page.locator("#quality-detail-list").inner_text()
     assert "Q&A feedback: not_helpful" in detail_text
     assert "Q&A" in detail_text
@@ -543,15 +543,15 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
 
     page.locator("#quality-use-selected-expected").click()
     assert "demo/demo-service-manual.md" in page.locator("#quality-expected-source").input_value()
-    page.locator("#quality-expected-text").fill("同时按住清洗键和热水键三秒")
+    page.locator("#quality-expected-text").fill("清洗喷嘴")
     page.locator("#quality-save-review").click()
     page.locator("#quality-status").get_by_text("Review saved.").wait_for(timeout=10000)
-    assert "同时按住清洗键和热水键三秒" in page.locator("#quality-expected-evidence").inner_text()
+    assert "清洗喷嘴" in page.locator("#quality-expected-evidence").inner_text()
     page.locator("#quality-preview").click()
     page.locator("#quality-status").get_by_text("Previewed 1 eval cases.").wait_for(timeout=10000)
     ready_text = page.locator("#quality-promotion-summary").inner_text()
     assert "feedback-" in ready_text
-    assert "服务模式怎么进入？" in ready_text
+    assert "蒸汽很小怎么办？" in ready_text
     assert "tagmemorag eval run --suite" in ready_text
     assert "--reuse-built-kb" in ready_text
     assert "--output" in ready_text

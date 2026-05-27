@@ -182,7 +182,7 @@ def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monke
             "--manual-id",
             "demo-service-manual",
             "--question",
-            "服务模式怎么进入？",
+            "蒸汽很小怎么办？",
             "--output",
             str(tmp_path / "library-qa.json"),
             "--no-overwrite",
@@ -194,7 +194,7 @@ def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monke
     assert options.config_path == "examples/config/qa-demo.yaml"
     assert options.kb_name == "default"
     assert options.manual_id == "demo-service-manual"
-    assert options.question == "服务模式怎么进入？"
+    assert options.question == "蒸汽很小怎么办？"
     assert options.output_path == str(tmp_path / "library-qa.json")
     assert options.overwrite is False
     body = json.loads(capsys.readouterr().out)

@@ -39,7 +39,7 @@ class DemoLibraryQaOptions:
     config_path: str = "examples/config/qa-demo.yaml"
     kb_name: str = "default"
     manual_id: str = "demo-service-manual"
-    question: str = "服务模式怎么进入？"
+    question: str = "蒸汽很小怎么办？"
     output_path: str | None = None
     overwrite: bool = True
 
@@ -242,20 +242,26 @@ def _run_library_qa_answer(options: DemoLibraryQaOptions, cfg: Any, emb: Any, ap
 def _demo_library_metadata(manual_id: str) -> dict[str, Any]:
     return {
         "manual_id": manual_id,
-        "title": "Demo Service Manual",
+        "title": "Demo Coffee Machine Troubleshooting Manual",
         "source_file": f"demo/{manual_id}.md",
         "product_category": "coffee",
         "language": "zh-CN",
-        "tags": ["service-mode", "demo"],
+        "tags": ["coffee", "troubleshooting", "demo"],
     }
 
 
 def _demo_library_manual_text() -> str:
     return (
-        "# 服务模式\n"
-        "进入服务模式时，请同时按住清洗键和热水键三秒，屏幕显示 SVC 后松开。\n"
-        "# 服务模式退出\n"
-        "退出服务模式时，按电源键一次并等待机器完成自检。\n"
+        "# 咖啡机排障演示手册\n"
+        "本手册用于演示浏览器问答，覆盖蒸汽、出咖啡、喷嘴清洗和除垢。\n"
+        "# 蒸汽很小\n"
+        "若蒸汽很小，请先检查喷嘴是否堵塞并清洗喷嘴，再检查水箱水量。若长期未维护，请执行除垢程序，因为水垢会影响蒸汽压力。\n"
+        "# 不出咖啡\n"
+        "若不出咖啡，请检查水箱是否缺水、粉仓是否堵塞、研磨器是否卡住，并确认冲煮单元安装到位。\n"
+        "# 喷嘴清洗\n"
+        "每次使用蒸汽后都要冲洗喷嘴十秒。喷嘴堵塞会造成蒸汽变小、奶泡不足或出汽不稳定，可用清洁针疏通喷嘴孔。\n"
+        "# 除垢\n"
+        "当出水量不足、加热变慢或蒸汽压力下降时，需要进行除垢。除垢前请取下滤芯，并按照除垢程序完成冲洗。\n"
     )
 
 
