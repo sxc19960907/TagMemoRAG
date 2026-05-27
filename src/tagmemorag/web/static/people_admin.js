@@ -85,7 +85,7 @@ async function loadAccessSummary() {
     const response = await fetch("/admin/people/access-summary", { headers: headers() });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.message || `HTTP ${response.status}`);
+      throw peopleAccessError(response.status, body);
     }
     renderSummary(body);
     setStatus(t("Access summary loaded."), "success");
@@ -122,7 +122,7 @@ async function generateAccessKey(event) {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.message || `HTTP ${response.status}`);
+      throw peopleAccessError(response.status, body);
     }
     renderGeneratedKey(body);
     setStatus(t("One-time key generated. Copy it before leaving this page."), "success");
@@ -131,6 +131,17 @@ async function generateAccessKey(event) {
   } finally {
     el.generateSubmit.disabled = false;
   }
+}
+
+function peopleAccessError(status, body = {}) {
+  if (status === 401) {
+    return new Error(t("Paste an admin Bearer token to view or change People & Access."));
+  }
+  if (status === 403) {
+    const required = body?.detail?.required_scope || "admin";
+    return new Error(t("This token is valid but lacks the {scope} scope required for People & Access.", { scope: required }));
+  }
+  return new Error(body?.message || `HTTP ${status}`);
 }
 
 function renderSummary(body) {

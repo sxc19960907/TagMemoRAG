@@ -855,6 +855,9 @@ def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "text/html" in response.headers["content-type"]
     body = response.text
     assert "People & Access" in body
+    assert 'class="people-boundary-guide"' in body
+    assert "Use the smallest scope that fits the person." in body
+    assert "Q&A users usually need search." in body
     assert 'id="people-key-rows"' in body
     assert 'id="people-detail-list"' in body
     assert 'id="people-lifecycle"' in body
@@ -891,6 +894,9 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
     assert "Copy revoke config" in js.text
     assert "revoked" in js.text
     assert "safeLifecycleEntry" in js.text
+    assert "peopleAccessError" in js.text
+    assert "Paste an admin Bearer token" in js.text
+    assert "lacks the {scope} scope" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
     assert "function updateLinks()" in js.text
