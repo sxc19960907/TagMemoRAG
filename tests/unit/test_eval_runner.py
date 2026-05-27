@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
+import pytest
+
 from tagmemorag.config import ManualLibraryConfig, ModelConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.eval.dataset import EvalThresholds
 from tagmemorag.eval.runner import run_eval
@@ -57,6 +59,32 @@ def test_run_eval_product_manual_suite_is_reproducible(tmp_path, test_config):
     assert first_case["search_strategy"] == "exact_local"
     assert first_case["expected"][0]["metadata"]["manual_id"] == "fridge-nrk6192"
     assert not str(report.config_snapshot["storage"]["data_dir"]).startswith(str(test_config.storage.data_dir))
+
+
+def test_run_eval_real_product_manual_pdfs_pass_current_quality_bar(tmp_path, test_config):
+    docs = Path("product_manuals")
+    if len(list(docs.glob("*/*.pdf"))) < 5:
+        pytest.skip("real product PDF manuals are not present")
+    test_config.model = ModelConfig(provider="hashing", dim=64)
+
+    report = run_eval(
+        cfg=test_config,
+        suite_path=Path("tests/fixtures/eval/realmanuals.jsonl"),
+        docs_path=docs,
+        eval_data_dir=tmp_path / "eval-data",
+        top_k=8,
+        source_k=5,
+        thresholds=EvalThresholds(min_recall_at_k=0.95, min_mrr=0.75, min_hit_at_k=1.0),
+    )
+
+    assert report.summary.passed
+    assert report.summary.cases == 10
+    metrics = report.summary.metrics.to_dict()
+    assert metrics["recall_at_k"] >= 0.95
+    assert metrics["mrr"] >= 0.75
+    assert metrics["hit_at_k"] == 1.0
+    assert {case.id for case in report.cases} >= {"asko-washer-drain", "hisense-oven-steam-clean"}
+    assert all(case.search_strategy in {"exact_local", "ann_preselect_then_wave"} for case in report.cases)
 
 
 def test_run_eval_records_search_parameter_overrides(tmp_path, test_config):

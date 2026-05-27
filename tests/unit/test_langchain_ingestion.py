@@ -15,6 +15,8 @@ def test_native_provider_keeps_default_suffixes():
 
 def test_langchain_provider_adds_html_suffixes():
     assert {".html", ".htm"}.issubset(supported_document_suffixes(ParserConfig(provider="langchain")))
+    assert ".doc" not in supported_document_suffixes(ParserConfig(provider="langchain"))
+    assert ".docx" not in supported_document_suffixes(ParserConfig(provider="langchain"))
 
 
 def test_langchain_provider_builds_html_document(tmp_path, fake_embedder):

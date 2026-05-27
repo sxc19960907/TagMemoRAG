@@ -139,6 +139,12 @@ def test_safe_source_path_rejects_traversal_and_unsupported_suffix(library_confi
         safe_source_path("default", "coffee/manual.html", library_config)
     assert native_html.value.code == "INVALID_INPUT"
 
+    for suffix in (".doc", ".docx"):
+        with pytest.raises(ServiceError) as office_doc:
+            safe_source_path("default", f"coffee/manual{suffix}", library_config)
+        assert office_doc.value.code == "INVALID_INPUT"
+        assert office_doc.value.detail["supported_suffixes"] == [".md", ".pdf", ".txt"]
+
 
 def test_safe_source_path_allows_html_when_langchain_provider_enabled(library_config):
     cfg = library_config.model_copy(update={"parser": ParserConfig(provider="langchain")})

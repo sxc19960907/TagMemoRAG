@@ -34,3 +34,15 @@ def test_trial_report_ci_handoff_documents_retention_and_ci_boundary():
     assert "browser QA readiness: `passed`" in final_review
     assert "QA first-run upload guidance" in final_review
     assert "GitHub Actions as authoritative" in final_review
+
+
+def test_real_pdf_document_intake_report_records_current_boundary():
+    report = (ROOT / "docs" / "real-pdf-document-intake-test-2026-05-27.md").read_text(encoding="utf-8")
+
+    assert "Real product-manual PDF intake is locally usable" in report
+    assert "recall@k" in report
+    assert "0.966667" in report
+    assert "limited `.docx` OpenXML text extractor" in report
+    assert "Direct `.doc` and `.docx` intake through Manual Library" in report
+    assert "OpenXML-to-Markdown extractor" in report
+    assert "parser warning summarization" in report
