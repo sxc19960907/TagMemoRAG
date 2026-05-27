@@ -7,6 +7,7 @@ This final local review closes the RAG trial operations hardening pass.
 - Trial operator handoff and dashboard map.
 - Feedback triage workflow and Retrieval Quality next-action guidance.
 - Upload/rebuild recovery guidance.
+- QA first-run upload guidance for empty knowledge bases.
 - Eval promotion quality signals for strong and weak matchers.
 - Auth/role boundary clarity in People & Access.
 - Trial report retention and GitHub CI handoff documentation.
@@ -29,6 +30,6 @@ Latest local result:
 
 ## Remaining Handoff
 
-The local trial evidence is ready for a small browser-first trial. The remaining external step is to push the current branch and treat GitHub Actions as authoritative for merge status.
+The local trial evidence is ready for a small browser-first trial. The remaining external step is to compare the latest local commits with the remote branch, push when network conditions allow, and treat GitHub Actions as authoritative for merge status.
 
 See [Trial Report And CI Handoff](trial-report-ci-handoff.md) for retained report paths and CI boundaries.

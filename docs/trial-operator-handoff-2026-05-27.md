@@ -4,8 +4,8 @@ This is the current starting point for a small local TagMemoRAG trial after the 
 
 ## Current Status
 
-- `master` has been pushed to GitHub through `7630ba7`.
-- The browser-first Q&A flow passed black-box acceptance.
+- Local `master` contains the browser-first Q&A flow and QA first-run upload guidance. Before treating a remote branch as current, compare the latest local `git log --oneline` with GitHub and then use GitHub Actions as the merge signal.
+- The browser-first Q&A flow passed black-box acceptance, including the normal seeded-demo path and the empty-KB upload-first path.
 - The local deterministic demo does not require API keys, Qdrant, S3, or external model services.
 - The retained pilot command can include browser QA readiness in the same report.
 - Report retention and GitHub CI handoff are summarized in `docs/trial-report-ci-handoff.md`.
@@ -42,7 +42,7 @@ Use `kb_name=default` for the local demo.
 | --- | --- | --- |
 | RAG Workbench | `/admin/rag-workbench?kb_name=default` | Inspect retrieval and answer payloads for one-off questions. |
 | Manual Library | `/admin/manual-library?kb_name=default` | Upload manuals, check searchable state, trigger rebuilds, and follow next-step guidance. |
-| Ask Q&A | `/qa?kb_name=default` | Normal user Q&A experience with answers, citations, source cards, language switch, and feedback. |
+| Ask Q&A | `/qa?kb_name=default` | Normal user Q&A experience with first-run upload guidance, answers, citations, source cards, language switch, and feedback. |
 | Retrieval Quality | `/admin/retrieval-quality?kb_name=default` | Review helpful/not-helpful feedback, add expected evidence, preview/export eval drafts, and launch eval runs. |
 | RAG Readiness | `/admin/rag-readiness?kb_name=default` | See KB readiness, recommendations, latest eval report links, and next actions. |
 | Eval Report | `/admin/eval-report?kb_name=default` | Review retained eval reports and case-level failures. |
@@ -91,6 +91,18 @@ Expected behavior:
 - citation chips should focus matching source cards;
 - the source cards should show section names and cited text;
 - weak or off-topic questions should show recovery guidance rather than pretending to know.
+
+## Empty-KB First Run
+
+If the active KB has no searchable manual content, open `/qa?kb_name=default` and start on the Q&A page:
+
+1. Confirm the answer area says **Start by adding a manual**.
+2. Use the left-side **Add manual** form to upload a `.md`, `.txt`, or text-based `.pdf` manual.
+3. Wait for **Manual is indexed. Ask a question about it below.**
+4. Use the generated suggested questions or type a manual-specific question.
+5. Confirm cited sources appear on the right.
+
+If indexing fails from the Q&A page, use **Check readiness** for KB health and **Open Manual Library** for metadata, rebuild, and recovery actions.
 
 ## Feedback Triage Loop
 

@@ -77,7 +77,26 @@ The answer appears in a conversation layout. Click a `cit_###` citation chip in 
 
 ## 6. Try Your Own Manual
 
-In Manual Library:
+There are two supported browser-first ways to add your own manual.
+
+### Option A: Start From Ask Q&A
+
+Use this path when the KB is empty or when you want the shortest normal-user flow:
+
+1. Open `http://127.0.0.1:8000/qa?kb_name=default`.
+2. In the answer area, confirm the page says **Start by adding a manual**.
+3. Use the left-side **Add manual** form to choose a `.md`, `.txt`, or text-based `.pdf` manual.
+4. Fill or confirm the title, source file, category, language, and tags.
+5. Click **Add and index**.
+6. Wait for **Manual is indexed. Ask a question about it below.**
+7. Click one of the suggested questions generated from the uploaded manual, or type your own question.
+8. Confirm the answer cites the uploaded manual in the Sources panel.
+
+If indexing fails, use the recovery links shown on the Q&A page: **Check readiness** opens RAG Readiness, and **Open Manual Library** opens the managed library for the active KB.
+
+### Option B: Start From Manual Library
+
+Use this path when you want the operator view of metadata, searchable state, and rebuild status:
 
 1. Click **Upload**.
 2. Choose a `.md`, `.txt`, or text-based `.pdf` manual.
