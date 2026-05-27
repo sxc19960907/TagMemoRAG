@@ -129,6 +129,11 @@ def test_promotion_preview_builds_eval_case_and_skips_unusable_feedback(tmp_path
     assert [case["id"] for case in preview.cases] == ["feedback-fb-good"]
     assert preview.cases[0]["query"] == "E05 蒸汽异常怎么处理"
     assert preview.cases[0]["relevant"][0]["metadata"] == {"manual_id": "cm1"}
+    assert preview.cases[0]["quality"] == {
+        "level": "strong",
+        "signals": ["text_contains"],
+        "message": "Matcher has specific anchor or text evidence.",
+    }
     assert preview.skipped == (
         {
             "feedback_id": "fb-bad",
@@ -139,6 +144,21 @@ def test_promotion_preview_builds_eval_case_and_skips_unusable_feedback(tmp_path
             "next_action": "Add expected evidence with source_file, header, anchor_key, text_contains, or metadata before promotion.",
         },
     )
+
+
+def test_promotion_preview_marks_broad_matcher_as_weak(tmp_path):
+    cfg = _settings(tmp_path)
+    feedback = create_feedback(
+        "default",
+        _payload(feedback_id="fb-weak", expected=[{"source_file": "coffee.md", "header": "E05"}]),
+        cfg,
+    )
+
+    preview = preview_eval_promotion("default", [feedback.feedback_id], cfg)
+
+    assert preview.cases[0]["quality"]["level"] == "weak"
+    assert preview.cases[0]["quality"]["signals"] == []
+    assert "run browser eval" in preview.cases[0]["quality"]["message"]
 
 
 def test_promotion_preview_explains_duplicate_case_skip(tmp_path):

@@ -21,7 +21,8 @@
   "children": [
     "05-27-trial-handoff-operator-dashboard-review",
     "05-27-feedback-triage-workflow-hardening",
-    "05-27-upload-rebuild-recovery-black-box-review"
+    "05-27-upload-rebuild-recovery-black-box-review",
+    "05-27-eval-promotion-quality-review"
   ],
   "parent": null,
   "relatedFiles": [],

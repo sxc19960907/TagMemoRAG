@@ -377,6 +377,7 @@ def _feedback_to_eval_case(feedback: SearchFeedback) -> tuple[dict[str, Any] | N
             "query": query,
             "kb_name": feedback.kb_name,
             "relevant": relevant,
+            "quality": _promotion_quality(relevant),
             "tags": tags,
             "notes": notes,
         },
@@ -445,6 +446,28 @@ def _result_to_matcher(ref: FeedbackResultRef) -> dict[str, Any]:
     if ref.manual_id:
         matcher["metadata"] = {"manual_id": ref.manual_id}
     return matcher
+
+
+def _promotion_quality(relevant: list[dict[str, Any]]) -> dict[str, Any]:
+    signals = sorted(
+        {
+            signal
+            for matcher in relevant
+            for signal in ("anchor_key", "text_contains")
+            if matcher.get(signal)
+        }
+    )
+    if signals:
+        return {
+            "level": "strong",
+            "signals": signals,
+            "message": "Matcher has specific anchor or text evidence.",
+        }
+    return {
+        "level": "weak",
+        "signals": [],
+        "message": "Matcher uses broad source, section, or metadata fields; run browser eval and inspect the report before using it as a regression gate.",
+    }
 
 
 def _read_feedback_log(kb_name: str, settings: Settings) -> list[SearchFeedback]:

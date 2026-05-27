@@ -489,11 +489,12 @@ function renderPromotionSummary(result) {
     </article>
   `;
   const caseCards = cases.map((item) => `
-    <article class="quality-promotion-card ready">
-      <span>${t("Ready")}</span>
+    <article class="quality-promotion-card ready ${escapeHtml(promotionQualityClass(item.quality))}">
+      <span>${escapeHtml(t(promotionQualityLabel(item.quality)))}</span>
       <strong>${escapeHtml(item.id || t("Eval case"))}</strong>
       <small>${escapeHtml(item.query || "")}</small>
       <small>${escapeHtml((item.relevant || []).length)} ${t("matcher(s)")}</small>
+      ${promotionQualityText(item.quality) ? `<small>${escapeHtml(t(promotionQualityText(item.quality)))}</small>` : ""}
     </article>
   `);
   const skippedCards = skipped.map((item) => `
@@ -505,6 +506,19 @@ function renderPromotionSummary(result) {
     </article>
   `);
   node.innerHTML = [summaryCard, ...caseCards, ...skippedCards].join("");
+}
+
+function promotionQualityClass(quality) {
+  return quality?.level === "weak" ? "weak" : "strong";
+}
+
+function promotionQualityLabel(quality) {
+  return quality?.level === "weak" ? "Weak matcher" : "Ready";
+}
+
+function promotionQualityText(quality) {
+  if (!quality) return "";
+  return quality.message || "";
 }
 
 function skipReasonLabel(reason) {

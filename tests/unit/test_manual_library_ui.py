@@ -199,6 +199,8 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "quality-mark-triaged" in js.text
     assert "renderRefList" in js.text
     assert "renderPromotionSummary" in js.text
+    assert "promotionQualityClass" in js.text
+    assert "Weak matcher" in js.text
     assert "skipReasonLabel" in js.text
     assert "summary.output_path" in js.text
     assert "summary.suite_path" in js.text

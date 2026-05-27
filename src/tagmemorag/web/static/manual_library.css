@@ -1774,6 +1774,11 @@ dialog {
   background: #effaf5;
 }
 
+.quality-promotion-card.ready.weak {
+  border-color: #f0d8ab;
+  background: #fff8ec;
+}
+
 .quality-promotion-card.blocked {
   border-color: #f0d8ab;
   background: #fff8ec;

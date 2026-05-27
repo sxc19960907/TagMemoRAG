@@ -572,6 +572,7 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "Report:" in ready_text
     assert "currently built KB" in ready_text
     assert "Run in browser" in ready_text
+    assert "Matcher has specific anchor or text evidence." in ready_text
     assert "feedback-" in page.locator("#quality-promotion-preview").inner_text()
     page.locator("#quality-export").click()
     page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)

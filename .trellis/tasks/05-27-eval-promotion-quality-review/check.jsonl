@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Final validation and scope review."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Ensure quality metadata remains backward compatible across backend, UI, and eval JSONL."}
