@@ -3,7 +3,7 @@
 ## Ordered Work
 
 - [x] Create and complete child task 1: trial handoff and operator dashboard review.
-- [ ] Create and complete child task 2: feedback triage workflow hardening.
+- [x] Create and complete child task 2: feedback triage workflow hardening.
 - [ ] Create and complete child task 3: upload/rebuild failure recovery black-box review.
 - [ ] Create and complete child task 4: eval promotion quality review from real feedback.
 - [ ] Create and complete child task 5: auth and role boundary trial review.

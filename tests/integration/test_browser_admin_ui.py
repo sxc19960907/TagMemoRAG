@@ -460,6 +460,7 @@ def _exercise_retrieval_quality(page, port: int) -> None:
     page.get_by_text("washer filter blocked", exact=True).click()
     assert "fb-ui-1" in page.locator("#quality-detail-subtitle").inner_text()
     assert "Capture the source that should have matched" in page.locator("#quality-review-guidance").inner_text()
+    assert "Ready to preview or export" in page.locator("#quality-triage-panel").inner_text()
     assert "washer/ui-washer.md" in page.locator("#quality-expected-evidence").inner_text()
     page.locator("#quality-operator-note").fill("Reviewed by browser automation")
     page.locator("#quality-save-review").click()
@@ -542,6 +543,9 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "Q&A" in detail_text
     assert "demo/demo-service-manual.md" in page.locator("#quality-selected-evidence").inner_text()
     assert "Review the cited evidence" in page.locator("#quality-review-guidance").inner_text()
+    triage_text = page.locator("#quality-triage-panel").inner_text()
+    assert "NEEDS EXPECTED EVIDENCE" in triage_text
+    assert "Use selected evidence" in triage_text
 
     page.locator("#quality-preview").click()
     page.locator("#quality-promotion-summary").get_by_text("Needs input").wait_for(timeout=10000)
@@ -552,8 +556,10 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     page.locator("#quality-use-selected-expected").click()
     assert "demo/demo-service-manual.md" in page.locator("#quality-expected-source").input_value()
     page.locator("#quality-expected-text").fill("清洗喷嘴")
-    page.locator("#quality-save-review").click()
+    page.locator("#quality-mark-triaged").click()
     page.locator("#quality-status").get_by_text("Review saved.").wait_for(timeout=10000)
+    assert "triaged" in page.locator("#quality-feedback-rows").inner_text()
+    assert "Ready to preview or export" in page.locator("#quality-triage-panel").inner_text()
     assert "清洗喷嘴" in page.locator("#quality-expected-evidence").inner_text()
     page.locator("#quality-preview").click()
     page.locator("#quality-status").get_by_text("Previewed 1 eval cases.").wait_for(timeout=10000)

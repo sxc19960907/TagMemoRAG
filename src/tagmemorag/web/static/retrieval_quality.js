@@ -129,10 +129,14 @@ function renderDetail() {
   $("quality-dismiss").disabled = !row;
   $("quality-preview").disabled = !row;
   $("quality-export").disabled = !row;
+  $("quality-triage-use-selected").disabled = !row;
+  $("quality-mark-triaged").disabled = !row;
+  $("quality-triage-preview").disabled = !row;
   if (!row) {
     $("quality-detail-list").innerHTML = "";
     $("quality-review-guidance").hidden = true;
     $("quality-review-guidance").textContent = "";
+    renderTriageDecision(null);
     $("quality-selected-evidence").className = "quality-ref-list empty-state";
     $("quality-selected-evidence").textContent = t("Select feedback to inspect cited sources.");
     $("quality-expected-evidence").className = "quality-ref-list empty-state";
@@ -147,6 +151,7 @@ function renderDetail() {
   $("quality-review-status").value = row.status;
   $("quality-operator-note").value = row.operator_note || "";
   renderGuidance(row);
+  renderTriageDecision(row);
   $("quality-detail-list").innerHTML = `
     <dt>${t("Query")}</dt><dd>${escapeHtml(row.query)}</dd>
     <dt>${t("Source")}</dt><dd><span class="quality-source-pill ${escapeHtml(sourceKind(row))}">${escapeHtml(sourceLabel(row))}</span></dd>
@@ -221,6 +226,88 @@ function useSelectedAsExpected() {
     text_contains: [],
     metadata: first.manual_id ? { manual_id: first.manual_id } : {},
   });
+}
+
+function renderTriageDecision(row) {
+  const panel = $("quality-triage-panel");
+  if (!row) {
+    panel.className = "quality-triage-panel empty-state";
+    panel.textContent = t("Select feedback to see the recommended review route.");
+    $("quality-triage-use-selected").disabled = true;
+    $("quality-mark-triaged").disabled = true;
+    $("quality-triage-preview").disabled = true;
+    return;
+  }
+  const decision = triageDecision(row);
+  panel.className = `quality-triage-panel ${decision.tone}`;
+  panel.innerHTML = `
+    <span class="quality-triage-badge">${escapeHtml(t(decision.badge))}</span>
+    <strong>${escapeHtml(t(decision.title))}</strong>
+    <p>${escapeHtml(t(decision.body))}</p>
+  `;
+  const selectedCount = (row.selected_results || []).length;
+  $("quality-triage-use-selected").disabled = selectedCount === 0 || row.status === "dismissed";
+  $("quality-mark-triaged").disabled = row.status === "triaged" || row.status === "promoted" || row.status === "dismissed";
+  $("quality-triage-preview").disabled = row.status === "dismissed";
+}
+
+function triageDecision(row) {
+  const expectedCount = (row.expected || []).length;
+  const selectedCount = (row.selected_results || []).length;
+  if (row.status === "dismissed") {
+    return {
+      tone: "muted",
+      badge: "Excluded",
+      title: "Dismissed case",
+      body: "This feedback is dismissed and excluded from promotion exports.",
+    };
+  }
+  if (row.status === "promoted") {
+    return {
+      tone: "ready",
+      badge: "Promoted",
+      title: "Already promoted",
+      body: "This feedback has already been exported as an eval case.",
+    };
+  }
+  if (expectedCount > 0) {
+    return {
+      tone: "ready",
+      badge: "Ready",
+      title: "Ready to preview or export",
+      body: "Expected evidence is present. Preview the eval draft, then export if the matcher looks stable.",
+    };
+  }
+  if (row.outcome === "helpful" && selectedCount > 0) {
+    return {
+      tone: "ready",
+      badge: "Positive candidate",
+      title: "Useful answer to preserve",
+      body: "This helpful answer can be previewed as a positive regression case.",
+    };
+  }
+  if (selectedCount > 0) {
+    return {
+      tone: "attention",
+      badge: "Needs expected evidence",
+      title: "Confirm the correct source",
+      body: "Use selected evidence if it is correct, or enter the source that should have answered this question before promotion.",
+    };
+  }
+  if (row.outcome === "missing_result" || row.outcome === "wrong_manual" || row.outcome === "not_helpful") {
+    return {
+      tone: "attention",
+      badge: "Needs expected evidence",
+      title: "Capture the missing answer source",
+      body: "Add source, section, text, or manual metadata before this feedback can become a stable eval case.",
+    };
+  }
+  return {
+    tone: "neutral",
+    badge: "Review",
+    title: "Review and classify",
+    body: "Read the feedback, add an operator note, then mark it triaged or dismiss it.",
+  };
 }
 
 async function promotion(commit) {
@@ -458,6 +545,9 @@ $("quality-preview").addEventListener("click", () => promotion(false).catch((err
 $("quality-preview-selected").addEventListener("click", () => promotion(false).catch((error) => setStatus(error.message, "error")));
 $("quality-export").addEventListener("click", () => promotion(true).catch((error) => setStatus(error.message, "error")));
 $("quality-use-selected-expected").addEventListener("click", useSelectedAsExpected);
+$("quality-triage-use-selected").addEventListener("click", useSelectedAsExpected);
+$("quality-mark-triaged").addEventListener("click", () => saveReview("triaged").catch((error) => setStatus(error.message, "error")));
+$("quality-triage-preview").addEventListener("click", () => promotion(false).catch((error) => setStatus(error.message, "error")));
 $("quality-clear-expected").addEventListener("click", () => setExpectedEditor(null));
 
 bindSharedApiToken($("quality-api-token"));

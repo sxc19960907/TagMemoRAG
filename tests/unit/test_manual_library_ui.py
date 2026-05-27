@@ -148,6 +148,9 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="quality-summary-promotable"' in body
     assert 'id="quality-feedback-rows"' in body
     assert 'id="quality-review-guidance"' in body
+    assert 'id="quality-triage-panel"' in body
+    assert 'id="quality-mark-triaged"' in body
+    assert 'id="quality-triage-preview"' in body
     assert 'id="quality-selected-evidence"' in body
     assert 'id="quality-expected-evidence"' in body
     assert 'id="quality-use-selected-expected"' in body
@@ -187,6 +190,9 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "quality-summary-needs-review" in js.text
     assert "sourceLabel" in js.text
     assert "reviewGuidance" in js.text
+    assert "renderTriageDecision" in js.text
+    assert "triageDecision" in js.text
+    assert "quality-mark-triaged" in js.text
     assert "renderRefList" in js.text
     assert "renderPromotionSummary" in js.text
     assert "skipReasonLabel" in js.text

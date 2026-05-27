@@ -1646,6 +1646,73 @@ dialog {
   padding: 10px 11px;
 }
 
+.quality-triage-panel {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 11px;
+}
+
+.quality-triage-panel.ready {
+  border-color: #a7d8be;
+  background: #f0faf4;
+}
+
+.quality-triage-panel.attention {
+  border-color: #f0d8ab;
+  background: #fff8ec;
+}
+
+.quality-triage-panel.muted {
+  background: #f5f7fa;
+  color: var(--muted);
+}
+
+.quality-triage-panel strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.quality-triage-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.quality-triage-badge {
+  justify-self: start;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #24558f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  text-transform: uppercase;
+}
+
+.quality-triage-panel.ready .quality-triage-badge {
+  background: #dff4e8;
+  color: #176449;
+}
+
+.quality-triage-panel.attention .quality-triage-badge {
+  background: #ffedcf;
+  color: #8a4b15;
+}
+
+.quality-triage-panel.muted .quality-triage-badge {
+  background: #e7ebf0;
+  color: #475569;
+}
+
+.quality-triage-actions button {
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
 .quality-ref-list {
   display: grid;
   gap: 9px;

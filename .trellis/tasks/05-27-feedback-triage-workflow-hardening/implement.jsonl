@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Trellis pre-development entry point and checklist for this single-repo project."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirms API/frontend assets remain entry-point layer changes and backend contracts are not inverted."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality and testing expectations for small scoped changes."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index for cross-layer and reuse thinking."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "This UI derives behavior from API feedback row fields and must preserve the boundary contract."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use existing save/promotion helpers instead of adding duplicate backend or frontend flows."}

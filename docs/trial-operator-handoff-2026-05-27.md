@@ -95,9 +95,10 @@ When a user marks an answer **Not helpful**:
 1. On the Q&A page, click **Review this case**.
 2. Confirm Retrieval Quality opens with the matching feedback row selected.
 3. Read selected evidence and answer context.
-4. Choose one route:
+4. Use the **Triage next action** panel to choose one route:
    - dismiss the case if the answer was acceptable or the question was out of scope;
-   - add expected evidence and preview/export an eval draft if it is a useful regression case;
+   - use selected evidence or add expected evidence, then preview/export an eval draft if it is a useful regression case;
+   - mark the case triaged after the expected evidence or operator note captures the decision;
    - record an operator note if the manual content or metadata needs cleanup.
 5. Run or retain the suggested eval report before treating the case as covered.
 

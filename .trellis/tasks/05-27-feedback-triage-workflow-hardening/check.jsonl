@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review validation coverage and forbidden pattern checklist before commit."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check that frontend decisions still match API row contracts and browser workflow."}
