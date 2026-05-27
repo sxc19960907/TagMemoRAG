@@ -43,6 +43,9 @@ const el = {
   sources: document.getElementById("qa-sources"),
   contextNote: document.getElementById("qa-context-note"),
   readinessLink: document.getElementById("qa-readiness-link"),
+  activeKb: document.getElementById("qa-active-kb"),
+  kbSelect: document.getElementById("qa-kb-select"),
+  kbNote: document.getElementById("qa-kb-note"),
   suggestions: document.getElementById("qa-suggestions"),
   followups: document.getElementById("qa-followups"),
   feedback: document.getElementById("qa-feedback"),
@@ -65,6 +68,9 @@ function updateLinks() {
   if (el.readinessLink) {
     el.readinessLink.href = `/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}`;
   }
+  if (el.activeKb) {
+    el.activeKb.textContent = state.kbName || "default";
+  }
 }
 
 function setHidden(node, hidden) {
@@ -82,9 +88,74 @@ function escapeHtml(value) {
 
 function updateLocationKb() {
   if (el.contextNote) {
-    el.contextNote.textContent = "Ask a question and get an answer grounded in the available manuals.";
+    el.contextNote.textContent = t("Ask a question and get an answer grounded in {kb}.", { kb: state.kbName || "default" });
     translatePage();
   }
+}
+
+function currentQuestionParam() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("question") || "";
+}
+
+function qaUrlForKb(kbName) {
+  const params = new URLSearchParams();
+  params.set("kb_name", kbName || "default");
+  const question = currentQuestionParam();
+  if (question) params.set("question", question);
+  return `/qa?${params.toString()}`;
+}
+
+function kbOptionLabel(item) {
+  const name = String(item?.kb_name || state.kbName || "default");
+  const count = Number(item?.node_count || 0);
+  const status = String(item?.status || "");
+  const parts = [name];
+  if (status) parts.push(status);
+  if (Number.isFinite(count) && count > 0) parts.push(t("{count} chunks", { count }));
+  return parts.join(" · ");
+}
+
+function renderKbOptions(kbs) {
+  if (!el.kbSelect) return;
+  const entries = Array.isArray(kbs) ? [...kbs] : [];
+  if (!entries.some((item) => String(item?.kb_name || "") === state.kbName)) {
+    entries.unshift({ kb_name: state.kbName || "default" });
+  }
+  el.kbSelect.innerHTML = entries
+    .map((item) => {
+      const name = String(item?.kb_name || state.kbName || "default");
+      return `<option value="${escapeHtml(name)}">${escapeHtml(kbOptionLabel(item))}</option>`;
+    })
+    .join("");
+  el.kbSelect.value = state.kbName || "default";
+  el.kbSelect.disabled = entries.length <= 1;
+  if (el.kbNote) {
+    el.kbNote.textContent = entries.length > 1
+      ? t("Switching knowledge bases starts a separate Q&A session.")
+      : t("Only this knowledge base is available for your token.");
+  }
+}
+
+async function loadKnowledgeBases() {
+  if (!el.kbSelect) return;
+  renderKbOptions([{ kb_name: state.kbName || "default" }]);
+  try {
+    const response = await fetch("/kb", { headers: authHeadersFromToken(el.token ? el.token.value : "") });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || body.detail || `HTTP ${response.status}`);
+    renderKbOptions(body.kbs || []);
+  } catch (_error) {
+    if (el.kbNote) {
+      el.kbNote.textContent = t("Knowledge base list unavailable. You can keep asking in {kb}.", { kb: state.kbName || "default" });
+    }
+  }
+}
+
+function handleKbSelection() {
+  const selected = el.kbSelect ? el.kbSelect.value.trim() : "";
+  if (!selected || selected === state.kbName) return;
+  window.location.assign(qaUrlForKb(selected));
 }
 
 function applyQuestionPrefill() {
@@ -1078,10 +1149,12 @@ if (el.feedback) {
 if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
 if (el.question) el.question.addEventListener("input", updateSubmitNewState);
+if (el.kbSelect) el.kbSelect.addEventListener("change", handleKbSelection);
 bindSharedApiToken(el.token);
 initI18n({ mount: ".qa-left-rail" });
 updateLinks();
 renderSuggestions();
+loadKnowledgeBases();
 loadSessionMemory();
 renderHistory();
 if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);

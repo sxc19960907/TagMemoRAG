@@ -21,7 +21,8 @@
   "children": [
     "05-27-first-run-demo-experience-stabilization",
     "05-27-browser-qa-readiness-quality-gate",
-    "05-27-test-tier-quality-gate-documentation"
+    "05-27-test-tier-quality-gate-documentation",
+    "05-27-user-facing-kb-selection-multi-kb-clarity"
   ],
   "parent": null,
   "relatedFiles": [],

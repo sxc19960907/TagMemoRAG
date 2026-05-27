@@ -29,6 +29,18 @@
             </a>
           </section>
 
+          <section class="qa-context-card qa-kb-card" aria-label="Knowledge base selection">
+            <div class="qa-kb-head">
+              <span class="eyebrow">Knowledge base</span>
+              <strong id="qa-active-kb">{{ default_kb_name }}</strong>
+            </div>
+            <label class="qa-kb-select-field">
+              <span>Use KB</span>
+              <select id="qa-kb-select" autocomplete="off" aria-label="Knowledge base"></select>
+            </label>
+            <p id="qa-kb-note">Switching knowledge bases starts a separate Q&A session.</p>
+          </section>
+
           <section class="qa-context-card qa-suggestion-card" aria-label="Suggested questions">
             <span class="eyebrow">Try asking</span>
             <div id="qa-suggestions" class="qa-suggestion-list"></div>

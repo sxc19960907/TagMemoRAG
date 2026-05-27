@@ -676,6 +676,10 @@ def _assert_qa_layout(page) -> None:
 
 
 def _assert_qa_first_screen_guidance(page) -> None:
+    assert "default" in page.locator("#qa-active-kb").inner_text()
+    page.locator("#qa-kb-select").wait_for()
+    assert page.locator("#qa-kb-select").input_value() == "default"
+    assert "Switching knowledge bases" in page.locator("#qa-kb-note").inner_text() or "Only this knowledge base" in page.locator("#qa-kb-note").inner_text()
     flow_text = page.locator(".qa-flow-guide").inner_text()
     assert "Ask" in flow_text
     assert "Read" in flow_text

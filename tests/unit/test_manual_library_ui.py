@@ -1069,13 +1069,17 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-readiness-link"' in body
     assert 'class="qa-readiness-link"' in body
     assert 'href="/admin/rag-readiness?kb_name=ops"' in body
+    assert 'id="qa-active-kb"' in body
+    assert 'id="qa-kb-select"' in body
+    assert 'aria-label="Knowledge base"' in body
+    assert "Knowledge base" in body
+    assert "Use KB" in body
+    assert "Switching knowledge bases starts a separate Q&A session." in body
     assert "Check KB state before troubleshooting." in body
     assert "Product manual support" in body
     assert "Try asking" in body
     assert "Ask about a symptom, task, model, or error." in body
     assert "Answers will cite the manual passages used on the right." in body
-    assert "Knowledge base" not in body
-    assert "Use KB" not in body
     assert 'id="qa-kb-name"' not in body
     assert "workbench-evidence" not in body
     assert "workbench-results" not in body
@@ -1104,6 +1108,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-context-notice" in js.text
     assert "sessionStorage" in js.text
     assert "bindSharedApiToken" in js.text
+    assert "loadKnowledgeBases" in js.text
+    assert 'fetch("/kb"' in js.text
+    assert "handleKbSelection" in js.text
+    assert "qaUrlForKb" in js.text
+    assert "Switching knowledge bases starts a separate Q&A session." in js.text
     assert "authHeadersFromToken" in js.text
     assert "loadSessionMemory" in js.text
     assert "saveSessionMemory" in js.text

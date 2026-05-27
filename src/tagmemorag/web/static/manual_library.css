@@ -556,6 +556,49 @@ textarea {
   color: var(--muted);
 }
 
+.qa-kb-card {
+  gap: 8px;
+}
+
+.qa-kb-head {
+  display: grid;
+  gap: 4px;
+}
+
+.qa-kb-head strong {
+  border: 1px solid #d9e3ee;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #17324d;
+  padding: 7px 9px;
+}
+
+.qa-kb-select-field {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qa-kb-select-field select {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid #d5e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.qa-kb-select-field select:focus {
+  border-color: #6f9fd3;
+  box-shadow: 0 0 0 3px rgba(111, 159, 211, 0.18);
+  outline: none;
+}
+
 .qa-suggestion-list {
   display: grid;
   gap: 8px;
