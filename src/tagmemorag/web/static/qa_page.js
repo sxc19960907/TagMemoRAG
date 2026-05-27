@@ -11,6 +11,9 @@ const state = {
   loadingStageIndex: 0,
   turns: [],
   activeTurnId: "",
+  kbReady: false,
+  uploadedManual: null,
+  dynamicSuggestions: [],
 };
 
 const sessionMemoryKey = `tagmemorag:qa:session:${state.kbName}`;
@@ -132,6 +135,8 @@ function kbOptionLabel(item) {
 function renderKbOptions(kbs) {
   if (!el.kbSelect) return;
   const entries = Array.isArray(kbs) ? [...kbs] : [];
+  const activeEntry = entries.find((item) => String(item?.kb_name || "") === state.kbName);
+  state.kbReady = Boolean(activeEntry && Number(activeEntry.node_count || 0) > 0 && String(activeEntry.status || "") !== "rebuilding");
   if (!entries.some((item) => String(item?.kb_name || "") === state.kbName)) {
     entries.unshift({ kb_name: state.kbName || "default" });
   }
@@ -158,10 +163,12 @@ async function loadKnowledgeBases() {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message || body.detail || `HTTP ${response.status}`);
     renderKbOptions(body.kbs || []);
+    renderFirstRunGuidance();
   } catch (_error) {
     if (el.kbNote) {
       el.kbNote.textContent = t("Knowledge base list unavailable. You can keep asking in {kb}.", { kb: state.kbName || "default" });
     }
+    renderFirstRunGuidance();
   }
 }
 
@@ -743,7 +750,8 @@ function clearHistory() {
 
 function renderSuggestions() {
   if (!el.suggestions) return;
-  el.suggestions.innerHTML = suggestedQuestions
+  const questions = state.dynamicSuggestions.length ? state.dynamicSuggestions : suggestedQuestions;
+  el.suggestions.innerHTML = questions
     .map((question) => `<button class="qa-suggestion" type="button" data-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`)
     .join("");
   el.suggestions.querySelectorAll("[data-question]").forEach((button) => {
@@ -753,6 +761,28 @@ function renderSuggestions() {
       askQuestion(question, { useConversationContext: false });
     });
   });
+}
+
+function renderFirstRunGuidance() {
+  if (!el.answer || state.turns.length > 0 || state.kbReady) return;
+  el.answer.className = "qa-answer-message empty-state qa-first-run";
+  el.answer.innerHTML = `
+    <strong>${t("Start by adding a manual")}</strong>
+    <p>${t("This knowledge base does not have searchable manual content yet. Add a manual on the left, wait for indexing, then ask your first question here.")}</p>
+    <div class="qa-first-run-actions">
+      <button type="button" class="ghost small" data-qa-focus-upload>${t("Choose a manual")}</button>
+      <a class="button-link compact" href="/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}">${t("Check readiness")}</a>
+    </div>
+  `;
+  const button = el.answer.querySelector("[data-qa-focus-upload]");
+  if (button) {
+    button.addEventListener("click", () => {
+      el.uploadFile?.focus();
+      el.uploadForm?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+  if (el.answerMeta) el.answerMeta.textContent = t("Add a manual to begin");
+  if (el.sourceMeta) el.sourceMeta.textContent = t("Sources appear after indexing and Q&A.");
 }
 
 function uploadHeaders(json = true) {
@@ -836,6 +866,20 @@ function setUploadMessage(message, kind = "") {
   if (!el.uploadMessages) return;
   el.uploadMessages.className = kind ? `qa-upload-messages ${kind}` : "qa-upload-messages";
   el.uploadMessages.textContent = message ? t(message) : "";
+}
+
+function setUploadRecoveryMessage(message) {
+  if (!el.uploadMessages) return;
+  const readinessHref = `/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}`;
+  const libraryHref = `/admin/manual-library?kb_name=${encodeURIComponent(state.kbName || "default")}`;
+  el.uploadMessages.className = "qa-upload-messages error";
+  el.uploadMessages.innerHTML = `
+    <span>${escapeHtml(t(message))}</span>
+    <span class="qa-upload-recovery-links">
+      <a href="${readinessHref}">${t("Check readiness")}</a>
+      <a href="${libraryHref}">${t("Open Manual Library")}</a>
+    </span>
+  `;
 }
 
 function formatApiError(errorBody, fallback) {
@@ -936,7 +980,7 @@ async function pollUploadRebuild(taskId, metadata) {
     if (task.status === "done") {
       await uploadReady(metadata);
     } else {
-      setUploadMessage(`Indexing failed: ${task.error || "review RAG Readiness"}`, "error");
+      setUploadRecoveryMessage(`Indexing failed: ${task.error || "review RAG Readiness"}`);
       setStatus(t("Indexing needs attention. The previous searchable KB remains available."), "error");
     }
   } catch (error) {
@@ -964,7 +1008,7 @@ async function pollUploadRebuildJob(jobId, metadata) {
       await uploadReady(metadata);
     } else {
       const detail = job.error?.message || JSON.stringify(job.error || {});
-      setUploadMessage(`Indexing failed: ${detail || job.status}`, "error");
+      setUploadRecoveryMessage(`Indexing failed: ${detail || job.status}`);
       setStatus(t("Indexing needs attention. The previous searchable KB remains available."), "error");
     }
   } catch (error) {
@@ -974,7 +1018,12 @@ async function pollUploadRebuildJob(jobId, metadata) {
 }
 
 async function uploadReady(metadata) {
+  state.kbReady = true;
+  state.uploadedManual = metadata || null;
+  state.dynamicSuggestions = suggestedQuestionsForManual(metadata);
   await loadKnowledgeBases();
+  state.dynamicSuggestions = suggestedQuestionsForManual(metadata);
+  renderSuggestions();
   setUploadMessage("Manual is indexed. Ask a question about it below.", "success");
   setStatus(t("Manual is ready for Q&A."), "success");
   if (el.uploadForm) el.uploadForm.reset();
@@ -982,6 +1031,28 @@ async function uploadReady(metadata) {
     el.question.placeholder = t("Ask about {title}", { title: metadata.title });
     el.question.focus();
   }
+}
+
+function suggestedQuestionsForManual(metadata) {
+  if (!metadata) return [];
+  const title = String(metadata.title || "").trim();
+  const category = String(metadata.product_category || "").trim();
+  const tags = Array.isArray(metadata.tags) ? metadata.tags.map((tag) => String(tag).toLowerCase()) : [];
+  const questions = [];
+  if (tags.some((tag) => tag.includes("steam")) || title.includes("蒸汽") || category.includes("coffee")) {
+    questions.push("这份手册里，蒸汽很小怎么办？");
+  }
+  if (tags.some((tag) => tag.includes("clean")) || tags.some((tag) => tag.includes("nozzle"))) {
+    questions.push("这份手册里，喷嘴怎么清洗？");
+  }
+  if (tags.some((tag) => tag.includes("service"))) {
+    questions.push("这份手册里，服务模式怎么进入？");
+  }
+  if (title) {
+    questions.push(`${title} 有哪些常见故障处理步骤？`);
+  }
+  questions.push("这份手册里，用户最应该先检查什么？");
+  return [...new Set(questions)].slice(0, 4);
 }
 
 function renderFollowups(answerText, citations) {

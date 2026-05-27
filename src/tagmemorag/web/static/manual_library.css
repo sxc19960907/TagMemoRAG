@@ -759,6 +759,26 @@ textarea {
   color: var(--danger);
 }
 
+.qa-upload-recovery-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.qa-upload-recovery-links a {
+  color: #265f91;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.qa-upload-recovery-links a:hover,
+.qa-upload-recovery-links a:focus {
+  color: #1f4d76;
+  text-decoration: underline;
+  outline: none;
+}
+
 .qa-upload-form button {
   justify-self: start;
   min-height: 32px;
@@ -982,6 +1002,19 @@ textarea {
 .qa-answer-message.empty-state p {
   max-width: 520px;
   color: var(--muted);
+}
+
+.qa-answer-message.qa-first-run {
+  border-color: #bfd4ea;
+  background: #ffffff;
+}
+
+.qa-first-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
 }
 
 .qa-message-stack {

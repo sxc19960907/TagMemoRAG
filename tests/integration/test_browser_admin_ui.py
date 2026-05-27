@@ -716,6 +716,9 @@ def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
     _assert_qa_first_screen_guidance(page)
+    page.locator("#qa-answer").get_by_text("Start by adding a manual").wait_for(timeout=10000)
+    assert "Add a manual to begin" in page.locator("#qa-answer-meta").inner_text()
+    assert "Choose a manual" in page.locator("#qa-answer").inner_text()
     assert "Add manual" in page.locator(".qa-upload-card").inner_text()
     assert page.locator("#qa-manual-library-link").get_attribute("href") == "/admin/manual-library?kb_name=default"
 
@@ -730,9 +733,11 @@ def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) 
     page.locator("#qa-upload-submit").click()
     page.locator("#qa-upload-messages").get_by_text("Manual is indexed. Ask a question about it below.").wait_for(timeout=15000)
     page.locator("#qa-status").get_by_text("Manual is ready for Q&A.").wait_for(timeout=10000)
+    suggestions_text = page.locator("#qa-suggestions").inner_text()
+    assert "这份手册里，蒸汽很小怎么办？" in suggestions_text
+    assert "QA Upload Steam Manual 有哪些常见故障处理步骤？" in suggestions_text
 
-    page.locator("#qa-question").fill("QA 页面上传后的机器蒸汽很小怎么办？")
-    page.locator("#qa-submit").click()
+    page.locator("#qa-suggestions button").filter(has_text="这份手册里，蒸汽很小怎么办？").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
     assert "清洗蒸汽喷嘴" in answer_text
@@ -786,9 +791,22 @@ def _assert_qa_first_screen_guidance(page) -> None:
     assert "Review the grounded answer and citation chips." in flow_text
     assert "Use Sources to inspect the manual passages." in flow_text
     empty_text = page.locator("#qa-answer").inner_text()
-    assert "Ask about a symptom, task, model, or error." in empty_text
-    assert "Answers will cite the manual passages used on the right." in empty_text
-    assert "Cited source snippets will appear here." in page.locator("#qa-source-meta").inner_text()
+    generic_guidance_visible = (
+        "Ask about a symptom, task, model, or error." in empty_text
+        and "Answers will cite the manual passages used on the right." in empty_text
+    )
+    first_run_guidance_visible = (
+        "Start by adding a manual" in empty_text
+        and "This knowledge base does not have searchable manual content yet." in empty_text
+        and "Choose a manual" in empty_text
+        and "Check readiness" in empty_text
+    )
+    assert generic_guidance_visible or first_run_guidance_visible
+    source_meta_text = page.locator("#qa-source-meta").inner_text()
+    assert (
+        "Cited source snippets will appear here." in source_meta_text
+        or "Sources appear after indexing and Q&A." in source_meta_text
+    )
     assert page.locator("#qa-submit").is_enabled()
 
 

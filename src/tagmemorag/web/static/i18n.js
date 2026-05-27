@@ -727,6 +727,12 @@ const zh = {
   "Manual is indexed. Ask a question about it below.": "手册已完成索引。可以在下方提问。",
   "Manual is ready for Q&A.": "手册已可用于问答。",
   "Ask about {title}": "询问 {title}",
+  "Start by adding a manual": "先添加一份手册",
+  "This knowledge base does not have searchable manual content yet. Add a manual on the left, wait for indexing, then ask your first question here.": "这个知识库还没有可检索的手册内容。先在左侧添加手册，等待索引完成后，再在这里提第一个问题。",
+  "Choose a manual": "选择手册",
+  "Add a manual to begin": "添加手册后开始",
+  "Sources appear after indexing and Q&A.": "索引并问答后会显示来源。",
+  "Open Manual Library": "打开资料库",
 };
 
 const dictionaries = { zh };

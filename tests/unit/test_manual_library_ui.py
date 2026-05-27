@@ -1179,6 +1179,11 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "/admin/retrieval-quality" in js.text
     assert "addConversationTurn" in js.text
     assert "updateConversationTurn" in js.text
+    assert "renderFirstRunGuidance" in js.text
+    assert "Start by adding a manual" in js.text
+    assert "suggestedQuestionsForManual" in js.text
+    assert "setUploadRecoveryMessage" in js.text
+    assert "Open Manual Library" in js.text
     assert "handleUploadSubmit" in js.text
     assert "applyUploadFileDefaults" in js.text
     assert "uploadMetadataFromForm" in js.text
