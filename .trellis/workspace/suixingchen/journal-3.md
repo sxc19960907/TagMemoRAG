@@ -1375,3 +1375,36 @@ Added a browser-first RAG readiness dashboard and summary API, linked it from us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 124: Readiness Next Action Center
+
+**Date**: 2026-05-27
+**Task**: Readiness Next Action Center
+**Branch**: `master`
+
+### Summary
+
+Added guided primary actions and recommendation links to RAG readiness, plus a QA readiness callout with tests and browser smoke validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4329c9e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
