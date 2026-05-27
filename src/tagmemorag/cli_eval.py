@@ -150,6 +150,8 @@ def _run_pilot(args) -> int:
             accepted_suites=split_csv(args.accepted_suites),
             answer_quality_suite_path=args.answer_quality_suite,
             skip_answer_quality=args.skip_answer_quality,
+            include_browser_qa=args.include_browser_qa,
+            browser_qa_full=args.browser_qa_full,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"pilot error: {type(exc).__name__}: {exc}", file=sys.stderr)

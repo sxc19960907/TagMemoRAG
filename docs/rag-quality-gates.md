@@ -67,6 +67,10 @@ uv run python -m tagmemorag production-provider verify --level smoke
 uv run python -m tagmemorag pilot run --format json --output .tmp/pilot/report.json
 ```
 
+For browser-first local pilot evidence, add `--include-browser-qa` to the local
+pilot command. Add `--browser-qa-full` only for release-style closure or broad
+browser/admin changes.
+
 See:
 
 - `docs/production-provider-smoke-runbook.md`

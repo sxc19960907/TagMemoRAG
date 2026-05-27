@@ -887,6 +887,10 @@ python -m tagmemorag pilot run \
   --output .tmp/production-pilot/report.json
 ```
 
+For a browser-first local trial, add `--include-browser-qa` so the retained pilot
+report also proves the normal Q&A page journey. Use `--browser-qa-full` only for
+release-style local closure or broad browser/admin changes.
+
 ### Qdrant Vector Backend
 
 The default vector backend is local NPZ at `data/{kb_name}/vectors.npz`. Qdrant is optional: it persists vectors externally while graph topology, anchors, chunk identity, rebuild impact, and build metadata remain local under `data/{kb_name}/`.

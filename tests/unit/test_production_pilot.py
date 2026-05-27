@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from tagmemorag.eval.dataset import EvalThresholds
+from tagmemorag.browser_qa_readiness import BrowserQaReadinessReport
 from tagmemorag.production_pilot import (
     DEFAULT_ANSWER_QUALITY_SUITE,
     DEFAULT_PILOT_THRESHOLDS,
@@ -86,6 +87,70 @@ def test_production_pilot_can_skip_answer_quality_stage(tmp_path):
 
     assert report.status == "passed"
     assert "answer_quality" not in [stage.name for stage in report.stages]
+
+
+def test_production_pilot_can_include_browser_qa_stage(monkeypatch, tmp_path):
+    seen = {}
+
+    def _fake_browser_qa(*, full=False):
+        seen["full"] = full
+        return BrowserQaReadinessReport(
+            status="passed",
+            mode="full" if full else "focused",
+            target="tests/integration/test_browser_admin_ui.py",
+            command=("python", "-m", "pytest", "browser"),
+            return_code=0,
+            duration_seconds=1.25,
+        )
+
+    monkeypatch.setattr("tagmemorag.production_pilot.run_browser_qa_readiness", _fake_browser_qa)
+
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        include_browser_qa=True,
+        browser_qa_full=True,
+    )
+
+    assert report.status == "passed"
+    assert seen["full"] is True
+    names = [stage.name for stage in report.stages]
+    assert names == ["config_validate", "provider_probe", "readiness_smoke", "browser_qa_readiness", "answer_quality", "eval"]
+    stage = next(stage for stage in report.stages if stage.name == "browser_qa_readiness")
+    assert stage.status == "passed"
+    assert stage.detail["mode"] == "full"
+    assert stage.detail["return_code"] == 0
+
+
+def test_production_pilot_browser_qa_failure_fails_report(monkeypatch, tmp_path):
+    def _fake_browser_qa(*, full=False):
+        return BrowserQaReadinessReport(
+            status="failed",
+            mode="focused",
+            target="tests/integration/test_browser_admin_ui.py::test_browser_manual_library_to_qa_user_flow",
+            command=("python", "-m", "pytest", "browser"),
+            return_code=1,
+            duration_seconds=0.5,
+        )
+
+    monkeypatch.setattr("tagmemorag.production_pilot.run_browser_qa_readiness", _fake_browser_qa)
+
+    report = run_production_pilot(
+        config_path=_local_config(tmp_path),
+        suite_path="tests/fixtures/eval/coffee.jsonl",
+        docs_path="tests/fixtures",
+        workdir=tmp_path / "pilot",
+        thresholds=DEFAULT_PILOT_THRESHOLDS,
+        include_browser_qa=True,
+    )
+
+    assert report.status == "failed"
+    stage = next(stage for stage in report.stages if stage.name == "browser_qa_readiness")
+    assert stage.status == "failed"
+    assert stage.error == {"type": "BrowserQaReadinessFailed", "reason": "return_code=1"}
 
 
 def test_production_pilot_answer_quality_suite_can_be_overridden(tmp_path):

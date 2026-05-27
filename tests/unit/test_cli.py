@@ -650,6 +650,32 @@ def test_cli_pilot_run_passes_baseline_flags(monkeypatch, tmp_path):
     assert seen["accepted_suites"] == ["product_manuals.jsonl", "mixed_language.jsonl"]
 
 
+def test_cli_pilot_run_passes_browser_qa_flags(monkeypatch, tmp_path):
+    from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
+
+    seen = {}
+
+    def _fake_pilot(**kwargs):
+        seen.update(kwargs)
+        return ProductionPilotReport(
+            status="passed",
+            config_path="config.yaml",
+            suite_path="suite.jsonl",
+            docs_path="docs",
+            workdir=str(tmp_path / "pilot"),
+            stages=[PilotStage("browser_qa_readiness", "passed", {"mode": "full"})],
+            next_steps=["Retain the pilot report."],
+        )
+
+    monkeypatch.setattr(cli_eval, "run_production_pilot", _fake_pilot)
+
+    exit_code = cli.main(["pilot", "run", "--include-browser-qa", "--browser-qa-full"])
+
+    assert exit_code == 0
+    assert seen["include_browser_qa"] is True
+    assert seen["browser_qa_full"] is True
+
+
 def test_cli_pilot_run_markdown_failure_returns_one(monkeypatch, capsys):
     from tagmemorag.production_pilot import PilotStage, ProductionPilotReport
 

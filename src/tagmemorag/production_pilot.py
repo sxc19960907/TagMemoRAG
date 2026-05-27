@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from .config import load_config
 from .config_validation import ConfigValidationReport, validate_config
+from .browser_qa_readiness import BrowserQaReadinessReport, run_browser_qa_readiness
 from .eval.answer_quality import AnswerQualityReport, run_answer_quality_diagnostics
 from .eval.dataset import EvalSuiteError, EvalThresholds
 from .eval.report import EvalReport
@@ -107,6 +108,8 @@ def run_production_pilot(
     accepted_suites: Iterable[str] | None = None,
     answer_quality_suite_path: str | Path | None = DEFAULT_ANSWER_QUALITY_SUITE,
     skip_answer_quality: bool = False,
+    include_browser_qa: bool = False,
+    browser_qa_full: bool = False,
 ) -> ProductionPilotReport:
     pilot_workdir = _pilot_workdir(workdir)
     stages: list[PilotStage] = []
@@ -119,6 +122,10 @@ def run_production_pilot(
 
     smoke_report = run_readiness_smoke(workdir=pilot_workdir / "readiness", keep_workdir=True)
     stages.append(_readiness_stage(smoke_report))
+
+    if include_browser_qa:
+        browser_report = run_browser_qa_readiness(full=browser_qa_full)
+        stages.append(_browser_qa_stage(browser_report))
 
     if not skip_answer_quality:
         stages.append(_answer_quality_stage(answer_quality_suite_path or DEFAULT_ANSWER_QUALITY_SUITE))
@@ -228,6 +235,25 @@ def _readiness_stage(report: SmokeReport) -> PilotStage:
         },
         _first_error([check.to_dict() for check in report.checks]),
     )
+
+
+def _browser_qa_stage(report: BrowserQaReadinessReport) -> PilotStage:
+    detail = {
+        "mode": report.mode,
+        "target": report.target,
+        "command": list(report.command),
+        "return_code": report.return_code,
+        "duration_seconds": round(report.duration_seconds, 3),
+    }
+    error = None
+    if report.error:
+        error = {
+            "type": str(report.error.get("type") or "BrowserQaReadinessError"),
+            "reason": _safe_reason(str(report.error.get("reason") or "")),
+        }
+    elif report.status != "passed":
+        error = {"type": "BrowserQaReadinessFailed", "reason": f"return_code={report.return_code}"}
+    return PilotStage("browser_qa_readiness", "passed" if report.status == "passed" else "failed", detail, error)
 
 
 def _eval_stage(report: EvalReport) -> PilotStage:

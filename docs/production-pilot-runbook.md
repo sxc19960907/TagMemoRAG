@@ -44,6 +44,20 @@ python -m tagmemorag pilot run \
   --format markdown
 ```
 
+For a browser-first local trial, include the normal-user Q&A journey in the same retained pilot report:
+
+```bash
+python -m tagmemorag pilot run \
+  --config examples/config/local-hashing-npz.yaml \
+  --suite tests/fixtures/eval/coffee.jsonl \
+  --docs tests/fixtures \
+  --workdir .tmp/production-pilot \
+  --output .tmp/production-pilot/report.json \
+  --include-browser-qa
+```
+
+Use `--browser-qa-full` with `--include-browser-qa` before release-style local closure or when broad browser/admin flows changed. Keep the browser stage opt-in because it starts a local server and runs Playwright.
+
 The command runs:
 
 | Stage | Purpose | Failure behavior |
@@ -51,6 +65,7 @@ The command runs:
 | `config_validate` | Load config, check local writable paths, env-var names, optional dependencies, and auth/metrics posture. | `failed` fails the pilot; `warning` keeps the pilot in warning. |
 | `provider_probe` | Probe configured remote providers through the existing explicit live-probe contract. | `failed` fails the pilot; all-skipped is acceptable for local/offline profiles. |
 | `readiness_smoke` | Build/retrieve/answer/queryplan/bundle composition with deterministic local data. | Must pass. |
+| `browser_qa_readiness` | Optional browser-first Q&A flow, including demo manual, Q&A, citations, feedback, Retrieval Quality, and eval draft launch. | Included only with `--include-browser-qa`; must pass when included. |
 | `answer_quality` | Run deterministic answer-quality diagnostics for groundedness, citation support, refusal behavior, and conflict handling. | Must pass unless explicitly skipped with `--skip-answer-quality`. |
 | `eval` | Retrieval fixture run with sanitized summary metrics. | Must pass the pilot thresholds. |
 | `eval_reauthoring_diagnosis` | Optional hashing-vs-production baseline diagnosis. | Non-informational, non-accepted warnings require reviewer signoff; informational and accepted suites are retained in detail but do not gate the stage. Invalid baseline input fails. |

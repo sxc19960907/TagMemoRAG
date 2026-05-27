@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Check changed CLI/readiness behavior against backend spec guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify focused tests and deterministic local checks are appropriate."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check browser readiness status mapping through report and CLI boundaries."}

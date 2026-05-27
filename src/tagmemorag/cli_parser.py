@@ -315,6 +315,8 @@ def build_parser() -> argparse.ArgumentParser:
     pilot_run.add_argument("--production-baseline", default=None)
     pilot_run.add_argument("--answer-quality-suite", default=DEFAULT_ANSWER_QUALITY_SUITE)
     pilot_run.add_argument("--skip-answer-quality", action="store_true", default=False)
+    pilot_run.add_argument("--include-browser-qa", action="store_true", default=False)
+    pilot_run.add_argument("--browser-qa-full", action="store_true", default=False)
     pilot_run.add_argument(
         "--informational-suites",
         default="",
