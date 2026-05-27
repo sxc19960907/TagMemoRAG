@@ -1408,3 +1408,36 @@ Added guided primary actions and recommendation links to RAG readiness, plus a Q
 ### Next Steps
 
 - None - task complete
+
+
+## Session 125: QA User Experience Hardening
+
+**Date**: 2026-05-27
+**Task**: QA User Experience Hardening
+**Branch**: `master`
+
+### Summary
+
+Hardened the browser QA page with a clearer ask-read-verify flow, improved loading/recovery/source guidance, i18n coverage, tests, and browser-visible validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a1570cd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
