@@ -1741,3 +1741,36 @@ Started the RAG trial operations parent task and completed child task 1 by addin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 135: Feedback Triage Workflow Hardening
+
+**Date**: 2026-05-27
+**Task**: Feedback Triage Workflow Hardening
+**Branch**: `master`
+
+### Summary
+
+Added a Retrieval Quality triage next-action panel, quick Mark Triaged flow, i18n labels, browser workflow assertions, and operator handoff updates for trial feedback review.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6a156a3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
