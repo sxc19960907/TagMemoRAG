@@ -1708,3 +1708,36 @@ Archived the completed RAG user experience completion program after all seven ch
 ### Next Steps
 
 - None - task complete
+
+
+## Session 134: Trial operator handoff
+
+**Date**: 2026-05-27
+**Task**: Trial operator handoff
+**Branch**: `master`
+
+### Summary
+
+Started the RAG trial operations parent task and completed child task 1 by adding a current trial operator handoff with browser dashboard map, retained pilot command, feedback triage loop, and links from README/quick-start/historical handoff.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1f63b9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
