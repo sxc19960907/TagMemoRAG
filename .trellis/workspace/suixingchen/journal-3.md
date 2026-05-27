@@ -1541,3 +1541,36 @@ Documented local RAG quality gate tiers, linked the gate matrix from README and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 129: QA knowledge base clarity
+
+**Date**: 2026-05-27
+**Task**: QA knowledge base clarity
+**Branch**: `master`
+
+### Summary
+
+Added visible QA knowledge-base selection, loaded available KBs from the existing /kb endpoint, preserved prefilled questions when switching KBs, and verified the browser QA readiness path.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c3ea502` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
