@@ -1508,3 +1508,36 @@ Started the RAG user experience completion parent program, stabilized the first-
 ### Next Steps
 
 - None - task complete
+
+
+## Session 128: RAG quality gate tiers
+
+**Date**: 2026-05-27
+**Task**: RAG quality gate tiers
+**Branch**: `master`
+
+### Summary
+
+Documented local RAG quality gate tiers, linked the gate matrix from README and the system test plan, and marked the first three RAG UX program child tasks complete.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `40212ac` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
