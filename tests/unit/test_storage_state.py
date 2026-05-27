@@ -578,6 +578,14 @@ def test_build_kb_includes_pdf_documents(monkeypatch, tmp_path, test_config, fak
     assert node["metadata"]["doc_id"] == "fridge"
     assert node["metadata"]["chunk_id"].startswith("chunk:sha256:")
     assert "冷藏室温度" in node["text"]
+    assert state.meta["pdf_quality"] == {
+        "documents": 1,
+        "pages_total": 1,
+        "pages_with_text": 1,
+        "pages_missing_text": 0,
+        "ocr_pages_created": 0,
+        "warning_counts": {},
+    }
 
 
 def test_build_kb_includes_ocr_text_for_empty_pdf_pages(monkeypatch, tmp_path, fake_embedder):
@@ -619,6 +627,8 @@ def test_build_kb_includes_ocr_text_for_empty_pdf_pages(monkeypatch, tmp_path, f
     assert state.meta["ocr"]["attempted"] == 1
     assert state.meta["ocr"]["created"] == 1
     assert "OCR steam wand" not in str(state.meta["ocr"])
+    assert state.meta["pdf_quality"]["pages_missing_text"] == 1
+    assert state.meta["pdf_quality"]["ocr_pages_created"] == 1
 
 
 def test_rebuild_keeps_old_state_until_done(tmp_path, test_config, fake_embedder):

@@ -35,6 +35,7 @@ from .manuals import load_manual_metadata
 from .observability.metrics import get_metrics
 from .observability.tracing import set_span_attributes, start_span
 from .ocr import OCRSummary, create_ocr_provider
+from .parser import PDFQualitySummary
 from .parser_provider import parse_chunks_for_config, parse_document_for_config, supported_document_suffixes
 from .rebuild_impact import ManualImpact, RebuildImpactReport, impact_path, make_impact_report, save_rebuild_impact
 from .storage.atomic import atomic_write
@@ -1141,6 +1142,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
         asset_summary = AssetExtractionSummary()
         ocr_provider = create_ocr_provider(cfg)
         ocr_summary = OCRSummary()
+        pdf_quality = PDFQualitySummary()
         supported_suffixes = supported_document_suffixes(cfg.parser)
         document_paths = (p for p in docs_root.rglob("*") if p.is_file() and p.suffix.lower() in supported_suffixes)
         seen_manual_ids: set[str] = set()
@@ -1163,6 +1165,7 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
             )
             chunks.extend(parsed.chunks)
             ocr_summary = ocr_summary.merge(parsed.ocr_summary)
+            pdf_quality = pdf_quality.merge(parsed.pdf_quality)
             if cfg.assets.enabled:
                 document_assets, document_asset_summary = extract_document_assets(path, metadata, kb_name, cfg)
                 asset_manifest = replace_document_assets(asset_manifest, metadata.manual_id, document_assets)
@@ -1225,6 +1228,8 @@ def build_kb(docs_dir: str | Path, kb_name: str, cfg: Settings, embedder=None, o
                 "trigger": cfg.ocr.trigger,
                 **ocr_summary.to_dict(),
             }
+        if pdf_quality.documents:
+            meta["pdf_quality"] = pdf_quality.to_dict()
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         set_span_attributes(**{"tagmemorag.build_id": build_id, "tagmemorag.result_count": len(chunks)})
         return GraphState(

@@ -93,6 +93,8 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "manual-library/tags/rewrite/preview" in js.text
     assert "manual-library/tags/policy" in js.text
     assert "manual-library/diagnostics" in js.text
+    assert "PDF Quality" in js.text
+    assert "review_pdf_quality" in js.text
     assert "manual-library/registry/audit" in js.text
     assert "manual-library/rebuild-jobs" in js.text
     assert "dirtyManualCount" in js.text

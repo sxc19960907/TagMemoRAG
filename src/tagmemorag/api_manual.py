@@ -203,6 +203,7 @@ def manual_library_diagnostics(
         ]
     queue_payload = {"enabled": settings.manual_library.rebuild_queue_enabled, "jobs": jobs}
     operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
+    pdf_quality = _safe_pdf_quality(graph_state)
     return {
         "kb_name": kb_name,
         "registry": registry,
@@ -220,8 +221,9 @@ def manual_library_diagnostics(
             "last_successful_build_id": dirty_report.get("last_successful_build_id") or "",
             "last_impact_summary": dirty_report.get("last_impact_summary"),
             "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
+            "pdf_quality": pdf_quality,
         },
-        "recommendations": diagnostic_recommendations(registry, blob_health, dirty_report, jobs),
+        "recommendations": diagnostic_recommendations(registry, blob_health, dirty_report, jobs, pdf_quality=pdf_quality),
     }
 
 
@@ -230,6 +232,8 @@ def diagnostic_recommendations(
     blob_health: dict[str, object],
     dirty_report: dict[str, object],
     jobs: list[dict[str, object]],
+    *,
+    pdf_quality: dict[str, object] | None = None,
 ) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = []
     if registry.get("enabled") and not blob_health.get("checked"):
@@ -245,9 +249,44 @@ def diagnostic_recommendations(
     qdrant_sync = dirty_report.get("last_qdrant_sync")
     if isinstance(qdrant_sync, dict) and qdrant_sync.get("fallback_reason"):
         recommendations.append({"code": "force_full_rebuild", "label": "Force a full rebuild after Qdrant fallback", "severity": "warning"})
+    pdf_quality = pdf_quality or {}
+    warning_counts = pdf_quality.get("warning_counts") if isinstance(pdf_quality.get("warning_counts"), dict) else {}
+    if int(pdf_quality.get("pages_missing_text") or 0) > 0 or bool(warning_counts):
+        recommendations.append({"code": "review_pdf_quality", "label": "Review PDF parser quality summary", "severity": "warning"})
     if not registry.get("enabled"):
         recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
     return recommendations
+
+
+def _safe_pdf_quality(graph_state: object | None) -> dict[str, object]:
+    meta = getattr(graph_state, "meta", None)
+    if not isinstance(meta, dict):
+        return {}
+    quality = meta.get("pdf_quality")
+    if not isinstance(quality, dict):
+        return {}
+    warning_counts = quality.get("warning_counts")
+    if not isinstance(warning_counts, dict):
+        warning_counts = {}
+    return {
+        "documents": _safe_non_negative_int(quality.get("documents")),
+        "pages_total": _safe_non_negative_int(quality.get("pages_total")),
+        "pages_with_text": _safe_non_negative_int(quality.get("pages_with_text")),
+        "pages_missing_text": _safe_non_negative_int(quality.get("pages_missing_text")),
+        "ocr_pages_created": _safe_non_negative_int(quality.get("ocr_pages_created")),
+        "warning_counts": {
+            str(key): _safe_non_negative_int(value)
+            for key, value in sorted(warning_counts.items())
+            if str(key).strip() and _safe_non_negative_int(value) > 0
+        },
+    }
+
+
+def _safe_non_negative_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def safe_audit_detail(detail: dict[str, object]) -> dict[str, object]:

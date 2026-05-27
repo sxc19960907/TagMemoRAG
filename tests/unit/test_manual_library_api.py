@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 
 from fastapi.testclient import TestClient
+import networkx as nx
+import numpy as np
 
 from tagmemorag import api
 from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.state import AppState
+from tagmemorag.types import GraphState
 
 
 def _configure(tmp_path, fake_embedder) -> TestClient:
@@ -171,6 +174,37 @@ def test_manual_library_diagnostics_file_sidecar_and_queue_disabled(tmp_path, fa
     assert body["rebuild_queue"]["enabled"] is False
     assert body["dirty"]["pending_changes"] is False
     assert body["recommendations"][0]["code"] == "file_sidecar_mode"
+
+
+def test_manual_library_diagnostics_returns_pdf_quality_summary(tmp_path, fake_embedder):
+    client = _configure(tmp_path, fake_embedder)
+    api.app_state.swap_kb(
+        "default",
+        GraphState(
+            graph=nx.Graph(),
+            vectors=np.zeros((0, 64), dtype=np.float32),
+            kb_name="default",
+            meta={
+                "pdf_quality": {
+                    "documents": 1,
+                    "pages_total": 3,
+                    "pages_with_text": 2,
+                    "pages_missing_text": 1,
+                    "ocr_pages_created": 0,
+                    "warning_counts": {"rotated_text": 2},
+                }
+            },
+        ),
+    )
+
+    response = client.get("/manual-library/diagnostics", params={"kb_name": "default"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_rebuild"]["pdf_quality"]["pages_total"] == 3
+    assert body["last_rebuild"]["pdf_quality"]["pages_missing_text"] == 1
+    assert body["last_rebuild"]["pdf_quality"]["warning_counts"] == {"rotated_text": 2}
+    assert any(item["code"] == "review_pdf_quality" for item in body["recommendations"])
 
 
 def test_manual_library_diagnostics_registry_blob_verify_audit_and_queue(tmp_path, fake_embedder):

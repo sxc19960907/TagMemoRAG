@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import warnings
 from typing import Any
 
 from pypdf import PdfReader
@@ -68,6 +69,9 @@ PDF_MANUALSLIB_NOISE = (
     "manuals / brands /",
     "quick links",
 )
+PDF_WARNING_KEYS = {
+    "rotated text discovered": "rotated_text",
+}
 
 PDF_PROFILE_HEADING_HINTS = {
     "generic": frozenset[str](),
@@ -108,9 +112,43 @@ def parse_document(
 
 
 @dataclass(frozen=True)
+class PDFQualitySummary:
+    documents: int = 0
+    pages_total: int = 0
+    pages_with_text: int = 0
+    pages_missing_text: int = 0
+    ocr_pages_created: int = 0
+    warning_counts: dict[str, int] | None = None
+
+    def merge(self, other: "PDFQualitySummary") -> "PDFQualitySummary":
+        warning_counts = dict(self.warning_counts or {})
+        for key, count in (other.warning_counts or {}).items():
+            warning_counts[key] = warning_counts.get(key, 0) + count
+        return PDFQualitySummary(
+            documents=self.documents + other.documents,
+            pages_total=self.pages_total + other.pages_total,
+            pages_with_text=self.pages_with_text + other.pages_with_text,
+            pages_missing_text=self.pages_missing_text + other.pages_missing_text,
+            ocr_pages_created=self.ocr_pages_created + other.ocr_pages_created,
+            warning_counts=warning_counts,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "documents": self.documents,
+            "pages_total": self.pages_total,
+            "pages_with_text": self.pages_with_text,
+            "pages_missing_text": self.pages_missing_text,
+            "ocr_pages_created": self.ocr_pages_created,
+            "warning_counts": dict(sorted((self.warning_counts or {}).items())),
+        }
+
+
+@dataclass(frozen=True)
 class ParsedDocument:
     chunks: list[Chunk]
     ocr_summary: OCRSummary = OCRSummary()
+    pdf_quality: PDFQualitySummary = PDFQualitySummary()
 
 
 def parse_document_with_ocr_summary(
@@ -220,13 +258,17 @@ def _parse_pdf(
     reader = PdfReader(str(file_path))
     raw_chunks: list[Chunk] = []
     ocr_summary = OCRSummary()
+    pdf_quality = PDFQualitySummary(documents=1, pages_total=len(reader.pages))
     heading_hints = _pdf_heading_hints_for_profile(pdf_profile, pdf_heading_hints)
     pdf_metadata = dict(metadata)
     pdf_metadata["pdf_parser_profile"] = pdf_profile
     for index, page in enumerate(reader.pages, 1):
-        text = _extract_pdf_page_text(page)
+        text, warning_counts = _extract_pdf_page_text_with_warnings(page)
+        if warning_counts:
+            pdf_quality = pdf_quality.merge(PDFQualitySummary(warning_counts=warning_counts))
         lines = _pdf_lines(text)
         if not lines:
+            pdf_quality = pdf_quality.merge(PDFQualitySummary(pages_missing_text=1))
             ocr_chunks, page_summary = _ocr_pdf_page_chunks(
                 file_path,
                 source_file=source_file,
@@ -240,7 +282,10 @@ def _parse_pdf(
             )
             raw_chunks.extend(ocr_chunks)
             ocr_summary = ocr_summary.merge(page_summary)
+            if page_summary.created:
+                pdf_quality = pdf_quality.merge(PDFQualitySummary(ocr_pages_created=1))
             continue
+        pdf_quality = pdf_quality.merge(PDFQualitySummary(pages_with_text=1))
         if ocr_enabled:
             ocr_summary = ocr_summary.merge(OCRSummary(skipped=1))
         raw_chunks.extend(
@@ -266,6 +311,7 @@ def _parse_pdf(
             *_with_lineage(ocr_chunks, parser_profile=f"pdf_ocr:{pdf_profile}"),
         ],
         ocr_summary=ocr_summary,
+        pdf_quality=pdf_quality,
     )
 
 
@@ -319,10 +365,38 @@ def _ocr_pdf_page_chunks(
 
 
 def _extract_pdf_page_text(page: Any) -> str:
+    text, _warning_counts = _extract_pdf_page_text_with_warnings(page)
+    return text
+
+
+def _extract_pdf_page_text_with_warnings(page: Any) -> tuple[str, dict[str, int]]:
+    captured: list[warnings.WarningMessage]
     try:
-        return str(page.extract_text(extraction_mode="layout") or "").strip()
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            text = str(page.extract_text(extraction_mode="layout") or "").strip()
     except TypeError:
-        return str(page.extract_text() or "").strip()
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            text = str(page.extract_text() or "").strip()
+    return text, _bounded_pdf_warning_counts(captured)
+
+
+def _bounded_pdf_warning_counts(captured: list[warnings.WarningMessage]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in captured:
+        key = _bounded_pdf_warning_key(str(item.message))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _bounded_pdf_warning_key(message: str) -> str:
+    lowered = str(message).strip().lower()
+    for needle, key in PDF_WARNING_KEYS.items():
+        if needle in lowered:
+            return key
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", lowered)[:80].strip("_")
+    return normalized or "parser_warning"
 
 
 def _pdf_lines(text: str) -> list[str]:

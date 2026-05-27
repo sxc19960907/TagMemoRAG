@@ -461,6 +461,7 @@ OCR is the cheaper, higher-coverage half of visual document understanding. It al
 - OCR provider/version/trigger/source participate in chunk identity, so OCR changes can force new chunk ids and embeddings.
 - OCR failures degrade by default and are summarized with bounded low-cardinality failure reasons. Strict mode can fail rebuild.
 - Rebuild metadata may include `meta["ocr"]` with enabled/provider/version/trigger counts, never raw OCR text.
+- PDF parser quality metadata may include `meta["pdf_quality"]` with bounded page counts and warning counts (`documents`, `pages_total`, `pages_with_text`, `pages_missing_text`, `ocr_pages_created`, `warning_counts`) so operators can decide whether OCR or cleaner source files are needed. It must not store raw extracted text or raw parser warning strings.
 
 **Deferred.** Production OCR backend selection, image-file OCR, layout-aware tables/regions/bounding boxes, `ocr_layer` asset persistence, async OCR workers, LLM correction, and all visual embedding/reranking work remain follow-up tasks.
 

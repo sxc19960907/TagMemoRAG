@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 from tagmemorag.parser import parse_document
 from tagmemorag.parser import parse_document_with_ocr_summary
 from tagmemorag.ocr.base import OCRPageResult
@@ -12,6 +14,12 @@ class _FakePdfPage:
 
     def extract_text(self, *_args, **_kwargs) -> str | None:
         return self._text
+
+
+class _WarningPdfPage:
+    def extract_text(self, *_args, **_kwargs) -> str:
+        warnings.warn("Rotated text discovered. Output will be incomplete.", UserWarning)
+        return "Rotated page text."
 
 
 class _FakePdfReader:
@@ -311,6 +319,8 @@ def test_parse_pdf_ocr_disabled_skips_empty_page(monkeypatch, tmp_path):
 
     assert result.chunks == []
     assert result.ocr_summary.to_dict()["skipped"] == 1
+    assert result.pdf_quality.to_dict()["pages_total"] == 1
+    assert result.pdf_quality.to_dict()["pages_missing_text"] == 1
 
 
 def test_parse_pdf_ocr_empty_page_becomes_chunk(monkeypatch, tmp_path):
@@ -340,6 +350,27 @@ def test_parse_pdf_ocr_empty_page_becomes_chunk(monkeypatch, tmp_path):
     assert chunk.metadata["page_start"] == 1
     assert result.ocr_summary.to_dict()["attempted"] == 1
     assert result.ocr_summary.to_dict()["created"] == 1
+    assert result.pdf_quality.to_dict()["ocr_pages_created"] == 1
+
+
+def test_parse_pdf_quality_captures_bounded_parser_warning(monkeypatch, tmp_path):
+    class FakePdfReader:
+        def __init__(self, _path: str):
+            self.pages = [_WarningPdfPage()]
+
+    monkeypatch.setattr("tagmemorag.parser.PdfReader", FakePdfReader)
+    path = tmp_path / "rotated.pdf"
+    path.write_bytes(b"%PDF fake")
+
+    result = parse_document_with_ocr_summary(path, min_chars=1, metadata={"manual_id": "rotated"})
+    quality = result.pdf_quality.to_dict()
+
+    assert len(result.chunks) == 1
+    assert quality["documents"] == 1
+    assert quality["pages_total"] == 1
+    assert quality["pages_with_text"] == 1
+    assert quality["pages_missing_text"] == 0
+    assert quality["warning_counts"] == {"rotated_text": 1}
 
 
 def test_parse_pdf_ocr_skips_native_text_page(monkeypatch, tmp_path):
