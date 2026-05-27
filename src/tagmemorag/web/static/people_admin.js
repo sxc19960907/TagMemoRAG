@@ -43,6 +43,7 @@ const el = {
   copyPlaintext: document.getElementById("people-copy-plaintext"),
   copyConfig: document.getElementById("people-copy-config"),
   workbench: document.getElementById("people-workbench"),
+  readiness: document.getElementById("people-readiness"),
   manualLibrary: document.getElementById("people-manual-library"),
   retrievalQuality: document.getElementById("people-retrieval-quality"),
   qa: document.getElementById("people-qa"),
@@ -69,6 +70,7 @@ function setStatus(message, kind = "") {
 function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   el.workbench.href = `/admin/rag-workbench?kb_name=${kb}`;
+  el.readiness.href = `/admin/rag-readiness?kb_name=${kb}`;
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.qa.href = `/qa?kb_name=${kb}`;

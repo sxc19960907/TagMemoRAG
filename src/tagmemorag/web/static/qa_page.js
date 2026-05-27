@@ -42,6 +42,7 @@ const el = {
   sourceMeta: document.getElementById("qa-source-meta"),
   sources: document.getElementById("qa-sources"),
   contextNote: document.getElementById("qa-context-note"),
+  readinessLink: document.getElementById("qa-readiness-link"),
   suggestions: document.getElementById("qa-suggestions"),
   followups: document.getElementById("qa-followups"),
   feedback: document.getElementById("qa-feedback"),
@@ -58,6 +59,12 @@ function headers() {
 function setStatus(message, kind = "") {
   el.status.textContent = message ? t(message) : "";
   el.status.className = kind ? `status-strip qa-status ${kind}` : "status-strip qa-status";
+}
+
+function updateLinks() {
+  if (el.readinessLink) {
+    el.readinessLink.href = `/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}`;
+  }
 }
 
 function setHidden(node, hidden) {
@@ -1027,6 +1034,7 @@ if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
 if (el.question) el.question.addEventListener("input", updateSubmitNewState);
 bindSharedApiToken(el.token);
 initI18n({ mount: ".qa-left-rail" });
+updateLinks();
 renderSuggestions();
 loadSessionMemory();
 renderHistory();

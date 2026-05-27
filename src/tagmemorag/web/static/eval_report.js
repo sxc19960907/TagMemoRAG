@@ -35,6 +35,7 @@ function reportPath() {
 function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   $("eval-report-quality").href = `/admin/retrieval-quality?kb_name=${kb}`;
+  $("eval-report-readiness").href = `/admin/rag-readiness?kb_name=${kb}`;
   $("eval-report-workbench").href = `/admin/rag-workbench?kb_name=${kb}`;
   $("eval-report-qa").href = `/qa?kb_name=${kb}`;
 }

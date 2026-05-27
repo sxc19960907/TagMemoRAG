@@ -31,6 +31,7 @@ const el = {
   manualLibrary: document.getElementById("workbench-manual-library"),
   retrievalQuality: document.getElementById("workbench-retrieval-quality"),
   evalReport: document.getElementById("workbench-eval-report"),
+  readiness: document.getElementById("workbench-readiness"),
   people: document.getElementById("workbench-people"),
   qa: document.getElementById("workbench-qa"),
 };
@@ -59,6 +60,7 @@ function updateLinks() {
   el.manualLibrary.href = `/admin/manual-library?kb_name=${kb}`;
   el.retrievalQuality.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.evalReport.href = `/admin/eval-report?kb_name=${kb}`;
+  el.readiness.href = `/admin/rag-readiness?kb_name=${kb}`;
   el.people.href = `/admin/people?kb_name=${kb}`;
   el.qa.href = `/qa?kb_name=${kb}`;
 }

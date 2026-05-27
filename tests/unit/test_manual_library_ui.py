@@ -6,11 +6,14 @@ import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import networkx as nx
+import numpy as np
 
 from tagmemorag import api, api_eval_report, api_eval_runs
 from tagmemorag.auth.config_store import ConfigAuthStore
 from tagmemorag.config import ApiKeyConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.state import AppState
+from tagmemorag.types import GraphState
 
 
 def _client(tmp_path, fake_embedder) -> TestClient:
@@ -98,6 +101,7 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "bindSharedApiToken" in js.text
     assert "function updateLinks()" in js.text
     assert "/admin/rag-workbench" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "/admin/retrieval-quality" in js.text
     assert "/admin/people" in js.text
     assert "/qa?kb_name=" in js.text
@@ -155,6 +159,8 @@ def test_retrieval_quality_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="quality-promotion-preview"' in body
     assert 'id="quality-workbench"' in body
     assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="quality-readiness"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
     assert 'id="quality-manual-library"' in body
     assert 'href="/admin/manual-library?kb_name=ops"' in body
     assert 'id="quality-people"' in body
@@ -204,6 +210,7 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "authHeadersFromToken" in js.text
     assert "function updateLinks()" in js.text
     assert "/admin/rag-workbench" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "/admin/manual-library" in js.text
     assert "/admin/people" in js.text
     assert "/qa?kb_name=" in js.text
@@ -223,6 +230,8 @@ def test_eval_report_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="eval-report-api-token"' in body
     assert 'id="eval-report-quality"' in body
     assert 'href="/admin/retrieval-quality?kb_name=ops"' in body
+    assert 'id="eval-report-readiness"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
     assert 'id="eval-run-suite"' in body
     assert 'id="eval-run-start"' in body
     assert 'id="eval-run-status"' in body
@@ -276,7 +285,82 @@ def test_eval_report_static_asset_is_served(tmp_path, fake_embedder):
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
     assert "/admin/retrieval-quality" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "/qa?kb_name=" in js.text
+
+
+def test_rag_readiness_admin_route_serves_shell(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    response = client.get("/admin/rag-readiness?kb_name=ops")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "RAG Readiness" in body
+    assert 'id="readiness-kb-name"' in body
+    assert 'value="ops"' in body
+    assert 'id="readiness-status"' in body
+    assert 'id="readiness-cards"' in body
+    assert 'id="readiness-recommendations"' in body
+    assert 'id="readiness-workbench"' in body
+    assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="readiness-qa"' in body
+    assert 'href="/qa?kb_name=ops"' in body
+    assert '"defaultKbName": "ops"' in body
+    assert "/static/manual-library/rag_readiness.js" in body
+
+
+def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+
+    js = client.get("/static/manual-library/rag_readiness.js")
+
+    assert js.status_code == 200
+    assert "/admin/rag-readiness/summary?kb_name=" in js.text
+    assert "readiness-cards" in js.text
+    assert "renderRecommendations" in js.text
+    assert "/admin/rag-workbench" in js.text
+    assert "/admin/manual-library" in js.text
+    assert "/admin/eval-report" in js.text
+    assert "/qa?kb_name=" in js.text
+
+
+def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    api.app_state.mark_embedder_ready()
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=missing")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "rag_readiness.v1"
+    assert body["kb_name"] == "missing"
+    assert body["status"] == "not_ready"
+    cards = {item["id"]: item for item in body["cards"]}
+    assert cards["kb"]["status"] == "not_ready"
+    assert cards["qa"]["status"] == "not_ready"
+    assert any(item["code"] == "load_kb" for item in body["recommendations"])
+
+
+def test_rag_readiness_summary_reports_review_when_eval_missing(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = _client(tmp_path, fake_embedder)
+    graph = nx.Graph()
+    graph.add_node(1, text="ready")
+    api.app_state.mark_embedder_ready()
+    api.app_state.swap_kb("default", GraphState(graph=graph, vectors=np.zeros((1, 64), dtype=np.float32), build_id="build-ready", kb_name="default"))
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_review"
+    cards = {item["id"]: item for item in body["cards"]}
+    assert cards["kb"]["status"] == "ready"
+    assert cards["manuals"]["status"] == "ready"
+    assert cards["eval"]["status"] == "needs_review"
+    assert cards["qa"]["status"] == "ready"
 
 
 def test_eval_suites_api_lists_browser_safe_suites(tmp_path, fake_embedder, monkeypatch):
@@ -626,9 +710,11 @@ def test_rag_workbench_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="workbench-manual-library"' in body
     assert 'id="workbench-retrieval-quality"' in body
     assert 'id="workbench-eval-report"' in body
+    assert 'id="workbench-readiness"' in body
     assert 'id="workbench-people"' in body
     assert 'id="workbench-qa"' in body
     assert 'href="/admin/eval-report?kb_name=ops"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
     assert 'href="/admin/people?kb_name=ops"' in body
     assert 'href="/qa?kb_name=ops"' in body
     assert '"defaultKbName": "ops"' in body
@@ -658,6 +744,7 @@ def test_rag_workbench_static_asset_is_served(tmp_path, fake_embedder):
     assert "workbench-evidence" in js.text
     assert "workbench-eval-report" in js.text
     assert "/admin/eval-report?kb_name=" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "applyQuestionPrefill" in js.text
     assert "Question prefilled. Review it, then ask when ready." in js.text
     assert "/admin/people" in js.text
@@ -684,6 +771,8 @@ def test_people_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="people-generate-command"' in body
     assert 'id="people-workbench"' in body
     assert 'href="/admin/rag-workbench?kb_name=ops"' in body
+    assert 'id="people-readiness"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
     assert 'id="people-manual-library"' in body
     assert 'href="/admin/manual-library?kb_name=ops"' in body
     assert 'id="people-retrieval-quality"' in body
@@ -713,6 +802,7 @@ def test_people_admin_static_asset_is_served(tmp_path, fake_embedder):
     assert "authHeadersFromToken" in js.text
     assert "function updateLinks()" in js.text
     assert "/admin/rag-workbench" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "/admin/manual-library" in js.text
     assert "/admin/retrieval-quality" in js.text
     assert "/qa?kb_name=" in js.text
@@ -897,6 +987,8 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'id="qa-history"' in body
     assert 'id="qa-clear-history"' in body
     assert 'id="qa-sources"' in body
+    assert 'id="qa-readiness-link"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
     assert "Product manual support" in body
     assert "Try asking" in body
     assert "Ask about a symptom, task, or error." in body
@@ -948,6 +1040,7 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "buildFollowupQuestions" in js.text
     assert "handleFeedback" in js.text
     assert "/search/feedback" in js.text
+    assert "/admin/rag-readiness" in js.text
     assert "feedbackPayloadForTurn" in js.text
     assert "selectedResultsForFeedback" in js.text
     assert "Feedback sent to Retrieval Quality." in js.text

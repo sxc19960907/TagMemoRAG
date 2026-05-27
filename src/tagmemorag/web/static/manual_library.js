@@ -48,6 +48,7 @@ const el = {
   kbName: document.getElementById("kb-name"),
   token: document.getElementById("api-token"),
   workbenchLink: document.getElementById("manual-library-workbench"),
+  readinessLink: document.getElementById("manual-library-readiness"),
   retrievalQualityLink: document.getElementById("manual-library-retrieval-quality"),
   peopleLink: document.getElementById("manual-library-people"),
   qaLink: document.getElementById("manual-library-qa-link"),
@@ -176,6 +177,7 @@ function setStatus(message, kind = "") {
 function updateLinks() {
   const kb = encodeURIComponent(state.kbName || "default");
   el.workbenchLink.href = `/admin/rag-workbench?kb_name=${kb}`;
+  el.readinessLink.href = `/admin/rag-readiness?kb_name=${kb}`;
   el.retrievalQualityLink.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.peopleLink.href = `/admin/people?kb_name=${kb}`;
   el.qaLink.href = `/qa?kb_name=${kb}`;

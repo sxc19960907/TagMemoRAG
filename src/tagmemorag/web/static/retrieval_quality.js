@@ -47,6 +47,7 @@ function currentKb() {
 function updateLinks() {
   const kb = encodeURIComponent(currentKb());
   $("quality-workbench").href = `/admin/rag-workbench?kb_name=${kb}`;
+  $("quality-readiness").href = `/admin/rag-readiness?kb_name=${kb}`;
   $("quality-manual-library").href = `/admin/manual-library?kb_name=${kb}`;
   $("quality-people").href = `/admin/people?kb_name=${kb}`;
   $("quality-qa").href = `/qa?kb_name=${kb}`;

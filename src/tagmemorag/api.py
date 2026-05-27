@@ -21,7 +21,7 @@ from .auth.config_store import ConfigAuthStore
 from .auth.dependencies import ensure_kb_access, rate_limit_dep, require_scope
 from .auth.keygen import generate_api_key_material
 from .cache.lru_ttl import LRUTTLCache
-from . import api_admin, api_eval_report, api_eval_runs, api_feedback, api_manual_routes, api_search
+from . import api_admin, api_eval_report, api_eval_runs, api_feedback, api_manual_routes, api_rag_readiness, api_search
 from .api_models import (
     AccessKeyGenerateRequest,
     AgenticRequestOverrides,
@@ -214,6 +214,19 @@ def rag_workbench_admin(request: Request, kb_name: str = "default"):
     return templates.TemplateResponse(
         request,
         "rag_workbench.html",
+        {
+            "default_kb_name": kb_name or "default",
+            "api_base_path": "",
+            "auth_enabled": settings.auth.enabled,
+        },
+    )
+
+
+@app.get("/admin/rag-readiness")
+def rag_readiness_admin(request: Request, kb_name: str = "default"):
+    return templates.TemplateResponse(
+        request,
+        "rag_readiness.html",
         {
             "default_kb_name": kb_name or "default",
             "api_base_path": "",
@@ -827,6 +840,21 @@ def get_eval_run(
     _: None = Depends(rate_limit_dep),
 ):
     return api_eval_runs.get_eval_run(job_id)
+
+
+@app.get("/admin/rag-readiness/summary")
+def get_rag_readiness_summary(
+    kb_name: str = "default",
+    api_key: ApiKey = Depends(require_scope("admin")),
+    _: None = Depends(rate_limit_dep),
+):
+    return api_rag_readiness.rag_readiness_summary(
+        kb_name,
+        settings=settings,
+        app_state=app_state,
+        api_key=api_key,
+        get_rebuild_queue=_get_rebuild_queue,
+    )
 
 
 @app.get("/rebuild/{task_id}")
