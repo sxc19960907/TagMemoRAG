@@ -261,6 +261,59 @@ def test_browser_upload_manual_rebuild_then_qa_user_flow(tmp_path):
             server.wait(timeout=10)
 
 
+def test_browser_qa_page_upload_rebuild_then_answer(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True)
+    upload_path = tmp_path / "qa-upload-steam-manual.md"
+    upload_path.write_text(
+        "# QA 页面上传蒸汽手册\n"
+        "如果 QA 页面上传后的机器蒸汽很小，请先清洗蒸汽喷嘴，并确认水箱已经加满。\n"
+        "# 后续检查\n"
+        "如果清洗喷嘴后蒸汽仍然很小，请执行除垢程序并重新启动机器。\n",
+        encoding="utf-8",
+    )
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_qa_page_upload_rebuild_answer(page, port, upload_path)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
 def test_browser_rag_failure_states_are_user_visible(tmp_path):
     playwright = pytest.importorskip("playwright.sync_api")
     port = _free_port()
@@ -657,6 +710,36 @@ def _exercise_upload_rebuild_qa_user_flow(page, port: int, upload_path: Path) ->
     assert "同时按住清洗键和热水键三秒" in answer_text
     sources_text = page.locator("#qa-sources").inner_text()
     assert "browser-upload-service-manual.md" in sources_text
+
+
+def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    _assert_qa_first_screen_guidance(page)
+    assert "Add manual" in page.locator(".qa-upload-card").inner_text()
+    assert page.locator("#qa-manual-library-link").get_attribute("href") == "/admin/manual-library?kb_name=default"
+
+    page.locator("#qa-upload-file").set_input_files(str(upload_path))
+    assert page.locator("#qa-upload-title").input_value() == "Qa Upload Steam Manual"
+    assert page.locator("#qa-upload-source").input_value() == "uploads/qa-upload-steam-manual.md"
+    assert page.locator("#qa-upload-category").input_value() == "manual"
+    page.locator("#qa-upload-title").fill("QA Upload Steam Manual")
+    page.locator("#qa-upload-category").fill("coffee")
+    page.locator("#qa-upload-language").fill("zh-CN")
+    page.locator("#qa-upload-tags").fill("steam, qa-upload")
+    page.locator("#qa-upload-submit").click()
+    page.locator("#qa-upload-messages").get_by_text("Manual is indexed. Ask a question about it below.").wait_for(timeout=15000)
+    page.locator("#qa-status").get_by_text("Manual is ready for Q&A.").wait_for(timeout=10000)
+
+    page.locator("#qa-question").fill("QA 页面上传后的机器蒸汽很小怎么办？")
+    page.locator("#qa-submit").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    assert "清洗蒸汽喷嘴" in answer_text
+    assert "水箱" in answer_text
+    sources_text = page.locator("#qa-sources").inner_text()
+    assert "qa-upload-steam-manual.md" in sources_text
+    assert "Cited manual passage" in sources_text
 
 
 def _assert_qa_layout(page) -> None:

@@ -46,6 +46,16 @@ const el = {
   activeKb: document.getElementById("qa-active-kb"),
   kbSelect: document.getElementById("qa-kb-select"),
   kbNote: document.getElementById("qa-kb-note"),
+  manualLibraryLink: document.getElementById("qa-manual-library-link"),
+  uploadForm: document.getElementById("qa-upload-form"),
+  uploadFile: document.getElementById("qa-upload-file"),
+  uploadTitle: document.getElementById("qa-upload-title"),
+  uploadCategory: document.getElementById("qa-upload-category"),
+  uploadSource: document.getElementById("qa-upload-source"),
+  uploadLanguage: document.getElementById("qa-upload-language"),
+  uploadTags: document.getElementById("qa-upload-tags"),
+  uploadMessages: document.getElementById("qa-upload-messages"),
+  uploadSubmit: document.getElementById("qa-upload-submit"),
   suggestions: document.getElementById("qa-suggestions"),
   followups: document.getElementById("qa-followups"),
   feedback: document.getElementById("qa-feedback"),
@@ -67,6 +77,9 @@ function setStatus(message, kind = "") {
 function updateLinks() {
   if (el.readinessLink) {
     el.readinessLink.href = `/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}`;
+  }
+  if (el.manualLibraryLink) {
+    el.manualLibraryLink.href = `/admin/manual-library?kb_name=${encodeURIComponent(state.kbName || "default")}`;
   }
   if (el.activeKb) {
     el.activeKb.textContent = state.kbName || "default";
@@ -742,6 +755,235 @@ function renderSuggestions() {
   });
 }
 
+function uploadHeaders(json = true) {
+  const out = json ? { "Content-Type": "application/json" } : {};
+  return { ...out, ...authHeadersFromToken(el.token ? el.token.value : "") };
+}
+
+function uploadMetadataFromForm() {
+  const title = el.uploadTitle ? el.uploadTitle.value.trim() : "";
+  const sourceFile = el.uploadSource ? el.uploadSource.value.trim() : "";
+  return {
+    manual_id: manualIdFromSource(sourceFile || title || "manual"),
+    title,
+    source_file: sourceFile,
+    product_category: el.uploadCategory ? el.uploadCategory.value.trim() : "",
+    language: el.uploadLanguage ? el.uploadLanguage.value.trim() || "unknown" : "unknown",
+    tags: tagsFromText(el.uploadTags ? el.uploadTags.value : ""),
+  };
+}
+
+function tagsFromText(value) {
+  return String(value || "")
+    .split(/[,\n]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function manualIdFromSource(value) {
+  return String(value || "manual")
+    .split("/")
+    .pop()
+    .replace(/\.[^.]+$/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80) || `manual-${Date.now()}`;
+}
+
+function sourcePathFromFileName(fileName) {
+  const safeName = String(fileName || "manual.md")
+    .trim()
+    .replaceAll("\\", "/")
+    .split("/")
+    .pop()
+    .replace(/[^A-Za-z0-9._\-\u4e00-\u9fff]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `uploads/${safeName || "manual.md"}`;
+}
+
+function titleFromFileName(fileName) {
+  const stem = String(fileName || "")
+    .split("/")
+    .pop()
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return stem ? stem.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
+}
+
+function applyUploadFileDefaults() {
+  const file = el.uploadFile?.files?.[0];
+  if (!file) return;
+  if (el.uploadTitle && !el.uploadTitle.value.trim()) {
+    el.uploadTitle.value = titleFromFileName(file.name);
+  }
+  if (el.uploadSource && !el.uploadSource.value.trim()) {
+    el.uploadSource.value = sourcePathFromFileName(file.name);
+  }
+  if (el.uploadCategory && !el.uploadCategory.value.trim()) {
+    el.uploadCategory.value = "manual";
+  }
+  if (el.uploadLanguage && !el.uploadLanguage.value.trim()) {
+    el.uploadLanguage.value = "zh-CN";
+  }
+  setUploadMessage(t("Review the details, then upload and index."), "");
+}
+
+function setUploadMessage(message, kind = "") {
+  if (!el.uploadMessages) return;
+  el.uploadMessages.className = kind ? `qa-upload-messages ${kind}` : "qa-upload-messages";
+  el.uploadMessages.textContent = message ? t(message) : "";
+}
+
+function formatApiError(errorBody, fallback) {
+  const detail = errorBody?.detail;
+  if (detail && Array.isArray(detail.messages)) {
+    return detail.messages.map((item) => `${item.field || "metadata"}: ${item.message}`).join("; ");
+  }
+  return errorBody?.message || errorBody?.detail || fallback;
+}
+
+async function qaApiFetch(path, options = {}) {
+  const response = await fetch(`${config.apiBasePath || ""}${path}`, options);
+  const text = await response.text();
+  let body = {};
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch (_error) {
+      body = { message: text };
+    }
+  }
+  if (!response.ok) {
+    throw new Error(formatApiError(body, `HTTP ${response.status}`));
+  }
+  return body;
+}
+
+async function validateUploadMetadata(metadata) {
+  return qaApiFetch("/manuals/validate", {
+    method: "POST",
+    headers: uploadHeaders(),
+    body: JSON.stringify({ kb_name: state.kbName, metadata, mode: "create" }),
+  });
+}
+
+async function handleUploadSubmit(event) {
+  event.preventDefault();
+  const file = el.uploadFile?.files?.[0];
+  if (!file) {
+    setUploadMessage("Choose a manual file first.", "error");
+    el.uploadFile?.focus();
+    return;
+  }
+  const metadata = uploadMetadataFromForm();
+  el.uploadSubmit.disabled = true;
+  setUploadMessage("Validating manual details...");
+  try {
+    const validation = await validateUploadMetadata(metadata);
+    if (validation && validation.valid === false) {
+      setUploadMessage(formatApiError(validation, "Manual details need review."), "error");
+      el.uploadSubmit.disabled = false;
+      return;
+    }
+    const form = new FormData();
+    form.set("kb_name", state.kbName || "default");
+    form.set("metadata", JSON.stringify(metadata));
+    form.set("overwrite", "false");
+    form.set("trigger_rebuild", "true");
+    form.set("file", file);
+    const body = await qaApiFetch("/manuals", {
+      method: "POST",
+      headers: uploadHeaders(false),
+      body: form,
+    });
+    setUploadMessage(body.rebuild_job ? "Manual uploaded. Indexing is queued..." : "Manual uploaded. Indexing started...");
+    setStatus(t("Manual uploaded. Indexing it for Q&A..."), "warn");
+    if (body.rebuild_job) {
+      pollUploadRebuildJob(body.rebuild_job.job_id, metadata);
+    } else if (body.rebuild_task) {
+      pollUploadRebuild(body.rebuild_task.task_id, metadata);
+    } else {
+      setUploadMessage("Manual uploaded. Use Advanced if indexing is still required.", "warn");
+      el.uploadSubmit.disabled = false;
+      await loadKnowledgeBases();
+    }
+  } catch (error) {
+    setUploadMessage(userFacingError(error.message), "error");
+    setStatus(userFacingError(error.message), "error");
+    el.uploadSubmit.disabled = false;
+  }
+}
+
+async function pollUploadRebuild(taskId, metadata) {
+  if (!taskId) {
+    el.uploadSubmit.disabled = false;
+    return;
+  }
+  try {
+    const task = await qaApiFetch(`/rebuild/${encodeURIComponent(taskId)}`, {
+      headers: uploadHeaders(false),
+    });
+    if (task.status === "running") {
+      setUploadMessage("Indexing manual for Q&A...");
+      window.setTimeout(() => pollUploadRebuild(taskId, metadata), 1000);
+      return;
+    }
+    el.uploadSubmit.disabled = false;
+    if (task.status === "done") {
+      await uploadReady(metadata);
+    } else {
+      setUploadMessage(`Indexing failed: ${task.error || "review RAG Readiness"}`, "error");
+      setStatus(t("Indexing needs attention. The previous searchable KB remains available."), "error");
+    }
+  } catch (error) {
+    el.uploadSubmit.disabled = false;
+    setUploadMessage(userFacingError(error.message), "error");
+  }
+}
+
+async function pollUploadRebuildJob(jobId, metadata) {
+  if (!jobId) {
+    el.uploadSubmit.disabled = false;
+    return;
+  }
+  try {
+    const job = await qaApiFetch(`/manual-library/rebuild-jobs/${encodeURIComponent(jobId)}`, {
+      headers: uploadHeaders(false),
+    });
+    if (["queued", "running", "retrying", "cancel_requested"].includes(job.status)) {
+      setUploadMessage(job.status === "queued" ? "Indexing is queued..." : "Indexing manual for Q&A...");
+      window.setTimeout(() => pollUploadRebuildJob(jobId, metadata), 1000);
+      return;
+    }
+    el.uploadSubmit.disabled = false;
+    if (job.status === "succeeded") {
+      await uploadReady(metadata);
+    } else {
+      const detail = job.error?.message || JSON.stringify(job.error || {});
+      setUploadMessage(`Indexing failed: ${detail || job.status}`, "error");
+      setStatus(t("Indexing needs attention. The previous searchable KB remains available."), "error");
+    }
+  } catch (error) {
+    el.uploadSubmit.disabled = false;
+    setUploadMessage(userFacingError(error.message), "error");
+  }
+}
+
+async function uploadReady(metadata) {
+  await loadKnowledgeBases();
+  setUploadMessage("Manual is indexed. Ask a question about it below.", "success");
+  setStatus(t("Manual is ready for Q&A."), "success");
+  if (el.uploadForm) el.uploadForm.reset();
+  if (el.question && metadata?.title) {
+    el.question.placeholder = t("Ask about {title}", { title: metadata.title });
+    el.question.focus();
+  }
+}
+
 function renderFollowups(answerText, citations) {
   if (!el.followups) return;
   const questions = buildFollowupQuestions(answerText, citations).slice(0, 3);
@@ -1176,6 +1418,8 @@ if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
 if (el.question) el.question.addEventListener("input", updateSubmitNewState);
 if (el.kbSelect) el.kbSelect.addEventListener("change", handleKbSelection);
+if (el.uploadFile) el.uploadFile.addEventListener("change", applyUploadFileDefaults);
+if (el.uploadForm) el.uploadForm.addEventListener("submit", handleUploadSubmit);
 bindSharedApiToken(el.token);
 initI18n({ mount: ".qa-left-rail" });
 updateLinks();

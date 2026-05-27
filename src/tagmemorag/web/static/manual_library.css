@@ -674,6 +674,96 @@ textarea {
   outline: none;
 }
 
+.qa-upload-card {
+  gap: 10px;
+}
+
+.qa-upload-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.qa-advanced-link {
+  color: #315f8f;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.qa-advanced-link:hover,
+.qa-advanced-link:focus {
+  color: #1f4974;
+  text-decoration: underline;
+  outline: none;
+}
+
+.qa-upload-form {
+  display: grid;
+  gap: 9px;
+}
+
+.qa-upload-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qa-upload-form input {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #d5e0eb;
+  border-radius: 8px;
+  background: #fbfdff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 8px;
+}
+
+.qa-upload-form input:focus {
+  border-color: #6f9fd3;
+  box-shadow: 0 0 0 3px rgba(111, 159, 211, 0.18);
+  outline: none;
+}
+
+.qa-file-field input {
+  padding: 6px;
+}
+
+.qa-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.qa-upload-messages {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.qa-upload-messages.success {
+  color: #1d5b43;
+}
+
+.qa-upload-messages.warn {
+  color: #8a5b10;
+}
+
+.qa-upload-messages.error {
+  color: var(--danger);
+}
+
+.qa-upload-form button {
+  justify-self: start;
+  min-height: 32px;
+}
+
 .qa-history-card {
   min-height: 0;
 }

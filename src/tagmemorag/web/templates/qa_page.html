@@ -46,6 +46,48 @@
             <div id="qa-suggestions" class="qa-suggestion-list"></div>
           </section>
 
+          <section class="qa-context-card qa-upload-card" aria-label="Add manual">
+            <div class="qa-upload-head">
+              <div>
+                <span class="eyebrow">Add manual</span>
+                <strong>Upload and index</strong>
+              </div>
+              <a id="qa-manual-library-link" class="qa-advanced-link" href="/admin/manual-library?kb_name={{ default_kb_name }}">Advanced</a>
+            </div>
+            <form id="qa-upload-form" class="qa-upload-form">
+              <label class="qa-file-field">
+                <span>Manual file</span>
+                <input id="qa-upload-file" name="file" type="file" accept=".md,.txt,.pdf,text/markdown,text/plain,application/pdf">
+              </label>
+              <div class="qa-upload-grid">
+                <label>
+                  <span>Title</span>
+                  <input id="qa-upload-title" name="title" type="text" autocomplete="off" placeholder="Manual title">
+                </label>
+                <label>
+                  <span>Category</span>
+                  <input id="qa-upload-category" name="product_category" type="text" autocomplete="off" placeholder="coffee">
+                </label>
+              </div>
+              <label>
+                <span>Source path</span>
+                <input id="qa-upload-source" name="source_file" type="text" autocomplete="off" placeholder="manuals/example.md">
+              </label>
+              <div class="qa-upload-grid">
+                <label>
+                  <span>Language</span>
+                  <input id="qa-upload-language" name="language" type="text" autocomplete="off" value="zh-CN">
+                </label>
+                <label>
+                  <span>Tags</span>
+                  <input id="qa-upload-tags" name="tags" type="text" autocomplete="off" placeholder="steam, cleaning">
+                </label>
+              </div>
+              <div id="qa-upload-messages" class="qa-upload-messages" aria-live="polite"></div>
+              <button id="qa-upload-submit" class="ghost small" type="submit">Upload and index</button>
+            </form>
+          </section>
+
           <section class="qa-context-card qa-history-card" aria-label="Conversation history">
             <div class="qa-history-head">
               <span class="eyebrow">Conversation</span>

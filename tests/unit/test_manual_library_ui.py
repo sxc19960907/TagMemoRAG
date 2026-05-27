@@ -1099,6 +1099,12 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert "Check KB state before troubleshooting." in body
     assert "Product manual support" in body
     assert "Try asking" in body
+    assert "Add manual" in body
+    assert 'id="qa-upload-form"' in body
+    assert 'id="qa-upload-file"' in body
+    assert 'id="qa-upload-submit"' in body
+    assert 'id="qa-manual-library-link"' in body
+    assert 'href="/admin/manual-library?kb_name=ops"' in body
     assert "Ask about a symptom, task, model, or error." in body
     assert "Answers will cite the manual passages used on the right." in body
     assert 'id="qa-kb-name"' not in body
@@ -1173,6 +1179,17 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "/admin/retrieval-quality" in js.text
     assert "addConversationTurn" in js.text
     assert "updateConversationTurn" in js.text
+    assert "handleUploadSubmit" in js.text
+    assert "applyUploadFileDefaults" in js.text
+    assert "uploadMetadataFromForm" in js.text
+    assert 'qaApiFetch("/manuals/validate"' in js.text
+    assert 'qaApiFetch("/manuals"' in js.text
+    assert "trigger_rebuild" in js.text
+    assert "pollUploadRebuild" in js.text
+    assert "pollUploadRebuildJob" in js.text
+    assert "/manual-library/rebuild-jobs" in js.text
+    assert "Manual is ready for Q&A." in js.text
+    assert "Indexing needs attention. The previous searchable KB remains available." in js.text
     assert "restoreConversationTurn" in js.text
     assert "clearHistory" in js.text
     assert "qa-history-item" in js.text
