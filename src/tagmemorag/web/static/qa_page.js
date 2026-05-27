@@ -231,6 +231,7 @@ function renderAnswer(body) {
     el.answer.innerHTML = renderConversationShell(body.question || activeConversationTurn()?.question || "", [
       `<p>${escapeHtml(userFacingReason(reason))}</p>`,
       ...hints.map((hint) => `<p class="muted">${escapeHtml(hint)}</p>`),
+      renderRecoveryState(userFacingReason(reason)),
     ].join(""));
     el.answerMeta.textContent = t("No grounded answer available");
     if (el.copyAnswer) el.copyAnswer.disabled = true;

@@ -488,20 +488,31 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
+    _assert_qa_first_screen_guidance(page)
     page.locator("#ui-language-switcher select").select_option("zh")
     page.get_by_text("手册问答", exact=True).wait_for()
     page.locator("#ui-language-switcher select").select_option("en")
     page.get_by_role("textbox", name="Q&A question").fill("服务模式怎么进入？")
     page.get_by_role("button", name="Ask question").click()
+    _assert_qa_loading_guidance_or_ready(page)
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
     assert "YOUR QUESTION" in answer_text
     assert "MANUAL ANSWER" in answer_text
     assert "服务模式怎么进入？" in answer_text
     assert "同时按住清洗键和热水键三秒" in answer_text
+    assert page.locator("#qa-copy-answer").is_enabled()
     sources_text = page.locator("#qa-sources").inner_text()
     assert "demo-service-manual.md" in sources_text
     assert "Cited manual passage" in sources_text
+    assert "Click a citation in the answer to focus a source." in page.locator("#qa-source-meta").inner_text()
+    followups_text = page.locator("#qa-followups").inner_text()
+    assert "Suggested follow-ups" in followups_text
+    assert "These will continue from the current answer when useful." in followups_text
+    feedback_text = page.locator("#qa-feedback").inner_text()
+    assert "Was this useful?" in feedback_text
+    assert "Helpful" in feedback_text
+    assert "Not helpful" in feedback_text
     page.locator(".qa-citation-chip").first.click()
     page.locator(".qa-source-item.active").wait_for()
     _assert_qa_layout(page)
@@ -664,16 +675,55 @@ def _assert_qa_layout(page) -> None:
     page.set_viewport_size({"width": 1440, "height": 980})
 
 
+def _assert_qa_first_screen_guidance(page) -> None:
+    flow_text = page.locator(".qa-flow-guide").inner_text()
+    assert "Ask" in flow_text
+    assert "Read" in flow_text
+    assert "Verify" in flow_text
+    assert "Describe the symptom, task, model, or error." in flow_text
+    assert "Review the grounded answer and citation chips." in flow_text
+    assert "Use Sources to inspect the manual passages." in flow_text
+    empty_text = page.locator("#qa-answer").inner_text()
+    assert "Ask about a symptom, task, model, or error." in empty_text
+    assert "Answers will cite the manual passages used on the right." in empty_text
+    assert "Cited source snippets will appear here." in page.locator("#qa-source-meta").inner_text()
+    assert page.locator("#qa-submit").is_enabled()
+
+
+def _assert_qa_loading_guidance_or_ready(page) -> None:
+    try:
+        page.locator("#qa-answer").get_by_text("Working on your answer").wait_for(timeout=350)
+        answer_text = page.locator("#qa-answer").inner_text()
+        sources_text = page.locator("#qa-sources").inner_text()
+        assert "Match the question to the active knowledge base." in answer_text
+        assert "Retrieve the most relevant manual passages." in answer_text
+        assert "Draft an answer with citations you can inspect." in answer_text
+        assert "Finding cited passages" in sources_text
+        assert "Sources will appear here as soon as the answer is ready." in sources_text
+        assert "Retrieving manual evidence..." in page.locator("#qa-source-meta").inner_text()
+    except Exception:
+        page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+
+
 def _exercise_rag_failure_states(page, port: int, upload_path: Path) -> None:
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
+    _assert_qa_first_screen_guidance(page)
     page.locator("#qa-question").fill("服务模式怎么进入？")
     page.locator("#qa-submit").click()
+    _assert_qa_loading_guidance_or_ready(page)
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
     assert "not ready" in answer_text
     assert "import manuals and rebuild" in answer_text
+    assert "Could not complete this answer" in answer_text
+    assert "Try asking again with the product model, symptom, or error code." in answer_text
+    assert "Check RAG Readiness if this keeps failing." in answer_text
+    readiness_href = page.locator("#qa-answer a").filter(has_text="Check readiness").first.get_attribute("href")
+    assert readiness_href is not None
+    assert readiness_href == "/admin/rag-readiness?kb_name=default"
     assert "No cited sources returned." in page.locator("#qa-sources").inner_text()
+    assert "Try a more specific product, symptom, task, or error code." in page.locator("#qa-sources").inner_text()
 
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
     page.get_by_role("heading", name="Manual Library").wait_for()
