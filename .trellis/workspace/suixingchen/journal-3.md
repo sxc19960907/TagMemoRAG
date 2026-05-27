@@ -1807,3 +1807,36 @@ Clarified Manual Library rebuild failure recovery with a dedicated failed next-s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 137: Eval Promotion Quality Signals
+
+**Date**: 2026-05-27
+**Task**: Eval Promotion Quality Signals
+**Branch**: `master`
+
+### Summary
+
+Added strong/weak matcher quality metadata to feedback promotion, surfaced quality in Retrieval Quality, and verified unit plus browser QA promotion flows.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3249d10` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
