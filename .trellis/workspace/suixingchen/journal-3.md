@@ -1840,3 +1840,36 @@ Added strong/weak matcher quality metadata to feedback promotion, surfaced quali
 ### Next Steps
 
 - None - task complete
+
+
+## Session 138: Trial Access Boundary Clarity
+
+**Date**: 2026-05-27
+**Task**: Trial Access Boundary Clarity
+**Branch**: `master`
+
+### Summary
+
+Added People & Access scope guidance, clearer admin-token error mapping, i18n/CSS support, and static plus auth enforcement test coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `075b04b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

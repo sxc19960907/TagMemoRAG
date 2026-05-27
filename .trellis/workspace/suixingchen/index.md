@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 137
+- **Total Sessions**: 138
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1842 | Active |
+| `journal-3.md` | ~1875 | Active |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 138 | 2026-05-27 | Trial Access Boundary Clarity | `075b04b` | `master` |
 | 137 | 2026-05-27 | Eval Promotion Quality Signals | `3249d10` | `master` |
 | 136 | 2026-05-27 | Upload Rebuild Recovery Hardening | `7203594` | `master` |
 | 135 | 2026-05-27 | Feedback Triage Workflow Hardening | `6a156a3` | `master` |
