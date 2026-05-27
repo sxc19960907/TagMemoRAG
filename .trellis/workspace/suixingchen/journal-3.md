@@ -1607,3 +1607,36 @@ Completed the feedback-to-eval loop smoothing child task: QA saved feedback now 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 131: Deployment pilot browser readiness
+
+**Date**: 2026-05-27
+**Task**: Deployment pilot browser readiness
+**Branch**: `master`
+
+### Summary
+
+Completed the deployment/pilot readiness child task: pilot run now optionally includes browser QA readiness in retained JSON/Markdown reports, docs explain browser-first pilot usage, and focused unit plus real pilot/browser gates passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7450f84` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
