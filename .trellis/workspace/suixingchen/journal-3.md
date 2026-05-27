@@ -1906,3 +1906,36 @@ Added retained trial report and GitHub CI handoff documentation with links and a
 ### Next Steps
 
 - None - task complete
+
+
+## Session 140: Trial Readiness Hardening Closure
+
+**Date**: 2026-05-27
+**Task**: Trial Readiness Hardening Closure
+**Branch**: `master`
+
+### Summary
+
+Closed the seven-part RAG trial operations hardening track after final readiness docs and local gates passed; archived final review and parent tasks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4800c02` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
