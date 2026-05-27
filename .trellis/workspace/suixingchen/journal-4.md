@@ -69,3 +69,36 @@ Added QA first-run upload guidance, upload-derived suggestions, and recovery lin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 144: Trial handoff QA entry alignment
+
+**Date**: 2026-05-27
+**Task**: Trial handoff QA entry alignment
+**Branch**: `master`
+
+### Summary
+
+Aligned quick-start and trial handoff docs with QA first-run upload guidance and protected the wording with documentation tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7e9e5ca` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
