@@ -516,6 +516,7 @@ const zh = {
   "Feedback cleared.": "反馈已清除。",
   "Saving feedback...": "正在保存反馈...",
   "Feedback sent to Retrieval Quality.": "反馈已发送到检索质量页。",
+  "Review this case": "查看这条反馈",
   "Feedback could not be saved.": "反馈未能保存。",
   "Answer copied.": "回答已复制。",
   "Copy failed. Select the answer text to copy it manually.": "复制失败。请选中回答文本后手动复制。",

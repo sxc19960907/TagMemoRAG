@@ -1080,6 +1080,18 @@ textarea {
   font-size: 12px;
 }
 
+.qa-feedback-review-link {
+  color: #265f91;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.qa-feedback-review-link:hover,
+.qa-feedback-review-link:focus {
+  color: #1f4d76;
+  text-decoration: underline;
+}
+
 .qa-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

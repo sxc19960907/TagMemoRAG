@@ -799,7 +799,7 @@ function renderFeedback() {
     button.disabled = Boolean(turn?.feedbackPending);
   });
   if (el.feedbackNote) {
-    el.feedbackNote.textContent = feedbackNoteForTurn(turn);
+    renderFeedbackNote(turn);
   }
 }
 
@@ -857,6 +857,32 @@ function feedbackNoteForTurn(turn) {
   if (turn.feedbackStatus === "saved") return t("Feedback sent to Retrieval Quality.");
   if (turn.feedbackStatus === "failed") return t("Feedback could not be saved.");
   return feedbackNoteForKind(turn.feedbackKind || "");
+}
+
+function renderFeedbackNote(turn) {
+  if (!el.feedbackNote) return;
+  el.feedbackNote.replaceChildren();
+  const note = feedbackNoteForTurn(turn);
+  if (!note) return;
+  el.feedbackNote.append(document.createTextNode(note));
+  const href = feedbackReviewHref(turn);
+  if (!href) return;
+  el.feedbackNote.append(document.createTextNode(" "));
+  const link = document.createElement("a");
+  link.className = "qa-feedback-review-link";
+  link.href = href;
+  link.textContent = t("Review this case");
+  el.feedbackNote.append(link);
+}
+
+function feedbackReviewHref(turn) {
+  if (!turn || turn.feedbackStatus !== "saved" || !turn.feedbackId) return "";
+  const body = turn.body || {};
+  const retrieve = body.retrieve || {};
+  const params = new URLSearchParams();
+  params.set("kb_name", body.kb_name || retrieve.kb_name || state.kbName || "default");
+  params.set("feedback_id", turn.feedbackId);
+  return `/admin/retrieval-quality?${params.toString()}`;
 }
 
 function feedbackNoteForKind(kind) {

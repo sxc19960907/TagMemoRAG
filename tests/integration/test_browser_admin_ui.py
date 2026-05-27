@@ -519,8 +519,15 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
 
     page.get_by_role("button", name="Not helpful").click()
     page.locator("#qa-feedback-note").get_by_text("Feedback sent to Retrieval Quality.").wait_for(timeout=10000)
+    review_link = page.locator("#qa-feedback-note a.qa-feedback-review-link")
+    review_link.get_by_text("Review this case").wait_for(timeout=10000)
+    review_href = review_link.get_attribute("href") or ""
+    assert "/admin/retrieval-quality?" in review_href
+    assert "kb_name=default" in review_href
+    assert "feedback_id=" in review_href
+    review_feedback_id = review_href.split("feedback_id=", 1)[1].split("&", 1)[0]
 
-    page.goto(f"http://127.0.0.1:{port}/admin/retrieval-quality?kb_name=default")
+    review_link.click()
     page.get_by_role("heading", name="Retrieval Quality").wait_for()
     page.locator("#quality-status").get_by_text("Loaded 1 feedback records.").wait_for(timeout=10000)
     assert "1 records" in page.locator("#quality-count").inner_text()
@@ -528,7 +535,8 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert page.locator("#quality-summary-not-helpful").inner_text() == "1"
     assert "蒸汽很小怎么办？" in page.locator("#quality-feedback-rows").inner_text()
     assert "Not helpful" in page.locator("#quality-feedback-rows").inner_text()
-    page.get_by_text("蒸汽很小怎么办？", exact=True).click()
+    selected_id = page.locator("#quality-detail-subtitle").inner_text()
+    assert selected_id == review_feedback_id
     detail_text = page.locator("#quality-detail-list").inner_text()
     assert "Q&A feedback: not_helpful" in detail_text
     assert "Q&A" in detail_text

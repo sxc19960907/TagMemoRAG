@@ -2,10 +2,13 @@ import { authHeadersFromToken, bindSharedApiToken } from "./admin_token.js";
 import { initI18n, t, translatePage } from "./i18n.js";
 
 const config = JSON.parse(document.getElementById("retrieval-quality-config").textContent);
+const initialParams = new URLSearchParams(window.location.search);
+const initialFeedbackId = initialParams.get("feedback_id") || "";
 
 const state = {
   rows: [],
-  selectedId: null,
+  selectedId: initialFeedbackId || null,
+  requestedFeedbackId: initialFeedbackId,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -67,11 +70,20 @@ async function loadFeedback() {
   setStatus(t("Loading feedback..."));
   const body = await requestJson(`/search/feedback?${params.toString()}`, { method: "GET" });
   state.rows = body.feedback || [];
+  selectFeedbackFromUrl();
   state.selectedId = state.rows.some((row) => row.feedback_id === state.selectedId) ? state.selectedId : null;
   renderSummary();
   renderRows();
   renderDetail();
   setStatus(`Loaded ${state.rows.length} feedback records.`, "success");
+}
+
+function selectFeedbackFromUrl() {
+  if (!state.requestedFeedbackId) return;
+  if (state.rows.some((row) => row.feedback_id === state.requestedFeedbackId)) {
+    state.selectedId = state.requestedFeedbackId;
+    state.requestedFeedbackId = "";
+  }
 }
 
 function renderSummary() {

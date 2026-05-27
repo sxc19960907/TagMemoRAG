@@ -5,8 +5,8 @@
 - [x] Create and complete child task 1: first-run/demo experience stabilization.
 - [x] Create and complete child task 2: browser-first QA readiness quality gate.
 - [x] Create and complete child task 3: test tier and quality-gate documentation.
-- [ ] Create and complete child task 4: user-facing KB selection and multi-KB clarity.
-- [ ] Create and complete child task 5: feedback-to-eval loop smoothing.
+- [x] Create and complete child task 4: user-facing KB selection and multi-KB clarity.
+- [x] Create and complete child task 5: feedback-to-eval loop smoothing.
 - [ ] Create and complete child task 6: deployment/pilot readiness pass.
 - [ ] Create and complete child task 7: integrated black-box user acceptance review.
 

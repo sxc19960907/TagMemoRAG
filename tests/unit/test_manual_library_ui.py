@@ -208,6 +208,9 @@ def test_retrieval_quality_static_asset_is_served(tmp_path, fake_embedder):
     assert "expectedRefCards" in js.text
     assert "bindSharedApiToken" in js.text
     assert "authHeadersFromToken" in js.text
+    assert "initialFeedbackId" in js.text
+    assert "requestedFeedbackId" in js.text
+    assert "selectFeedbackFromUrl" in js.text
     assert "function updateLinks()" in js.text
     assert "/admin/rag-workbench" in js.text
     assert "/admin/rag-readiness" in js.text
@@ -1146,6 +1149,10 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "feedbackPayloadForTurn" in js.text
     assert "selectedResultsForFeedback" in js.text
     assert "Feedback sent to Retrieval Quality." in js.text
+    assert "renderFeedbackNote" in js.text
+    assert "feedbackReviewHref" in js.text
+    assert "Review this case" in js.text
+    assert "/admin/retrieval-quality" in js.text
     assert "addConversationTurn" in js.text
     assert "updateConversationTurn" in js.text
     assert "restoreConversationTurn" in js.text
