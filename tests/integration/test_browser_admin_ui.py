@@ -1813,6 +1813,14 @@ def _exercise_qa_insufficient_evidence_refusal(page, port: int, upload_path: Pat
 
 
 def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
+    qa_payloads = []
+    page.on(
+        "request",
+        lambda request: qa_payloads.append(request.post_data_json)
+        if request.url.endswith("/qa/answer") and request.method == "POST"
+        else None,
+    )
+
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
     page.get_by_role("heading", name="Manual Library").wait_for()
     page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
@@ -1847,15 +1855,23 @@ def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
     page.locator("#qa-question").fill("蒸汽很小怎么办？")
+    assert "New question" in page.locator("#qa-context-mode").inner_text()
     page.locator("#qa-submit").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    assert qa_payloads[-1]["conversation_context"] == []
     first_answer = page.locator("#qa-answer").inner_text()
     assert "清洗喷嘴" in first_answer
     assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
 
     page.locator("#qa-question").fill("下一步呢？")
+    context_mode = page.locator("#qa-context-mode")
+    context_mode.get_by_text("Will continue from earlier").wait_for()
+    assert "蒸汽很小怎么办？" in context_mode.inner_text()
+    assert page.locator("#qa-submit-new").is_enabled()
     page.locator("#qa-submit").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    assert qa_payloads[-1]["conversation_context"]
+    assert qa_payloads[-1]["conversation_context"][0]["question"] == "蒸汽很小怎么办？"
     notice = page.locator("#qa-context-notice")
     notice.wait_for()
     notice_text = notice.inner_text()
@@ -1864,6 +1880,14 @@ def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
     followup_answer = page.locator("#qa-answer").inner_text()
     assert "喷嘴" in followup_answer or "除垢" in followup_answer
     assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
+
+    page.locator("#qa-question").fill("下一步呢？")
+    context_mode.get_by_text("Will continue from earlier").wait_for()
+    page.locator("#qa-submit-new").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    assert qa_payloads[-1]["conversation_context"] == []
+    assert page.locator("#qa-context-notice").count() == 0
+    assert "New question" in page.locator("#qa-context-mode").inner_text()
 
 
 def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False, ocr_enabled: bool = False, assets_enabled: bool = False) -> Path:

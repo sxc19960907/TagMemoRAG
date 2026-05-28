@@ -36,6 +36,7 @@ const el = {
   token: document.getElementById("qa-api-token"),
   questionForm: document.getElementById("qa-question-form"),
   question: document.getElementById("qa-question"),
+  contextMode: document.getElementById("qa-context-mode"),
   submit: document.getElementById("qa-submit"),
   submitNew: document.getElementById("qa-submit-new"),
   status: document.getElementById("qa-status"),
@@ -258,6 +259,7 @@ async function askQuestion(question, options = {}) {
   } finally {
     el.submit.disabled = false;
     updateSubmitNewState();
+    renderContextMode();
   }
 }
 
@@ -446,6 +448,7 @@ function updateConversationTurn(turnId, patch) {
     turn.id === turnId ? { ...turn, ...patch } : turn
   ));
   renderHistory();
+  renderContextMode();
   saveSessionMemory();
 }
 
@@ -465,6 +468,10 @@ function conversationContextForRequest(activeTurnId) {
       question: turn.question,
       answer: answerPreviewForContext(turn.body),
     }));
+}
+
+function latestAnsweredTurn() {
+  return state.turns.find((turn) => turn.body && turn.status === "answered") || null;
 }
 
 function answerPreviewForContext(body) {
@@ -752,6 +759,33 @@ function updateSubmitNewState() {
   if (!el.submitNew) return;
   const question = el.question ? el.question.value.trim() : "";
   el.submitNew.disabled = !shouldUseConversationContext(question);
+}
+
+function renderContextMode() {
+  if (!el.contextMode) return;
+  const question = el.question ? el.question.value.trim() : "";
+  const activeTurn = state.turns.find((turn) => turn.id === state.activeTurnId) || null;
+  const activeStandaloneQuestion = activeTurn
+    && activeTurn.question === question
+    && activeTurn.status !== "pending"
+    && !activeTurn.usedContext;
+  const willUseContext = shouldUseConversationContext(question);
+  const previous = latestAnsweredTurn();
+  if (willUseContext && previous && !activeStandaloneQuestion) {
+    const previousQuestion = previous.question || t("previous question");
+    const contextText = t("Ask will use: {question}", { question: previousQuestion });
+    el.contextMode.className = "qa-context-mode continuing";
+    el.contextMode.innerHTML = `
+      <strong>${t("Will continue from earlier")}</strong>
+      <p>${escapeHtml(contextText)}</p>
+    `;
+    return;
+  }
+  el.contextMode.className = "qa-context-mode standalone";
+  el.contextMode.innerHTML = `
+    <strong>${t("New question")}</strong>
+    <p>${t("This ask will not use earlier conversation context.")}</p>
+  `;
 }
 
 function historyStatusLabel(status) {
@@ -1635,7 +1669,12 @@ if (el.feedback) {
 }
 if (el.clearHistory) el.clearHistory.addEventListener("click", clearHistory);
 if (el.submitNew) el.submitNew.addEventListener("click", requestNewQuestion);
-if (el.question) el.question.addEventListener("input", updateSubmitNewState);
+if (el.question) {
+  el.question.addEventListener("input", () => {
+    updateSubmitNewState();
+    renderContextMode();
+  });
+}
 if (el.kbSelect) el.kbSelect.addEventListener("change", handleKbSelection);
 if (el.uploadFile) el.uploadFile.addEventListener("change", applyUploadFileDefaults);
 if (el.uploadForm) el.uploadForm.addEventListener("submit", handleUploadSubmit);
@@ -1649,5 +1688,6 @@ renderHistory();
 if (state.activeTurnId) restoreConversationTurn(state.activeTurnId);
 applyQuestionPrefill();
 updateSubmitNewState();
+renderContextMode();
 updateLocationKb();
 translatePage();

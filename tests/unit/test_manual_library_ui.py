@@ -1213,6 +1213,8 @@ def test_qa_page_route_serves_user_facing_shell(tmp_path, fake_embedder):
     assert 'class="qa-center-pane"' in body
     assert 'class="qa-right-rail"' in body
     assert 'id="qa-question"' in body
+    assert 'id="qa-context-mode"' in body
+    assert "This ask will not use earlier conversation context." in body
     assert 'id="qa-submit-new"' in body
     assert 'aria-label="Ask without conversation context"' in body
     assert 'aria-label="Ask question"' in body
@@ -1260,8 +1262,12 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     client = _client(tmp_path, fake_embedder)
 
     js = client.get("/static/manual-library/qa_page.js")
+    css = client.get("/static/manual-library/manual_library.css")
+    i18n = client.get("/static/manual-library/i18n.js")
 
     assert js.status_code == 200
+    assert css.status_code == 200
+    assert i18n.status_code == 200
     assert "/qa/answer" in js.text
     assert "include_retrieve" in js.text
     assert "conversation_context" in js.text
@@ -1273,6 +1279,10 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "requestNewQuestion" in js.text
     assert "renderContextNotice" in js.text
     assert "updateSubmitNewState" in js.text
+    assert "renderContextMode" in js.text
+    assert "Will continue from earlier" in js.text
+    assert "Ask will use: {question}" in js.text
+    assert "This ask will not use earlier conversation context." in js.text
     assert "qa-context-pill" in js.text
     assert "qa-context-notice" in js.text
     assert "sessionStorage" in js.text
@@ -1382,6 +1392,9 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-kb-name" not in js.text
     assert "plan_id" in js.text
     assert "build_id" in js.text
+    assert "qa-context-mode" in css.text
+    assert "Will continue from earlier" in i18n.text
+    assert "这次提问不会使用之前的对话上下文。" in i18n.text
 
 
 def _eval_report_payload(suite: str = ".tmp/feedback.jsonl", *, passed: bool = False) -> dict:

@@ -1530,6 +1530,35 @@ textarea {
   padding: 11px 12px;
 }
 
+.qa-context-mode {
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 9px 11px;
+}
+
+.qa-context-mode.continuing {
+  border-color: #bdd6c9;
+  background: #f3fbf6;
+}
+
+.qa-context-mode strong {
+  color: #17324d;
+  font-size: 13px;
+}
+
+.qa-context-mode.continuing strong {
+  color: #1d5b43;
+}
+
+.qa-context-mode p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .qa-composer button {
   align-self: end;
   min-width: 76px;
