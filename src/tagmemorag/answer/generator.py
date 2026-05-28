@@ -55,6 +55,8 @@ def _supported_excerpts(context: AnswerRequestContext) -> tuple[tuple[str, str],
     deduped_evidence = _dedupe_excerpts(evidence_candidates)
     if deduped_evidence:
         return tuple(deduped_evidence[:MAX_EXTRACTIVE_EXCERPTS])
+    if _asks_unsupported_repair(context.question):
+        return tuple()
     return tuple(_dedupe_excerpts(_all_supported_excerpts(context, allowed))[:MAX_EXTRACTIVE_EXCERPTS])
 
 
@@ -149,14 +151,17 @@ def _step_text(excerpt: str) -> str:
 
 
 def _is_relevant_excerpt(question: str, excerpt: str) -> bool:
-    if _asks_unsupported_repair(question) and _contains_any(excerpt, UNSUPPORTED_REPAIR_TERMS):
+    unsupported_repair = _asks_unsupported_repair(question)
+    if unsupported_repair and _contains_any(excerpt, UNSUPPORTED_REPAIR_TERMS) and _has_subject_overlap(question, excerpt):
         return True
     if _contains_any(question, SAFETY_TERMS) and _contains_any(excerpt, SAFETY_TERMS):
         return True
     if (
-        _contains_cjk(question)
+        not unsupported_repair
+        and _contains_cjk(question)
         and _contains_any(question, TROUBLESHOOTING_QUESTION_TERMS)
         and _contains_any(excerpt, TROUBLESHOOTING_ACTION_TERMS)
+        and (not _requires_subject_overlap(question) or _has_subject_overlap(question, excerpt))
     ):
         return True
     question_terms = _relevance_terms(question)
@@ -167,6 +172,27 @@ def _is_relevant_excerpt(question: str, excerpt: str) -> bool:
     if _contains_cjk(question):
         return len(overlap) >= min(2, len(question_terms))
     return len(overlap) >= min(2, len(question_terms))
+
+
+def _has_subject_overlap(question: str, excerpt: str) -> bool:
+    question_terms = _subject_terms(question)
+    if not question_terms:
+        return False
+    return bool(question_terms & _subject_terms(excerpt))
+
+
+def _requires_subject_overlap(question: str) -> bool:
+    if re.search(r"[A-Za-z]{2,}\s*[A-Za-z0-9-]{2,}", question):
+        return True
+    strong_terms = {term for term in _subject_terms(question) if len(term) > 1 or term.isascii()}
+    return len(strong_terms) >= 2
+
+
+def _subject_terms(text: str) -> set[str]:
+    terms = _relevance_terms(text)
+    generic = _relevance_terms(" ".join(UNSUPPORTED_REPAIR_TERMS + TROUBLESHOOTING_QUESTION_TERMS + TROUBLESHOOTING_ACTION_TERMS))
+    generic.update({"是否", "是不是", "直接", "故障", "需要", "可以", "how", "what", "should"})
+    return {term for term in terms if term not in generic}
 
 
 def _relevance_terms(text: str) -> set[str]:

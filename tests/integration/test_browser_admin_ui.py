@@ -1298,6 +1298,8 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
             "question": "ASKO W6564 如何清潔過濾器和排水馬達？",
             "source_name": "ASKO W6564.pdf",
             "expected_terms": ["過濾器", "排水馬達", "清潔"],
+            "forbidden_terms": ["Steam Clean", "0.6 l", "BSA5221"],
+            "unsupported": False,
         },
         {
             "path": pdf_paths["oven"],
@@ -1309,9 +1311,18 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
             "question": "How do I use Steam Clean on the HISENSE BSA5221 oven?",
             "source_name": "HISENSE BSA5221.pdf",
             "expected_terms": ["Steam Clean", "70", "water", "damp cloth"],
+            "forbidden_terms": ["ASKO W6564", "排水馬達", "過濾器"],
+            "unsupported": False,
+        },
+        {
+            "question": "ASKO W6564 排水馬達故障時是不是要直接換泵？",
+            "source_name": "ASKO W6564.pdf",
+            "expected_terms": [],
+            "forbidden_terms": ["Steam Clean", "BSA5221", "oven", "telescopic", "catalytic", "必须立即", "必須立即", "直接換泵"],
+            "unsupported": True,
         },
     ]
-    for upload in uploads:
+    for upload in uploads[:2]:
         _upload_manual_from_library_dialog(page, upload)
 
     diagnostics = page.evaluate(
@@ -1337,9 +1348,31 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
         page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
         answer_text = page.locator("#qa-answer").inner_text()
         sources_text = page.locator("#qa-sources").inner_text()
-        evidence_text = f"{answer_text}\n{sources_text}"
+        answer_without_question = answer_text.replace(str(upload["question"]), "")
+        evidence_text = f"{answer_without_question}\n{sources_text}"
+        evidence_text_casefold = evidence_text.casefold()
         assert str(upload["source_name"]) in sources_text
-        assert any(term in evidence_text for term in upload["expected_terms"])
+        if not upload["unsupported"]:
+            assert any(str(term).casefold() in evidence_text_casefold for term in upload["expected_terms"]), {
+                "question": upload["question"],
+                "expected_terms": upload["expected_terms"],
+                "answer": answer_without_question,
+                "sources": sources_text,
+            }
+        forbidden_hits = [term for term in upload["forbidden_terms"] if str(term).casefold() in evidence_text_casefold]
+        assert forbidden_hits == [], {
+            "question": upload["question"],
+            "forbidden_hits": forbidden_hits,
+            "answer": answer_text,
+            "sources": sources_text,
+        }
+        assert not any(leak in evidence_text for leak in ["storage_key", "blob_key", "checksum", "node_id", "anchor_key"])
+        if upload["unsupported"]:
+            assert "證據不足" in answer_without_question or "证据不足" in answer_without_question or "insufficient" in answer_without_question
+            assert "直接換泵" not in answer_without_question
+            assert "直接换泵" not in answer_without_question
+        else:
+            assert "證據不足" not in answer_without_question and "证据不足" not in answer_without_question
         page.locator(".qa-citation-chip").first.click()
         page.locator(".qa-source-item.active").wait_for()
         source_card = page.locator(".qa-source-item").filter(has_text=str(upload["source_name"])).first
@@ -1549,9 +1582,9 @@ def _exercise_qa_insufficient_evidence_refusal(page, port: int, upload_path: Pat
     page.locator("#qa-submit").click()
     page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
     answer_text = page.locator("#qa-answer").inner_text()
-    assert "证据不足" in answer_text
-    assert "无法确认" in answer_text
-    assert "进入服务模式" in answer_text
+    assert "证据不足" in answer_text or "insufficient" in answer_text.casefold()
+    assert "无法确认" in answer_text or "insufficient" in answer_text.casefold()
+    assert "配件编号是" not in answer_text
     assert "no results" not in answer_text.lower()
     assert "PN-" not in answer_text
     sources_text = page.locator("#qa-sources").inner_text()

@@ -424,6 +424,30 @@ def test_noop_answer_generator_does_not_fabricate_replacement_instruction():
     assert [c.citation_id for c in generation.citations] == ["cit_001", "cit_002"]
 
 
+def test_noop_answer_generator_refuses_unsupported_repair_without_relevant_evidence():
+    retrieve_payload = {
+        "citations": [{"citation_id": "cit_001"}, {"citation_id": "cit_002"}],
+        "context_pack": {
+            "items": [
+                {"citation_id": "cit_001", "content": "Steam Clean\n\nPour water into the oven tray and wipe with a damp cloth."},
+                {"citation_id": "cit_002", "content": "Guides\n\nRemove and clean wire and telescopic extendable guides."},
+            ]
+        },
+    }
+    prompt = build_answer_prompt(question="ASKO W6564 排水馬達故障時是不是要直接換泵", retrieve_payload=retrieve_payload, prompt_version="answer_prompt.v1")
+    context = AnswerRequestContext(
+        question="ASKO W6564 排水馬達故障時是不是要直接換泵",
+        retrieve_payload=retrieve_payload,
+        prompt=prompt,
+        max_output_tokens=64,
+    )
+
+    generation = NoopAnswerGenerator().generate(context)
+
+    assert generation.text == "The available evidence is insufficient to produce an extractive answer."
+    assert generation.citations == ()
+
+
 def test_create_answer_generator_noop():
     gen = create_answer_generator(Settings())
 

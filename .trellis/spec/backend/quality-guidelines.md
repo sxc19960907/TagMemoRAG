@@ -447,6 +447,15 @@ generation = validate_generation_citations(generation, prompt.allowed_citation_i
 - Unsupported part-number, disassembly, or replacement questions keep the
   insufficient-evidence framing even when retrieved evidence contains adjacent
   maintenance content.
+- Unsupported repair/replacement questions must not fall back to arbitrary
+  retrieved excerpts. They require same-subject evidence, such as matching
+  product model, component, or part terms; otherwise the local answer generator
+  returns insufficient evidence with no citations. This prevents cross-manual
+  contamination like an oven cleaning passage answering a washer pump question.
+- For specific product/manual questions that include a model or multiple strong
+  subject terms, broad troubleshooting action words such as `clean`/`check` are
+  not enough to mark an excerpt relevant; the excerpt must overlap the question
+  subject.
 - English keyword matching for short documentation terms must be word-boundary
   aware so terms such as `api` do not match unrelated words such as `rapid`.
 - New answer-formatting heuristics should be covered by focused answer-layer
@@ -462,6 +471,8 @@ generation = validate_generation_citations(generation, prompt.allowed_citation_i
   precedence.
 - Unsupported repair/replacement question -> insufficient-evidence repair
   framing takes precedence.
+- Unsupported repair/replacement question with only other-manual repair/action
+  snippets -> insufficient evidence with no citations.
 
 ### 5. Good/Base/Bad Cases
 
@@ -476,6 +487,8 @@ generation = validate_generation_citations(generation, prompt.allowed_citation_i
   boundaries.
 - Intent tests for short-token false positives.
 - Existing safety and unsupported-repair answer tests remain green.
+- Browser QA trust tests cover supported real-manual questions, unsupported
+  replacement questions, citation focus, and safe source-card details.
 
 ## Scenario: Answer-Quality Diagnostics Command
 
