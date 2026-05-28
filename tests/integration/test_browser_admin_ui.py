@@ -486,6 +486,56 @@ def test_browser_pdf_source_preview_success_path_when_renderer_available(tmp_pat
             server.wait(timeout=10)
 
 
+def test_browser_real_product_pdf_source_preview_user_flow(tmp_path):
+    if importlib.util.find_spec("fitz") is None:
+        pytest.skip("requires optional PyMuPDF/fitz for PDF page snapshot rendering")
+    real_pdf = Path("product_manuals/washer/ASKO W6564.pdf")
+    if not real_pdf.exists():
+        pytest.skip("requires local real product PDF sample")
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True, assets_enabled=True)
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_real_product_pdf_preview_flow(page, port, real_pdf)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
 def test_browser_rag_failure_states_are_user_visible(tmp_path):
     playwright = pytest.importorskip("playwright.sync_api")
     port = _free_port()
@@ -1228,6 +1278,64 @@ def _exercise_pdf_preview_success_flow(page, port: int, pdf_path: Path) -> None:
     assert asset_response.headers.get("content-type", "").startswith("image/png")
     assert asset_response.headers.get("x-document-asset-id")
     assert len(asset_response.body()) > 100
+
+
+def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+    _upload_manual_from_library_dialog(
+        page,
+        {
+            "path": pdf_path,
+            "manual_id": "asko-w6564-real",
+            "title": "ASKO W6564 Real Washer Manual",
+            "source_file": "real/ASKO W6564.pdf",
+            "tag": "real-pdf-preview",
+            "ready_source": "real/ASKO W6564.pdf",
+        },
+    )
+
+    diagnostics = page.evaluate(
+        """
+        async () => {
+          const response = await fetch("/manual-library/diagnostics?kb_name=default&include_jobs=true");
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        }
+        """
+    )
+    source_preview = diagnostics["last_rebuild"]["source_preview"]
+    assert source_preview["status"] == "ready"
+    assert source_preview["page_snapshots_ready"] >= 1
+    assert source_preview["renderer_available"] is True
+    assert "storage_key" not in json.dumps(source_preview)
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    page.get_by_role("textbox", name="Q&A question").fill("ASKO W6564 如何清潔過濾器和排水馬達？")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    sources_text = page.locator("#qa-sources").inner_text()
+    assert "ASKO W6564.pdf" in sources_text
+    assert any(term in f"{answer_text}\n{sources_text}" for term in ["過濾器", "排水馬達", "清潔"])
+    page.locator(".qa-citation-chip").first.click()
+    active_source = page.locator(".qa-source-item.active")
+    active_source.wait_for()
+    preview = active_source.locator("[data-source-preview]").first
+    preview.wait_for()
+    assert "Open source preview" in active_source.inner_text()
+    preview_href = preview.get_attribute("href") or ""
+    assert preview_href.startswith("/assets/")
+    assert "kb_name=default" in preview_href
+    assert "storage_key" not in preview_href
+    assert "blob_key" not in preview_href
+    asset_response = page.request.get(f"http://127.0.0.1:{port}{preview_href}")
+    assert asset_response.status == 200
+    assert asset_response.headers.get("content-type", "").startswith("image/png")
+    assert asset_response.headers.get("x-document-asset-id")
+    assert len(asset_response.body()) > 10_000
 
 
 def _assert_qa_layout(page) -> None:

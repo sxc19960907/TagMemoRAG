@@ -449,7 +449,8 @@ def test_rag_readiness_summary_reports_source_preview_review_for_pdfs(tmp_path, 
     assert "PDF page snapshots are disabled" in recommendations["review_source_previews"]["label"]
 
 
-def test_manual_library_diagnostics_include_source_preview_recommendation(tmp_path, fake_embedder):
+def test_manual_library_diagnostics_include_source_preview_recommendation(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.setattr("tagmemorag.api_manual.importlib.util.find_spec", lambda name: None if name == "fitz" else object())
     client = _client(tmp_path, fake_embedder)
     api.settings = Settings(
         storage=StorageConfig(data_dir=str(tmp_path / "data")),
