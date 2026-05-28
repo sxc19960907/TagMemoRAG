@@ -318,6 +318,42 @@ manual_library:
     assert dependency["detail"]["dependency"] == "qdrant-client"
 
 
+def test_config_validate_tesseract_cli_checks_system_commands(tmp_path, monkeypatch):
+    def fake_which(command):
+        return "/usr/bin/tesseract" if command == "tesseract" else None
+
+    monkeypatch.setattr("tagmemorag.config_validation.shutil.which", fake_which)
+    config = tmp_path / "ocr.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+ocr:
+  enabled: true
+  provider: tesseract_cli
+  pdf_renderer_command: pdftoppm
+  tesseract_command: tesseract
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+    checks = [check for check in report.to_dict()["checks"] if check["name"] == "system_command"]
+
+    assert report.status == "warning"
+    assert checks[0]["detail"]["field"] == "ocr.pdf_renderer_command"
+    assert checks[0]["detail"]["available"] is False
+    assert checks[1]["detail"]["field"] == "ocr.tesseract_command"
+    assert checks[1]["detail"]["available"] is True
+
+
 def test_config_validate_s3_missing_bucket_fails(tmp_path):
     config = tmp_path / "s3.yaml"
     config.write_text(

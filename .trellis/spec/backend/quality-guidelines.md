@@ -142,6 +142,66 @@ model:
   api_key_env: SILICONFLOW_API_KEY
 ```
 
+## Scenario: Tesseract CLI OCR Provider
+
+### 1. Scope / Trigger
+
+- Trigger: enabling local OCR for PDF pages where native text extraction returns no useful text.
+
+### 2. Signatures
+
+- `OCRConfig.provider: "deterministic" | "tesseract_cli"`
+- `OCRConfig.tesseract_command: str`
+- `OCRConfig.pdf_renderer_command: str`
+- `OCRConfig.language: str`
+- `OCRConfig.dpi: int`
+- `OCRConfig.timeout_seconds: float`
+- `TesseractCliOCRProvider.recognize_pdf_page(context: OCRPageContext) -> OCRPageResult`
+
+### 3. Contracts
+
+- OCR remains default-off (`Settings.ocr.enabled=False`).
+- `tesseract_cli` uses operator-installed system commands; it does not add Python OCR dependencies.
+- The provider renders only `context.page_number` with `pdftoppm -f N -l N -r <dpi> -png`.
+- The provider runs `tesseract <image> stdout -l <language>`.
+- Command execution must use `subprocess.run(..., shell=False, capture_output=True, timeout=...)`.
+- Returned OCR text enters the existing OCR chunk path; OCR is not a parallel retriever.
+
+### 4. Validation & Error Matrix
+
+- Missing renderer/OCR command -> `RuntimeError("ocr_command_missing:<binary>")`.
+- Renderer/OCR timeout -> `RuntimeError("ocr_command_timeout:<stage>")`.
+- Renderer/OCR non-zero exit -> `RuntimeError("ocr_command_failed:<stage>")`.
+- Render command produces no image -> `RuntimeError("ocr_render_missing_output")`.
+- `config validate` with `ocr.enabled=true` and `ocr.provider=tesseract_cli` checks command availability via `shutil.which` and reports `system_command` checks without running OCR.
+
+### 5. Good/Base/Bad Cases
+
+- Good: scanned page has no native text, renderer and Tesseract are installed, OCR text becomes a normal `pdf_ocr:<profile>` chunk.
+- Base: OCR remains disabled and deterministic tests still run without system OCR tools.
+- Bad: invoking OCR through `shell=True`, logging raw OCR stderr/text, or requiring Tesseract in CI.
+
+### 6. Tests Required
+
+- Config parses `tesseract_cli` settings.
+- Provider factory returns `TesseractCliOCRProvider`.
+- Unit tests mock command execution and verify exact command shape, one-page render, stdout text return, missing-command failure, and parser failure summarization.
+- Config validation tests mock `shutil.which` for renderer/OCR availability.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+subprocess.run(f"tesseract {image} stdout -l {language}", shell=True)
+```
+
+#### Correct
+
+```python
+subprocess.run(["tesseract", str(image), "stdout", "-l", language], shell=False, capture_output=True, timeout=timeout)
+```
+
 ## Scenario: HTTP Embedding Large Batch Failure Hardening
 
 ### 1. Scope / Trigger

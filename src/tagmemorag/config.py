@@ -265,10 +265,15 @@ class OCRConfig(BaseModel):
     """T7: Settings block for optional OCR text ingestion."""
 
     enabled: bool = False
-    provider: Literal["deterministic"] = "deterministic"
+    provider: Literal["deterministic", "tesseract_cli"] = "deterministic"
     version: str = "ocr.v1"
     trigger: Literal["missing_text"] = "missing_text"
     strict_extraction: bool = False
+    tesseract_command: str = "tesseract"
+    pdf_renderer_command: str = "pdftoppm"
+    language: str = "eng"
+    dpi: int = Field(default=200, ge=72, le=600)
+    timeout_seconds: float = Field(default=30.0, gt=0.0)
 
 
 class VisualRetrievalConfig(BaseModel):

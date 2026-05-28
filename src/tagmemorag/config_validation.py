@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import importlib.util
 import os
 from pathlib import Path
+import shutil
 from typing import Any
 
 from .config import Settings, load_config
@@ -72,6 +73,7 @@ def validate_config(path: str | Path = "config.yaml") -> ConfigValidationReport:
     checks.extend(_local_path_checks(cfg))
     checks.extend(_remote_env_checks(cfg))
     checks.extend(_dependency_checks(cfg))
+    checks.extend(_system_command_checks(cfg))
     checks.extend(_auth_observability_checks(cfg))
     return ConfigValidationReport(
         status=_aggregate_status(checks),
@@ -204,6 +206,26 @@ def _dependency_check(name: str, module: str, reason: str) -> ConfigValidationCh
         "passed" if available else "warning",
         {"dependency": name, "available": available, "reason": reason},
         "" if available else "Optional dependency is not importable in this environment.",
+    )
+
+
+def _system_command_checks(cfg: Settings) -> list[ConfigValidationCheck]:
+    if not (cfg.ocr.enabled and cfg.ocr.provider == "tesseract_cli"):
+        return []
+    return [
+        _command_check("ocr.pdf_renderer_command", cfg.ocr.pdf_renderer_command, "ocr.provider=tesseract_cli"),
+        _command_check("ocr.tesseract_command", cfg.ocr.tesseract_command, "ocr.provider=tesseract_cli"),
+    ]
+
+
+def _command_check(field: str, command: str, reason: str) -> ConfigValidationCheck:
+    command_name = Path(str(command or "").strip()).name
+    available = bool(command_name and shutil.which(str(command).strip()))
+    return ConfigValidationCheck(
+        "system_command",
+        "passed" if available else "warning",
+        {"field": field, "command": command_name, "available": available, "reason": reason},
+        "" if available else "Optional system command is not available in PATH.",
     )
 
 

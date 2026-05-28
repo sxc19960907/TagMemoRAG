@@ -454,7 +454,7 @@ OCR is the cheaper, higher-coverage half of visual document understanding. It al
 **Contract.**
 
 - `Settings.ocr.enabled` defaults to `False`.
-- `OCRProvider` is vendor-neutral. T7 ships only a deterministic fixture provider; production OCR providers are follow-up work.
+- `OCRProvider` is vendor-neutral. T7 shipped a deterministic fixture provider; the local `tesseract_cli` provider is default-off and depends on operator-installed `pdftoppm` and `tesseract` system commands.
 - Trigger policy is `missing_text`: OCR runs only for PDF pages where native extraction produces no useful lines.
 - OCR output is page-block text in the MVP. Layout-aware table/region reconstruction is deferred.
 - OCR chunks are normal chunks with `parser_profile="pdf_ocr:<profile>"`, page metadata, and `ocr_provider` / `ocr_version` / `ocr_trigger` / `ocr_source` lineage.
