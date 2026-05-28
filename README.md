@@ -843,7 +843,13 @@ observability:
     export_timeout_seconds: 5
 ```
 
-To let Q&A source cards open cited PDF page previews, enable both asset flags and install the optional PyMuPDF package in the runtime environment:
+To let Q&A source cards open cited PDF page previews, install the optional PDF preview extra and enable both asset flags:
+
+```bash
+uv sync --extra pdf-preview
+# or, when installing from a built package:
+pip install 'tagmemorag[pdf-preview]'
+```
 
 ```yaml
 assets:
@@ -852,7 +858,7 @@ assets:
   root_dir: ./data/document_assets
 ```
 
-Run `tagmemorag config validate --config config.yaml` after changing this. The validator reports a warning when `assets.pdf_page_snapshots_enabled=true` but PyMuPDF (`fitz`) is not importable; search and Q&A still work, but source cards will show a non-clickable preview fallback until snapshots can be generated.
+Run `tagmemorag config validate --config config.yaml` after changing this. The validator reports a warning with the install hint above when `assets.pdf_page_snapshots_enabled=true` but PyMuPDF (`fitz`) is not importable; search and Q&A still work, but source cards will show a non-clickable preview fallback until snapshots can be generated.
 
 Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix and double underscores for nested fields:
 

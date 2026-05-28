@@ -198,17 +198,27 @@ def _dependency_checks(cfg: Settings) -> list[ConfigValidationCheck]:
     if cfg.manual_library.blob_backend == "s3":
         checks.append(_dependency_check("boto3", "boto3", "manual_library.blob_backend=s3"))
     if cfg.assets.enabled and cfg.assets.pdf_page_snapshots_enabled:
-        checks.append(_dependency_check("PyMuPDF", "fitz", "assets.pdf_page_snapshots_enabled=true"))
+        checks.append(
+            _dependency_check(
+                "PyMuPDF",
+                "fitz",
+                "assets.pdf_page_snapshots_enabled=true",
+                install_hint="Install with `uv sync --extra pdf-preview` or `pip install 'tagmemorag[pdf-preview]'`.",
+            )
+        )
     return checks
 
 
-def _dependency_check(name: str, module: str, reason: str) -> ConfigValidationCheck:
+def _dependency_check(name: str, module: str, reason: str, *, install_hint: str = "") -> ConfigValidationCheck:
     available = importlib.util.find_spec(module) is not None
+    detail: dict[str, Any] = {"dependency": name, "available": available, "reason": reason}
+    if install_hint and not available:
+        detail["install_hint"] = install_hint
     return ConfigValidationCheck(
         "dependency",
         "passed" if available else "warning",
-        {"dependency": name, "available": available, "reason": reason},
-        "" if available else "Optional dependency is not importable in this environment.",
+        detail,
+        "" if available else (install_hint or "Optional dependency is not importable in this environment."),
     )
 
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+import tomllib
+
 import pytest
 from pydantic import ValidationError
 
@@ -401,7 +404,17 @@ assets:
         "dependency": "PyMuPDF",
         "available": False,
         "reason": "assets.pdf_page_snapshots_enabled=true",
+        "install_hint": "Install with `uv sync --extra pdf-preview` or `pip install 'tagmemorag[pdf-preview]'`.",
     }
+    assert dependency["message"] == "Install with `uv sync --extra pdf-preview` or `pip install 'tagmemorag[pdf-preview]'`."
+
+
+def test_pyproject_exposes_pdf_preview_extra():
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    optional = pyproject["project"]["optional-dependencies"]
+
+    assert "pdf-preview" in optional
+    assert any(requirement.startswith("pymupdf>=") for requirement in optional["pdf-preview"])
 
 
 def test_config_validate_s3_missing_bucket_fails(tmp_path):

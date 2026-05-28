@@ -503,6 +503,8 @@ These are different responsibilities. The archive design conflated them. A manag
 - `source_preview` fields are bounded and safe: `enabled`, `pdf_page_snapshots_enabled`, `renderer`, `renderer_available`, `status`, `pdf_documents`, `page_snapshots_ready`, `page_snapshots_failed`, `failure_reasons`, and `message`.
 - `status` is `ready`, `needs_review`, or `disabled`.
 - `renderer` is a public label such as `pymupdf`; do not include import paths, local binary paths, storage keys, checksums, blob keys, or manifest records.
+- PyMuPDF is optional and belongs to the `pdf-preview` extra. Operators can install it with `uv sync --extra pdf-preview` or package installers that support `tagmemorag[pdf-preview]`; the base install must not require it.
+- `config validate` checks module `fitz` when `assets.enabled=true` and `assets.pdf_page_snapshots_enabled=true`. Missing PyMuPDF is a warning with a safe install hint, not a failed config.
 - Manual Library may recommend `enable_document_assets`, `enable_pdf_page_snapshots`, `install_pdf_snapshot_renderer`, or `review_source_preview_assets`.
 - RAG Readiness may mark the Manual Library card `needs_review` for source preview issues, but the Q&A card remains ready when the KB is loaded because previews are a trust enhancement, not a retrieval blocker.
 
@@ -511,7 +513,7 @@ These are different responsibilities. The archive design conflated them. A manag
 - No PDF documents -> `status` is informational (`ready` or `disabled` depending on config), no warning recommendation.
 - PDFs exist and assets disabled -> `needs_review` plus `enable_document_assets`.
 - PDFs exist and page snapshots disabled -> `needs_review` plus `enable_pdf_page_snapshots`.
-- PDFs exist and renderer missing / extraction has `renderer_unavailable` -> `needs_review` plus `install_pdf_snapshot_renderer`.
+- PDFs exist and renderer missing / extraction has `renderer_unavailable` -> `needs_review` plus `install_pdf_snapshot_renderer`; config validation should also show the `pdf-preview` extra install hint.
 - PDFs exist, ready snapshots present, no failures -> `ready`.
 - PDFs exist, partial or failed extraction -> `needs_review` plus `review_source_preview_assets`.
 
