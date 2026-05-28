@@ -30,8 +30,7 @@ def test_github_pages_workflow_publishes_static_site():
     workflow = (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
 
     assert "Publish Public Site" in workflow
-    assert "pages: write" in workflow
-    assert "id-token: write" in workflow
-    assert "actions/upload-pages-artifact" in workflow
-    assert "actions/deploy-pages" in workflow
-    assert "path: site" in workflow
+    assert "contents: write" in workflow
+    assert "peaceiris/actions-gh-pages" in workflow
+    assert "publish_dir: ./site" in workflow
+    assert "publish_branch: gh-pages" in workflow
