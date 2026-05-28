@@ -604,7 +604,9 @@ function renderDiagnostics(errorMessage = "") {
   const dirty = diagnostics.dirty || {};
   const last = diagnostics.last_rebuild || {};
   const pdfQuality = last.pdf_quality || {};
+  const ocr = last.ocr || {};
   const pdfWarningCount = Object.values(pdfQuality.warning_counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+  const missingOcrCommandCount = (ocr.commands || []).filter((command) => command && command.available === false).length;
   const queue = diagnostics.rebuild_queue || {};
   el.diagnosticsSummary.textContent = `${diagnostics.kb_name || state.kbName} | registry ${registry.enabled ? registry.registry_backend : "file-sidecar"} | blob ${blob.blob_backend || registry.blob_backend || "local"}`;
   [
@@ -615,6 +617,7 @@ function renderDiagnostics(errorMessage = "") {
     [t("Last Build"), last.last_successful_build_id || last.current_build_id || t("none"), "off"],
     [t("Qdrant"), last.qdrant_sync ? `${last.qdrant_sync.strategy || "sync"} up ${last.qdrant_sync.points_upserted || 0}` : t("not reported"), last.qdrant_sync?.fallback_reason ? "warn" : "off"],
     [t("PDF Quality"), pdfQuality.documents ? `${pdfQuality.pages_with_text || 0}/${pdfQuality.pages_total || 0} ${t("text pages")}, ${pdfQuality.pages_missing_text || 0} ${t("missing")}, ${pdfWarningCount} ${t("warnings")}` : t("not reported"), (pdfQuality.pages_missing_text || pdfWarningCount) ? "warn" : "off"],
+    [t("OCR"), ocr.enabled ? `${ocr.provider || "ocr"} · ${ocr.created || 0} ${t("chunks")} · ${ocr.failed || 0} ${t("failed")}${missingOcrCommandCount ? ` · ${missingOcrCommandCount} ${t("missing commands")}` : ""}` : t("disabled"), missingOcrCommandCount || ocr.failed ? "warn" : ocr.enabled ? "ok" : "off"],
   ].forEach(([label, value, kind]) => {
     const div = document.createElement("div");
     div.className = "ops-card";
@@ -703,6 +706,9 @@ function recommendationLabel(code, fallback) {
     retry_rebuild: "Retry the failed queued rebuild",
     inspect_queue: "Inspect queued rebuild work",
     force_full_rebuild: "Force a full rebuild",
+    enable_ocr_for_scanned_pdfs: "Enable OCR before rebuilding scanned PDFs",
+    review_ocr_output: "Review OCR output; scanned pages were detected but OCR produced no indexed pages",
+    install_ocr_commands: "Install missing OCR commands such as tesseract or pdftoppm",
     review_pdf_quality: "Review PDF parser quality; missing text pages may need OCR or a cleaner PDF",
     file_sidecar_mode: "Registry disabled; file sidecar mode is normal",
   };

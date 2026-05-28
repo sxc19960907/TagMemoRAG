@@ -94,6 +94,10 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "manual-library/tags/policy" in js.text
     assert "manual-library/diagnostics" in js.text
     assert "PDF Quality" in js.text
+    assert "OCR" in js.text
+    assert "enable_ocr_for_scanned_pdfs" in js.text
+    assert "install_ocr_commands" in js.text
+    assert "review_ocr_output" in js.text
     assert "review_pdf_quality" in js.text
     assert "manual-library/registry/audit" in js.text
     assert "manual-library/rebuild-jobs" in js.text

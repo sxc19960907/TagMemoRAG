@@ -22,7 +22,22 @@ pip install -e ".[dev]"
 python -m tagmemorag build --docs docs/ --kb default --config config.yaml
 ```
 
-`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). Managed Manual Library and Q&A uploads also accept `.docx` by converting readable OpenXML text into Markdown before indexing. PDF support extracts embedded text and uses a parser profile to split section-like chunks when headings are visible; the default `product_manual` profile preserves current product-manual heading hints, while `generic` uses only structural heading cues plus optional `parser.pdf_heading_hints`. Scanned image-only PDFs still need OCR before indexing.
+`build` indexes Markdown, plain text, and text-based PDF files (`.md`, `.txt`, `.pdf`). Managed Manual Library and Q&A uploads also accept `.docx` by converting readable OpenXML text into Markdown before indexing. PDF support extracts embedded text and uses a parser profile to split section-like chunks when headings are visible; the default `product_manual` profile preserves current product-manual heading hints, while `generic` uses only structural heading cues plus optional `parser.pdf_heading_hints`. Scanned image-only PDFs need OCR before indexing.
+
+For local English OCR on scanned PDFs, install the Tesseract command-line engine and enable the default-off OCR provider:
+
+```bash
+brew install tesseract
+```
+
+```yaml
+ocr:
+  enabled: true
+  provider: tesseract_cli
+  language: eng
+```
+
+The Homebrew `tesseract` formula includes `eng`, `osd`, and `snum`. Do not install the full `tesseract-lang` package unless you need additional languages; for Chinese OCR use `language: chi_sim+eng` after installing the required traineddata. OCR output is indexed as normal PDF-derived chunks with OCR lineage, and Manual Library diagnostics reports missing-text pages, OCR-created pages/chunks, failures, and missing local commands without exposing OCR text.
 
 Manual metadata can live next to each source file as `<manual>.metadata.json`:
 
@@ -851,7 +866,7 @@ Validate a profile before starting the service:
 python -m tagmemorag config validate --config examples/config/local-hashing-npz.yaml
 ```
 
-`config validate` is static and local: it loads the config with normal env precedence, checks local writable paths, checks required env var names for configured remote providers, and warns when optional extras such as `qdrant-client` or `boto3` are not importable. It does not call Qdrant, S3, embedding, reranker, answer, OCR, or visual providers.
+`config validate` is static and local: it loads the config with normal env precedence, checks local writable paths, checks required env var names for configured remote providers, warns when optional extras such as `qdrant-client` or `boto3` are not importable, and checks local OCR command availability when `ocr.provider=tesseract_cli` is enabled. It does not call Qdrant, S3, embedding, reranker, answer, OCR recognition, or visual providers.
 
 Live provider probes are explicit because they can call external services:
 

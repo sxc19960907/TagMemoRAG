@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 
 from tagmemorag import api
-from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
+from tagmemorag.config import ManualLibraryConfig, OCRConfig, Settings, StorageConfig
 from tagmemorag.state import AppState
 from tagmemorag.types import GraphState
 
@@ -205,6 +205,100 @@ def test_manual_library_diagnostics_returns_pdf_quality_summary(tmp_path, fake_e
     assert body["last_rebuild"]["pdf_quality"]["pages_missing_text"] == 1
     assert body["last_rebuild"]["pdf_quality"]["warning_counts"] == {"rotated_text": 2}
     assert any(item["code"] == "review_pdf_quality" for item in body["recommendations"])
+
+
+def test_manual_library_diagnostics_returns_ocr_status_and_recommendations(tmp_path, fake_embedder, monkeypatch):
+    client = _configure(tmp_path, fake_embedder)
+    api.settings.ocr = OCRConfig(
+        enabled=True,
+        provider="tesseract_cli",
+        version="tesseract.local.v1",
+        tesseract_command="missing-tesseract",
+        pdf_renderer_command="pdftoppm",
+        language="eng",
+    )
+    monkeypatch.setattr("tagmemorag.api_manual.shutil.which", lambda command: "/usr/bin/pdftoppm" if command == "pdftoppm" else None)
+    api.app_state.swap_kb(
+        "default",
+        GraphState(
+            graph=nx.Graph(),
+            vectors=np.zeros((0, 64), dtype=np.float32),
+            kb_name="default",
+            meta={
+                "ocr": {
+                    "enabled": True,
+                    "provider": "tesseract_cli",
+                    "version": "tesseract.local.v1",
+                    "trigger": "missing_text",
+                    "attempted": 1,
+                    "created": 0,
+                    "skipped": 0,
+                    "failed": 1,
+                    "failure_reasons": {"runtimeerror": 1},
+                    "warnings": ["ocr_empty_result"],
+                },
+                "pdf_quality": {
+                    "documents": 1,
+                    "pages_total": 1,
+                    "pages_with_text": 0,
+                    "pages_missing_text": 1,
+                    "ocr_pages_created": 0,
+                    "warning_counts": {},
+                },
+            },
+        ),
+    )
+
+    response = client.get("/manual-library/diagnostics", params={"kb_name": "default"})
+
+    assert response.status_code == 200
+    body = response.json()
+    ocr = body["last_rebuild"]["ocr"]
+    assert ocr["enabled"] is True
+    assert ocr["provider"] == "tesseract_cli"
+    assert ocr["language"] == "eng"
+    assert ocr["attempted"] == 1
+    assert ocr["failed"] == 1
+    assert ocr["failure_reasons"] == {"runtimeerror": 1}
+    assert ocr["commands"] == [
+        {"field": "ocr.pdf_renderer_command", "command": "pdftoppm", "available": True},
+        {"field": "ocr.tesseract_command", "command": "missing-tesseract", "available": False},
+    ]
+    recommendation_codes = {item["code"] for item in body["recommendations"]}
+    assert "install_ocr_commands" in recommendation_codes
+    assert "review_ocr_output" in recommendation_codes
+    assert "review_pdf_quality" in recommendation_codes
+
+
+def test_manual_library_diagnostics_recommends_enabling_ocr_for_scanned_pdfs(tmp_path, fake_embedder):
+    client = _configure(tmp_path, fake_embedder)
+    api.app_state.swap_kb(
+        "default",
+        GraphState(
+            graph=nx.Graph(),
+            vectors=np.zeros((0, 64), dtype=np.float32),
+            kb_name="default",
+            meta={
+                "pdf_quality": {
+                    "documents": 1,
+                    "pages_total": 1,
+                    "pages_with_text": 0,
+                    "pages_missing_text": 1,
+                    "ocr_pages_created": 0,
+                    "warning_counts": {},
+                }
+            },
+        ),
+    )
+
+    response = client.get("/manual-library/diagnostics", params={"kb_name": "default"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["last_rebuild"]["ocr"]["enabled"] is False
+    recommendation_codes = {item["code"] for item in body["recommendations"]}
+    assert "enable_ocr_for_scanned_pdfs" in recommendation_codes
+    assert "install_ocr_commands" not in recommendation_codes
 
 
 def test_manual_library_diagnostics_registry_blob_verify_audit_and_queue(tmp_path, fake_embedder):

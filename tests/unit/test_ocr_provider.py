@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import subprocess
+
+import pytest
 
 from tagmemorag.config import OCRConfig, Settings
 from tagmemorag.ocr.base import OCRPageContext
@@ -121,6 +124,29 @@ def test_tesseract_cli_provider_missing_command_fails_bounded(monkeypatch):
         assert str(exc) == "ocr_command_missing:pdftoppm"
     else:
         raise AssertionError("expected missing command failure")
+
+
+def test_tesseract_cli_provider_real_smoke_when_commands_available():
+    if shutil.which("pdftoppm") is None or shutil.which("tesseract") is None:
+        pytest.skip("requires local pdftoppm and tesseract commands")
+    sample = Path(".tmp/ocr-samples/scanned-coffee-manual.pdf")
+    if not sample.exists():
+        pytest.skip("requires generated scanned PDF sample under .tmp/ocr-samples")
+
+    provider = TesseractCliOCRProvider(language="eng", dpi=240, timeout_seconds=30.0)
+    result = provider.recognize_pdf_page(
+        OCRPageContext(
+            source_path=sample,
+            source_file=sample.name,
+            page_number=1,
+            kb_name="ocr-smoke",
+            doc_id="scanned-coffee-manual",
+        )
+    )
+
+    text = result.text.lower()
+    assert "steam" in text
+    assert "steam-042" in text
 
 
 class _StaticTempDir:

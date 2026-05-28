@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from typing import cast
 
 from fastapi import UploadFile
@@ -204,6 +205,7 @@ def manual_library_diagnostics(
     queue_payload = {"enabled": settings.manual_library.rebuild_queue_enabled, "jobs": jobs}
     operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
     pdf_quality = _safe_pdf_quality(graph_state)
+    ocr = _safe_ocr_status(graph_state, settings)
     return {
         "kb_name": kb_name,
         "registry": registry,
@@ -222,8 +224,16 @@ def manual_library_diagnostics(
             "last_impact_summary": dirty_report.get("last_impact_summary"),
             "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
             "pdf_quality": pdf_quality,
+            "ocr": ocr,
         },
-        "recommendations": diagnostic_recommendations(registry, blob_health, dirty_report, jobs, pdf_quality=pdf_quality),
+        "recommendations": diagnostic_recommendations(
+            registry,
+            blob_health,
+            dirty_report,
+            jobs,
+            pdf_quality=pdf_quality,
+            ocr=ocr,
+        ),
     }
 
 
@@ -234,6 +244,7 @@ def diagnostic_recommendations(
     jobs: list[dict[str, object]],
     *,
     pdf_quality: dict[str, object] | None = None,
+    ocr: dict[str, object] | None = None,
 ) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = []
     if registry.get("enabled") and not blob_health.get("checked"):
@@ -250,8 +261,17 @@ def diagnostic_recommendations(
     if isinstance(qdrant_sync, dict) and qdrant_sync.get("fallback_reason"):
         recommendations.append({"code": "force_full_rebuild", "label": "Force a full rebuild after Qdrant fallback", "severity": "warning"})
     pdf_quality = pdf_quality or {}
+    ocr = ocr or {}
     warning_counts = pdf_quality.get("warning_counts") if isinstance(pdf_quality.get("warning_counts"), dict) else {}
-    if int(pdf_quality.get("pages_missing_text") or 0) > 0 or bool(warning_counts):
+    pages_missing_text = int(pdf_quality.get("pages_missing_text") or 0)
+    ocr_pages_created = int(pdf_quality.get("ocr_pages_created") or 0)
+    if pages_missing_text > 0 and not bool(ocr.get("enabled")):
+        recommendations.append({"code": "enable_ocr_for_scanned_pdfs", "label": "Enable OCR before indexing scanned PDFs", "severity": "warning"})
+    if pages_missing_text > 0 and bool(ocr.get("enabled")) and ocr_pages_created == 0:
+        recommendations.append({"code": "review_ocr_output", "label": "Review OCR output for scanned PDF pages", "severity": "warning"})
+    if any(not bool(check.get("available")) for check in _ocr_command_checks(ocr)):
+        recommendations.append({"code": "install_ocr_commands", "label": "Install missing OCR system commands", "severity": "warning"})
+    if pages_missing_text > 0 or bool(warning_counts):
         recommendations.append({"code": "review_pdf_quality", "label": "Review PDF parser quality summary", "severity": "warning"})
     if not registry.get("enabled"):
         recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
@@ -280,6 +300,68 @@ def _safe_pdf_quality(graph_state: object | None) -> dict[str, object]:
             if str(key).strip() and _safe_non_negative_int(value) > 0
         },
     }
+
+
+def _safe_ocr_status(graph_state: object | None, settings: Settings) -> dict[str, object]:
+    meta = getattr(graph_state, "meta", None)
+    meta_ocr = meta.get("ocr") if isinstance(meta, dict) and isinstance(meta.get("ocr"), dict) else {}
+    cfg = settings.ocr
+    status: dict[str, object] = {
+        "enabled": bool(cfg.enabled),
+        "provider": str(cfg.provider),
+        "version": str(meta_ocr.get("version") or cfg.version),
+        "trigger": str(meta_ocr.get("trigger") or cfg.trigger),
+        "language": str(getattr(cfg, "language", "") or ""),
+        "attempted": _safe_non_negative_int(meta_ocr.get("attempted")),
+        "created": _safe_non_negative_int(meta_ocr.get("created")),
+        "skipped": _safe_non_negative_int(meta_ocr.get("skipped")),
+        "failed": _safe_non_negative_int(meta_ocr.get("failed")),
+        "failure_reasons": _safe_ocr_reason_counts(meta_ocr.get("failure_reasons")),
+        "warnings": _safe_ocr_warnings(meta_ocr.get("warnings")),
+        "commands": [],
+    }
+    if cfg.enabled and cfg.provider == "tesseract_cli":
+        status["commands"] = [
+            _ocr_command_status("ocr.pdf_renderer_command", cfg.pdf_renderer_command),
+            _ocr_command_status("ocr.tesseract_command", cfg.tesseract_command),
+        ]
+    return status
+
+
+def _safe_ocr_reason_counts(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): _safe_non_negative_int(count)
+        for key, count in sorted(value.items())
+        if str(key).strip() and _safe_non_negative_int(count) > 0
+    }
+
+
+def _safe_ocr_warnings(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    warnings: list[str] = []
+    for item in value[:10]:
+        normalized = str(item).strip()
+        if normalized:
+            warnings.append(normalized[:80])
+    return warnings
+
+
+def _ocr_command_status(field: str, command: str) -> dict[str, object]:
+    return {
+        "field": field,
+        "command": command,
+        "available": shutil.which(command) is not None,
+    }
+
+
+def _ocr_command_checks(ocr: dict[str, object]) -> list[dict[str, object]]:
+    commands = ocr.get("commands")
+    if not isinstance(commands, list):
+        return []
+    return [item for item in commands if isinstance(item, dict)]
 
 
 def _safe_non_negative_int(value: object) -> int:
