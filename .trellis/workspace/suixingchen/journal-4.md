@@ -463,3 +463,36 @@ Validated the user-facing QA flow with two real PDF manuals, fixed incremental r
 ### Next Steps
 
 - None - task complete
+
+
+## Session 156: QA answer trust hardening
+
+**Date**: 2026-05-28
+**Task**: QA answer trust hardening
+**Branch**: `master`
+
+### Summary
+
+Hardened deterministic QA answer behavior for unsupported repair questions, expanded real browser QA trust acceptance across real PDFs, updated answer formatting regression coverage and backend quality spec, then archived the task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c14cf24` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
