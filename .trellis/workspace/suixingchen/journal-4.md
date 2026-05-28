@@ -430,3 +430,36 @@ Added QA source verification controls that preserve safe asset preview descripto
 ### Next Steps
 
 - None - task complete
+
+
+## Session 155: Real PDF QA browser acceptance
+
+**Date**: 2026-05-28
+**Task**: Real PDF QA browser acceptance
+**Branch**: `master`
+
+### Summary
+
+Validated the user-facing QA flow with two real PDF manuals, fixed incremental rebuild source-preview asset preservation, added browser/unit regression coverage, updated backend quality spec, and archived the task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `351f35b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
