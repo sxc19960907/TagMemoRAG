@@ -7,9 +7,13 @@ import socket
 import subprocess
 import sys
 import time
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from tagmemorag.config import ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.embedder import HashingEmbedder
@@ -354,6 +358,69 @@ def test_browser_upload_scanned_pdf_rebuilds_with_real_ocr_then_qa(tmp_path):
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
                 _exercise_scanned_pdf_ocr_user_flow(page, port, upload_path)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
+def test_browser_upload_multiformat_manuals_then_qa_user_flow(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True)
+    txt_path = tmp_path / "service-pressure-notes.txt"
+    txt_path.write_text(
+        "Pressure reset notes\n"
+        "When code TXT-41 appears, hold the steam button for five seconds and refill the tank.\n",
+        encoding="utf-8",
+    )
+    pdf_path = tmp_path / "pdf-gasket-calibration.pdf"
+    _write_text_pdf(
+        pdf_path,
+        "PDF gasket calibration says error PDF-77 requires checking the steam sensor and reseating the brew gasket.",
+    )
+    docx_path = tmp_path / "docx-nozzle-care.docx"
+    docx_path.write_bytes(
+        _docx_bytes(
+            "DOCX nozzle care",
+            "When code DOCX-19 appears, clean the steam nozzle weekly and purge steam for ten seconds.",
+        )
+    )
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_multiformat_upload_qa_user_flow(page, port, txt_path, pdf_path, docx_path)
                 assert console_errors == []
             finally:
                 browser.close()
@@ -879,6 +946,134 @@ def _exercise_scanned_pdf_ocr_user_flow(page, port: int, upload_path: Path) -> N
     assert "STEAM-042" in evidence_text or "steam nozzle" in evidence_text or "Weak Steam" in evidence_text
 
 
+def _exercise_multiformat_upload_qa_user_flow(page, port: int, txt_path: Path, pdf_path: Path, docx_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+
+    uploads = [
+        {
+            "path": txt_path,
+            "manual_id": "txt-pressure-notes",
+            "title": "TXT Pressure Notes",
+            "source_file": "mixed/service-pressure-notes.txt",
+            "tag": "txt-format",
+            "ready_source": "mixed/service-pressure-notes.txt",
+            "question": "What should I do when TXT-41 appears?",
+            "expected": ("TXT-41", "steam button", "refill the tank"),
+        },
+        {
+            "path": pdf_path,
+            "manual_id": "pdf-gasket-calibration",
+            "title": "PDF Gasket Calibration",
+            "source_file": "mixed/pdf-gasket-calibration.pdf",
+            "tag": "pdf-format",
+            "ready_source": "mixed/pdf-gasket-calibration.pdf",
+            "question": "What does PDF-77 require?",
+            "expected": ("PDF-77", "steam sensor", "brew gasket"),
+        },
+        {
+            "path": docx_path,
+            "manual_id": "docx-nozzle-care",
+            "title": "DOCX Nozzle Care",
+            "source_file": "mixed/docx-nozzle-care.docx",
+            "tag": "docx-format",
+            "ready_source": "mixed/docx-nozzle-care.md",
+            "question": "What should I do when DOCX-19 appears?",
+            "expected": ("DOCX-19", "steam nozzle", "ten seconds"),
+        },
+    ]
+    for upload in uploads:
+        _upload_manual_from_library_dialog(page, upload)
+
+    records = page.evaluate(
+        """
+        async () => {
+          const response = await fetch("/manual-library?kb_name=default");
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        }
+        """
+    )["manuals"]
+    by_id = {record["manual_id"]: record for record in records}
+    assert set(by_id) == {"txt-pressure-notes", "pdf-gasket-calibration", "docx-nozzle-care"}
+    for upload in uploads:
+        record = by_id[upload["manual_id"]]
+        assert record["source_file"] == upload["ready_source"]
+        assert record["searchable"] is True
+        assert int(record["chunk_count"]) > 0
+        assert record["rebuild_required"] is False
+    docx_record = by_id["docx-nozzle-care"]
+    assert docx_record["metadata"]["source_format"] == "docx"
+    assert docx_record["metadata"]["remote_id"] == "mixed/docx-nozzle-care.docx"
+
+    diagnostics = page.evaluate(
+        """
+        async () => {
+          const response = await fetch("/manual-library/diagnostics?kb_name=default&include_jobs=true");
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        }
+        """
+    )
+    assert diagnostics["dirty"]["pending_changes"] is False
+    pdf_quality = diagnostics["last_rebuild"]["pdf_quality"]
+    assert pdf_quality["documents"] >= 1
+    assert pdf_quality["pages_with_text"] >= 1
+    assert "PDF-77" not in json.dumps(diagnostics)
+    assert "DOCX-19" not in json.dumps(diagnostics)
+    assert "TXT-41" not in json.dumps(diagnostics)
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    for upload in uploads:
+        page.get_by_role("textbox", name="Q&A question").fill(upload["question"])
+        page.get_by_role("button", name="Ask question").click()
+        page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+        answer_text = page.locator("#qa-answer").inner_text()
+        sources_text = page.locator("#qa-sources").inner_text()
+        evidence_text = f"{answer_text}\n{sources_text}"
+        assert Path(upload["ready_source"]).name in sources_text
+        assert any(expected in evidence_text for expected in upload["expected"])
+
+
+def _upload_manual_from_library_dialog(page, upload: dict[str, object]) -> None:
+    page.locator("#open-upload").click()
+    assert page.locator("#upload-dialog").is_visible()
+    page.locator("#upload-form input[name='file']").set_input_files(str(upload["path"]))
+    page.locator("#upload-form input[name='manual_id']").fill(str(upload["manual_id"]))
+    page.locator("#upload-form input[name='title']").fill(str(upload["title"]))
+    page.locator("#upload-form input[name='source_file']").fill(str(upload["source_file"]))
+    page.locator("#upload-form input[name='product_category']").fill("coffee")
+    page.locator("#upload-form input[name='language']").fill("en")
+    page.locator("#upload-form textarea[name='tags']").fill(str(upload["tag"]))
+    page.locator("#upload-form input[name='trigger_rebuild']").check()
+    page.locator("#validate-upload").click()
+    page.locator("#upload-messages .message.success").wait_for()
+    page.locator("#upload-form button.primary").click()
+    row = page.locator("#manual-rows tr").filter(has_text=str(upload["manual_id"]))
+    row.wait_for()
+    page.wait_for_function(
+        """
+        (manualId) => {
+          const rows = [...document.querySelectorAll("#manual-rows tr")];
+          const row = rows.find((item) => item.textContent.includes(manualId));
+          if (!row) return false;
+          const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent.trim());
+          return cells.includes("yes") && cells.includes("clear") && Number(cells[9] || 0) > 0;
+        }
+        """,
+        arg=str(upload["manual_id"]),
+        timeout=30000,
+    )
+    row_text = row.inner_text()
+    assert str(upload["ready_source"]) in row_text
+    assert str(upload["tag"]) in row_text
+    assert "yes" in row_text
+    assert "clear" in row_text
+    page.locator("#library-next-step").get_by_text("Manual is ready for Q&A").wait_for()
+
+
 def _assert_qa_layout(page) -> None:
     metrics = page.evaluate(
         """
@@ -1166,6 +1361,38 @@ auth:
         encoding="utf-8",
     )
     return config_path
+
+
+def _write_text_pdf(path: Path, text: str) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = DecodedStreamObject()
+    stream.set_data(f"BT /F1 16 Tf 72 720 Td ({escaped}) Tj ET".encode("utf-8"))
+    page[NameObject("/Contents")] = stream
+    with path.open("wb") as handle:
+        writer.write(handle)
+
+
+def _docx_bytes(*paragraphs: str) -> bytes:
+    body = "".join(f"<w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>" for paragraph in paragraphs)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body></w:document>"
+    )
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return out.getvalue()
 
 
 def _seed_feedback(tmp_path: Path) -> None:

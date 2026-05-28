@@ -82,6 +82,7 @@ Tests should avoid network access by default. Heavy model tests should be opt-in
 - Treating `node_id` as stable across rebuilds.
 - Forgetting that `implement.jsonl` and `check.jsonl` determine what future agents automatically load.
 - Letting tests pass only because the developer workspace has optional extras or generated `.tmp/` reports. Tests for optional integrations should skip clearly when the extra is absent, and batch/CLI tests should create their own report fixtures instead of depending on local evaluation artifacts.
+- Updating full rebuild diagnostics while forgetting incremental rebuild. If full rebuild writes safe `GraphState.meta` summaries such as `pdf_quality` or `ocr`, incremental rebuild must either preserve the old summary, add dirty-document deltas, or intentionally fall back to full. Otherwise the Manual Library diagnostics page can lose PDF/OCR status after a normal small upload even though the indexed content is correct.
 
 ## Scenario: HTTP Embedding Provider
 

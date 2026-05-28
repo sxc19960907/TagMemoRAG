@@ -8,6 +8,8 @@ import zipfile
 
 import numpy as np
 import pytest
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from tagmemorag.config import ManualLibraryConfig, ParserConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
@@ -138,6 +140,25 @@ def _persist_qdrant_baseline(state, cfg) -> None:
     save_kb(state, cfg)
     save_chunk_identity(identity_path(state.kb_name, cfg), build_chunk_identity_map(state.graph, kb_name=state.kb_name, build_id=state.build_id, cfg=cfg))
     mark_pending(state.kb_name, cfg, pending=False, build_id=state.build_id)
+
+
+def _write_text_pdf(path: Path, text: str) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = DecodedStreamObject()
+    stream.set_data(f"BT /F1 16 Tf 72 720 Td ({escaped}) Tj ET".encode("utf-8"))
+    page[NameObject("/Contents")] = stream
+    with path.open("wb") as handle:
+        writer.write(handle)
 
 
 def test_safe_source_path_rejects_traversal_and_unsupported_suffix(library_config):
@@ -372,6 +393,30 @@ def test_incremental_library_rebuild_reuses_unchanged_chunks(library_config, fak
     data_dir = Path(library_config.storage.data_dir)
     assert json.loads((data_dir / "default" / "chunk_identity.json").read_text(encoding="utf-8"))["chunks"]
     assert json.loads((data_dir / "default" / "rebuild_impact.json").read_text(encoding="utf-8"))["summary"]["chunks_reused"] >= 1
+
+
+def test_incremental_rebuild_preserves_pdf_quality_summary(library_config, fake_embedder):
+    pdf_path = Path(library_config.storage.data_dir).parent / "calibration.pdf"
+    _write_text_pdf(pdf_path, "PDF-77 requires checking the steam sensor.")
+    upsert_manual("default", _metadata("coffee/calibration.pdf", "pdf"), pdf_path.read_bytes(), library_config)
+    old_state = build_kb(library_root("default", library_config), "default", library_config, embedder=fake_embedder)
+    mark_pending("default", library_config, pending=False, build_id=old_state.build_id)
+    assert old_state.meta["pdf_quality"]["documents"] == 1
+    app = AppState(old_state)
+
+    upsert_manual("default", _metadata("coffee/notes.txt", "txt"), b"TXT-41 requires refilling the tank.\n", library_config)
+    task = start_library_rebuild(app, "default", library_config, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "incremental"
+    pdf_quality = app.get_current("default").meta["pdf_quality"]
+    assert pdf_quality["documents"] == 1
+    assert pdf_quality["pages_with_text"] == 1
+    assert pdf_quality["pages_missing_text"] == 0
 
 
 def test_incremental_rebuild_reuses_unchanged_dirty_manual_chunk(library_config, fake_embedder):

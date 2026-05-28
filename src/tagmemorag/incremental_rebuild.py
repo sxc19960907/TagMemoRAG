@@ -16,7 +16,10 @@ from .graph_builder import build_graph
 from .manual_library import ManualLibraryManifest, is_active_status, list_records
 from .manuals import load_manual_metadata, metadata_from_node
 from .observability.metrics import get_metrics
-from .parser_provider import parse_chunks_for_config
+from .ocr import create_ocr_provider
+from .ocr.base import OCRSummary
+from .parser import PDFQualitySummary
+from .parser_provider import parse_document_for_config
 from .rebuild_impact import make_impact_report
 from .storage.json_anchor import JsonAnchorStore
 from .tag_rebuild import sync_rebuild_tags
@@ -95,6 +98,8 @@ class IncrementalPlan:
     dirty_chunks: list[Chunk] = field(default_factory=list)
     manual_tags_by_id: dict[str, tuple[str, ...]] = field(default_factory=dict)
     chunk_identity_fallback_reason: str = ""
+    ocr_summary: OCRSummary = OCRSummary()
+    pdf_quality: PDFQualitySummary = PDFQualitySummary()
 
 
 def build_kb_incremental(
@@ -169,6 +174,8 @@ def build_kb_incremental(
         impact_data = impact_report.to_dict()
         impact_data.update(tag_report.to_dict())
         impact_data.update(epa_report)
+        ocr_summary = _merge_ocr_summary_from_meta(old_state, plan.ocr_summary)
+        pdf_quality = _merge_pdf_quality_from_meta(old_state, plan.pdf_quality)
         detail = RebuildDetail(
             requested_mode=requested_mode,
             effective_mode="incremental",
@@ -221,6 +228,16 @@ def build_kb_incremental(
             "tag_intrinsic_residual_error": tag_report.tag_intrinsic_residual_error,
             "impact_summary": impact_report.summary,
         }
+        if cfg.ocr.enabled or ocr_summary.attempted or ocr_summary.failed:
+            meta["ocr"] = {
+                "enabled": cfg.ocr.enabled,
+                "provider": cfg.ocr.provider,
+                "version": cfg.ocr.version,
+                "trigger": cfg.ocr.trigger,
+                **ocr_summary.to_dict(),
+            }
+        if pdf_quality.documents:
+            meta["pdf_quality"] = pdf_quality.to_dict()
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         return IncrementalBuildResult(
             GraphState(
@@ -278,6 +295,7 @@ def _build_plan(
         active_source_by_manual_id=active_source_by_manual_id,
         chunk_identity_fallback_reason=identity_fallback_reason,
     )
+    ocr_provider = create_ocr_provider(cfg)
     old_node_ids = sorted(int(node_id) for node_id in old_state.graph.nodes)
     if old_node_ids and old_node_ids != list(range(len(old_node_ids))):
         raise RebuildFailedError({"fallback_reason": "non_contiguous_node_ids"})
@@ -315,12 +333,19 @@ def _build_plan(
         if not is_active_status(metadata.status):
             continue
         plan.manual_tags_by_id[metadata.manual_id] = metadata.tags
-        for chunk in parse_chunks_for_config(
+        parsed = parse_document_for_config(
             path,
             cfg.parser,
             root_dir=docs_root,
             metadata=manual_node_attrs(metadata),
-        ):
+            ocr_provider=ocr_provider,
+            ocr_enabled=cfg.ocr.enabled,
+            ocr_strict=cfg.ocr.strict_extraction,
+            kb_name=kb_name,
+        )
+        plan.ocr_summary = plan.ocr_summary.merge(parsed.ocr_summary)
+        plan.pdf_quality = plan.pdf_quality.merge(parsed.pdf_quality)
+        for chunk in parsed.chunks:
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)
             if (
@@ -362,6 +387,65 @@ def _assemble_final_inputs(plan: IncrementalPlan, dirty_vectors: np.ndarray, dim
         return [], np.zeros((0, dim), dtype=np.float32)
     vectors = np.asarray([vector for _chunk, vector in items], dtype=np.float32)
     return chunks, vectors
+
+
+def _merge_ocr_summary_from_meta(old_state: GraphState | None, dirty_summary: OCRSummary) -> OCRSummary:
+    summary = _ocr_summary_from_meta(getattr(old_state, "meta", None))
+    return summary.merge(dirty_summary)
+
+
+def _ocr_summary_from_meta(meta: object) -> OCRSummary:
+    if not isinstance(meta, dict) or not isinstance(meta.get("ocr"), dict):
+        return OCRSummary()
+    ocr = meta["ocr"]
+    reasons = ocr.get("failure_reasons")
+    failure_reasons = {
+        str(key): _safe_non_negative_int(value)
+        for key, value in (reasons.items() if isinstance(reasons, dict) else [])
+        if str(key).strip() and _safe_non_negative_int(value) > 0
+    }
+    warnings = ocr.get("warnings")
+    return OCRSummary(
+        attempted=_safe_non_negative_int(ocr.get("attempted")),
+        created=_safe_non_negative_int(ocr.get("created")),
+        skipped=_safe_non_negative_int(ocr.get("skipped")),
+        failed=_safe_non_negative_int(ocr.get("failed")),
+        failure_reasons=failure_reasons,
+        warnings=tuple(str(item) for item in warnings if str(item).strip()) if isinstance(warnings, list) else (),
+    )
+
+
+def _merge_pdf_quality_from_meta(old_state: GraphState | None, dirty_quality: PDFQualitySummary) -> PDFQualitySummary:
+    quality = _pdf_quality_from_meta(getattr(old_state, "meta", None))
+    return quality.merge(dirty_quality)
+
+
+def _pdf_quality_from_meta(meta: object) -> PDFQualitySummary:
+    if not isinstance(meta, dict) or not isinstance(meta.get("pdf_quality"), dict):
+        return PDFQualitySummary()
+    quality = meta["pdf_quality"]
+    warnings = quality.get("warning_counts")
+    warning_counts = {
+        str(key): _safe_non_negative_int(value)
+        for key, value in (warnings.items() if isinstance(warnings, dict) else [])
+        if str(key).strip() and _safe_non_negative_int(value) > 0
+    }
+    return PDFQualitySummary(
+        documents=_safe_non_negative_int(quality.get("documents")),
+        pages_total=_safe_non_negative_int(quality.get("pages_total")),
+        pages_with_text=_safe_non_negative_int(quality.get("pages_with_text")),
+        pages_missing_text=_safe_non_negative_int(quality.get("pages_missing_text")),
+        ocr_pages_created=_safe_non_negative_int(quality.get("ocr_pages_created")),
+        warning_counts=warning_counts,
+    )
+
+
+def _safe_non_negative_int(value: object) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
 
 
 def _identity_keys_by_manual_from_graph(state: GraphState) -> dict[str, set[str]]:
