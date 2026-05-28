@@ -694,3 +694,36 @@ Ran a local delivery rehearsal from the browser readiness page, verified config 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 163: First-run RAG UI polish
+
+**Date**: 2026-05-28
+**Task**: First-run RAG UI polish
+**Branch**: `master`
+
+### Summary
+
+Added a guided empty-state panel to Manual Library, softened RAG Readiness visual hierarchy, verified browser-first behavior, and kept the non-performance unit/e2e gate green.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c054501` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
