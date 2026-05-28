@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 161
+- **Total Sessions**: 162
 - **Last Active**: 2026-05-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~663 | Active |
+| `journal-4.md` | ~696 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 162 | 2026-05-28 | RAG delivery rehearsal | `985e2ec` | `master` |
 | 161 | 2026-05-28 | RAG delivery readiness checklist | `9050802` | `master` |
 | 160 | 2026-05-28 | QA context reset clarity | `d7d35ab` | `master` |
 | 159 | 2026-05-28 | RAG configuration onboarding cards | `d39a9f0` | `master` |

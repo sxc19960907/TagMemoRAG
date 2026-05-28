@@ -661,3 +661,36 @@ Added a browser-visible delivery handoff checklist to RAG Readiness, exposing sa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 162: RAG delivery rehearsal
+
+**Date**: 2026-05-28
+**Task**: RAG delivery rehearsal
+**Branch**: `master`
+
+### Summary
+
+Ran a local delivery rehearsal from the browser readiness page, verified config validation, readiness smoke, and browser QA readiness gates, checked empty-KB Manual Library and QA guidance, and recorded one non-blocking future UX polish note.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `985e2ec` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
