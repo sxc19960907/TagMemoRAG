@@ -298,3 +298,36 @@ Surfaced bounded OCR status in Manual Library diagnostics, added OCR recovery re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 151: Scanned PDF OCR browser flow
+
+**Date**: 2026-05-28
+**Task**: Scanned PDF OCR browser flow
+**Branch**: `master`
+
+### Summary
+
+Added an opt-in browser integration smoke for uploading a scanned PDF through Manual Library, rebuilding with real tesseract_cli OCR, checking diagnostics, and answering from OCR-indexed evidence. Verified focused browser flows, OCR diagnostics tests, CI unit/e2e suite, and baseline eval suites.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d5d5340` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
