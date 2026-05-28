@@ -871,6 +871,13 @@ def _exercise_rag_readiness_onboarding(page, port: int) -> None:
     assert "Start Q&A" in steps_text
     progress_text = page.locator("#readiness-progress-label").inner_text()
     assert "of 4 steps ready" in progress_text
+    capability_text = page.locator("#readiness-capabilities").inner_text()
+    assert "Answer LLM" in capability_text
+    assert "Embeddings" in capability_text
+    assert "OCR" in capability_text
+    assert "PDF Source Preview" in capability_text
+    assert "Local embedding configuration is ready." in capability_text
+    assert "Answer generation is disabled" in capability_text
     cards_text = page.locator("#readiness-cards").inner_text()
     assert "KB Loaded" in cards_text
     assert "Manual Library" in cards_text
@@ -880,17 +887,21 @@ def _exercise_rag_readiness_onboarding(page, port: int) -> None:
     assert "Build or load this KB before using Q&A." in recommendations
     assert "storage_key" not in page.locator("body").inner_text()
     assert "blob_key" not in page.locator("body").inner_text()
+    assert "sk-" not in page.locator("body").inner_text()
     metrics = page.evaluate(
         """
         () => {
           const hero = document.querySelector(".readiness-hero").getBoundingClientRect();
           const steps = [...document.querySelectorAll(".readiness-step")].map((item) => item.getBoundingClientRect());
+          const capabilities = [...document.querySelectorAll(".readiness-capability")].map((item) => item.getBoundingClientRect());
           const cards = [...document.querySelectorAll(".readiness-card")].map((item) => item.getBoundingClientRect());
           return {
             heroHeight: Math.round(hero.height),
             stepCount: steps.length,
+            capabilityCount: capabilities.length,
             cardCount: cards.length,
             minStepWidth: Math.round(Math.min(...steps.map((box) => box.width))),
+            minCapabilityWidth: Math.round(Math.min(...capabilities.map((box) => box.width))),
             minCardWidth: Math.round(Math.min(...cards.map((box) => box.width))),
           };
         }
@@ -898,8 +909,10 @@ def _exercise_rag_readiness_onboarding(page, port: int) -> None:
     )
     assert metrics["heroHeight"] > 140
     assert metrics["stepCount"] == 4
+    assert metrics["capabilityCount"] == 4
     assert metrics["cardCount"] == 4
     assert metrics["minStepWidth"] > 220
+    assert metrics["minCapabilityWidth"] > 220
     assert metrics["minCardWidth"] > 220
 
 

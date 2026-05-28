@@ -329,6 +329,7 @@ def test_rag_readiness_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="readiness-primary-action"' in body
     assert 'id="readiness-steps"' in body
     assert 'id="readiness-progress-label"' in body
+    assert 'id="readiness-capabilities"' in body
     assert 'id="readiness-cards"' in body
     assert 'id="readiness-recommendations"' in body
     assert 'id="readiness-workbench"' in body
@@ -350,10 +351,12 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "readiness-cards" in js.text
     assert "renderRecommendations" in js.text
     assert "renderSteps" in js.text
+    assert "renderCapabilities" in js.text
     assert "primary_action" in js.text
     assert "action_label" in js.text
     assert "button-link compact" in js.text
     assert "Load the knowledge base" in js.text
+    assert "capabilities" in js.text
     assert "readiness-primary-link" in js.text
     assert "source_preview_status" in js.text
     assert "Source preview" in js.text
@@ -365,6 +368,8 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "Start Q&A" in i18n.text
     assert "Review manuals" in i18n.text
     assert "Open latest report" in i18n.text
+    assert "Answer LLM" in i18n.text
+    assert "Capability setup" in i18n.text
 
 
 def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fake_embedder):
@@ -390,6 +395,49 @@ def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fak
     assert recommendations["load_kb"]["href"] == "/admin/manual-library?kb_name=missing"
     assert recommendations["load_kb"]["action_label"] == "Manual Library"
     assert recommendations["try_qa_after_ready"]["href"] == "/qa?kb_name=missing"
+
+
+def test_rag_readiness_summary_reports_configuration_capabilities(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    api.app_state.mark_embedder_ready()
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    capabilities = {item["id"]: item for item in body["capabilities"]}
+    assert capabilities["answer"]["status"] == "needs_review"
+    assert capabilities["answer"]["detail"]["provider"] == "noop"
+    assert capabilities["embedding"]["status"] == "ready"
+    assert capabilities["embedding"]["detail"]["provider"] == "hashing"
+    assert capabilities["ocr"]["status"] == "needs_review"
+    assert capabilities["source_preview"]["status"] == "needs_review"
+    assert "storage_key" not in json.dumps(body)
+    assert "blob_key" not in json.dumps(body)
+
+
+def test_rag_readiness_summary_reports_missing_live_answer_env(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.delenv("MISSING_ANSWER_KEY", raising=False)
+    client = _client(tmp_path, fake_embedder)
+    api.settings = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        model={"provider": "hashing", "dim": 64},
+        answer={"enabled": True, "provider": "openai_compatible", "model_id": "chat-model", "api_key_env": "MISSING_ANSWER_KEY"},
+    )
+    api.app_state.mark_embedder_ready()
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    answer = {item["id"]: item for item in body["capabilities"]}["answer"]
+    assert answer["status"] == "not_ready"
+    assert answer["detail"]["api_key_env"] == "MISSING_ANSWER_KEY"
+    assert answer["detail"]["api_key_present"] is False
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["configure_answer"]["label"] == "Answer LLM is enabled, but its API key environment variable is missing."
+    assert "sk-" not in json.dumps(body)
 
 
 def test_rag_readiness_summary_reports_review_when_eval_missing(tmp_path, fake_embedder, monkeypatch):

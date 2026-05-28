@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
+import os
+import shutil
 from typing import Any
 from urllib.parse import urlencode
 
@@ -37,15 +40,17 @@ def rag_readiness_summary(
     cards.append(eval_card)
     qa_card = _qa_card(kb, kb_card)
     cards.append(qa_card)
+    capabilities = _capability_cards(kb, settings=settings, manual_card=manual_card)
 
     status = _overall_status(cards)
-    recommendations = _recommendations(cards, kb)
+    recommendations = _recommendations(cards, capabilities, kb)
     primary_action = _primary_action(status, recommendations, kb)
     return {
         "schema_version": SCHEMA_VERSION,
         "kb_name": kb,
         "status": status,
         "summary": _status_summary(status),
+        "capabilities": capabilities,
         "cards": cards,
         "actions": actions,
         "primary_action": primary_action,
@@ -194,6 +199,130 @@ def _qa_card(kb_name: str, kb_card: dict[str, Any]) -> dict[str, Any]:
     return _card("qa", "User Q&A", status, summary, {"href": f"/qa?{urlencode({'kb_name': kb_name})}"})
 
 
+def _capability_cards(kb_name: str, *, settings: Settings, manual_card: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _answer_capability(kb_name, settings),
+        _embedding_capability(kb_name, settings),
+        _ocr_capability(kb_name, settings),
+        _source_preview_capability(kb_name, settings=settings, manual_card=manual_card),
+    ]
+
+
+def _answer_capability(kb_name: str, settings: Settings) -> dict[str, Any]:
+    cfg = settings.answer
+    detail = {
+        "enabled": bool(cfg.enabled),
+        "provider": str(cfg.provider),
+        "model": str(cfg.model_id or cfg.provider),
+        "api_key_env": str(cfg.api_key_env or ""),
+        "api_key_present": _env_present(cfg.api_key_env) if cfg.provider == "openai_compatible" else None,
+    }
+    if not cfg.enabled:
+        status = STATUS_NEEDS_REVIEW
+        summary = "Answer generation is disabled; Q&A will not draft model answers."
+    elif cfg.provider == "noop":
+        status = STATUS_NEEDS_REVIEW
+        summary = "Answer generation uses the offline demo provider."
+    elif cfg.provider == "openai_compatible" and not detail["api_key_present"]:
+        status = STATUS_NOT_READY
+        summary = "Answer LLM is enabled, but its API key environment variable is missing."
+    else:
+        status = STATUS_READY
+        summary = "Answer LLM configuration is ready for model-backed Q&A."
+    return _capability(
+        "answer",
+        "Answer LLM",
+        status,
+        summary,
+        detail,
+        "Open Workbench",
+        _kb_href("rag-workbench", kb_name),
+    )
+
+
+def _embedding_capability(kb_name: str, settings: Settings) -> dict[str, Any]:
+    cfg = settings.model
+    detail = {
+        "provider": str(cfg.provider),
+        "model": str(cfg.name),
+        "dimensions": int(cfg.dim),
+        "api_key_env": str(cfg.api_key_env or "") if cfg.provider == "http" else "",
+        "api_key_present": _env_present(cfg.api_key_env) if cfg.provider == "http" else None,
+    }
+    if cfg.provider == "http" and not detail["api_key_present"]:
+        status = STATUS_NOT_READY
+        summary = "HTTP embeddings are configured, but the API key environment variable is missing."
+    elif cfg.provider == "http":
+        status = STATUS_READY
+        summary = "HTTP embedding configuration is ready."
+    else:
+        status = STATUS_READY
+        summary = "Local embedding configuration is ready."
+    return _capability("embedding", "Embeddings", status, summary, detail, "Manual Library", _kb_href("manual-library", kb_name))
+
+
+def _ocr_capability(kb_name: str, settings: Settings) -> dict[str, Any]:
+    cfg = settings.ocr
+    commands = []
+    if cfg.enabled and cfg.provider == "tesseract_cli":
+        commands = [
+            _command_status("PDF renderer", cfg.pdf_renderer_command),
+            _command_status("Tesseract", cfg.tesseract_command),
+        ]
+    missing = [item for item in commands if not item["available"]]
+    detail = {
+        "enabled": bool(cfg.enabled),
+        "provider": str(cfg.provider),
+        "language": str(cfg.language),
+        "commands": commands,
+        "missing_commands": len(missing),
+    }
+    if not cfg.enabled:
+        status = STATUS_NEEDS_REVIEW
+        summary = "OCR is disabled; scanned PDFs may need searchable text already embedded."
+    elif cfg.provider == "tesseract_cli" and missing:
+        status = STATUS_NOT_READY
+        summary = "OCR is enabled, but required local commands are missing."
+    else:
+        status = STATUS_READY
+        summary = "OCR configuration is ready for scanned PDF ingestion."
+    return _capability("ocr", "OCR", status, summary, detail, "Manual Library", _kb_href("manual-library", kb_name))
+
+
+def _source_preview_capability(kb_name: str, *, settings: Settings, manual_card: dict[str, Any]) -> dict[str, Any]:
+    detail = _safe_dict(manual_card.get("detail"))
+    preview_status = str(detail.get("source_preview_status") or "")
+    payload = {
+        "enabled": bool(settings.assets.enabled),
+        "pdf_page_snapshots_enabled": bool(settings.assets.pdf_page_snapshots_enabled),
+        "renderer_available": _command_or_module_available("fitz"),
+        "source_preview_status": preview_status,
+        "page_snapshots_ready": int(detail.get("page_snapshots_ready") or 0),
+        "page_snapshots_failed": int(detail.get("page_snapshots_failed") or 0),
+    }
+    if not settings.assets.enabled or not settings.assets.pdf_page_snapshots_enabled:
+        status = STATUS_NEEDS_REVIEW
+        summary = "PDF source previews are disabled; citations can still show text snippets."
+    elif not payload["renderer_available"]:
+        status = STATUS_NOT_READY
+        summary = "PDF source previews are enabled, but the page renderer is unavailable."
+    elif preview_status == STATUS_NEEDS_REVIEW:
+        status = STATUS_NEEDS_REVIEW
+        summary = str(detail.get("source_preview_message") or "PDF source previews need review.")
+    else:
+        status = STATUS_READY
+        summary = "PDF source preview configuration is ready."
+    return _capability(
+        "source_preview",
+        "PDF Source Preview",
+        status,
+        summary,
+        payload,
+        "Review manuals",
+        _kb_href("manual-library", kb_name),
+    )
+
+
 def _suite_matches_kb(suite: dict[str, Any], kb_name: str) -> bool:
     if suite.get("kind") == "feedback_draft":
         path = str(suite.get("suite_path") or "")
@@ -210,8 +339,21 @@ def _overall_status(cards: list[dict[str, Any]]) -> str:
     return STATUS_READY
 
 
-def _recommendations(cards: list[dict[str, Any]], kb_name: str) -> list[dict[str, str]]:
+def _recommendations(cards: list[dict[str, Any]], capabilities: list[dict[str, Any]], kb_name: str) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = []
+    for capability in capabilities:
+        status = str(capability.get("status") or "")
+        if status != STATUS_NOT_READY:
+            continue
+        action = _safe_dict(capability.get("action"))
+        recommendations.append(_recommendation(
+            f"configure_{capability.get('id')}",
+            str(capability.get("summary") or "Review configuration before using this capability."),
+            "warning",
+            str(action.get("label") or "Review configuration"),
+            str(action.get("href") or f"/admin/rag-readiness?{urlencode({'kb_name': kb_name})}"),
+            str(action.get("kind") or "warning"),
+        ))
     for card in cards:
         status = str(card.get("status") or "")
         if status == STATUS_READY:
@@ -280,6 +422,25 @@ def _recommendation(code: str, label: str, severity: str, action_label: str, hre
     }
 
 
+def _capability(
+    capability_id: str,
+    title: str,
+    status: str,
+    summary: str,
+    detail: dict[str, Any],
+    action_label: str,
+    href: str,
+) -> dict[str, Any]:
+    return {
+        "id": capability_id,
+        "title": title,
+        "status": status,
+        "summary": summary,
+        "detail": detail,
+        "action": {"label": action_label, "href": href, "kind": "secondary"},
+    }
+
+
 def _primary_action(status: str, recommendations: list[dict[str, str]], kb_name: str) -> dict[str, str]:
     if status == STATUS_READY:
         return {"label": "Start Q&A", "href": f"/qa?{urlencode({'kb_name': kb_name})}", "kind": "primary"}
@@ -328,3 +489,19 @@ def _status_summary(status: str) -> str:
 
 def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _env_present(env_name: str) -> bool:
+    name = str(env_name or "").strip()
+    return bool(name and os.environ.get(name))
+
+
+def _command_status(label: str, command: str) -> dict[str, Any]:
+    command_name = str(command or "").strip()
+    return {"label": label, "command": command_name, "available": bool(command_name and shutil.which(command_name))}
+
+
+def _command_or_module_available(module_name: str) -> bool:
+    if module_name == "fitz":
+        return importlib.util.find_spec("fitz") is not None
+    return False

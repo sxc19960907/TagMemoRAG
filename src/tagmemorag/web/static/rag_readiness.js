@@ -22,6 +22,7 @@ const el = {
   actions: document.getElementById("readiness-actions"),
   progressLabel: document.getElementById("readiness-progress-label"),
   steps: document.getElementById("readiness-steps"),
+  capabilities: document.getElementById("readiness-capabilities"),
   cards: document.getElementById("readiness-cards"),
   recommendationCount: document.getElementById("readiness-recommendation-count"),
   recommendations: document.getElementById("readiness-recommendations"),
@@ -89,6 +90,7 @@ function renderSummary(body) {
   el.guidance.textContent = t(guidanceForStatus(status));
   renderActions(body.primary_action || null, body.actions || []);
   renderSteps(body.cards || []);
+  renderCapabilities(body.capabilities || []);
   renderCards(body.cards || []);
   renderRecommendations(body.recommendations || []);
 }
@@ -181,6 +183,51 @@ function renderCards(cards) {
   el.cards.innerHTML = cards.map(renderCard).join("");
 }
 
+function renderCapabilities(capabilities) {
+  if (!Array.isArray(capabilities) || !capabilities.length) {
+    el.capabilities.className = "readiness-capabilities empty-state";
+    el.capabilities.textContent = t("No capability checks returned.");
+    return;
+  }
+  el.capabilities.className = "readiness-capabilities";
+  el.capabilities.innerHTML = capabilities.map(renderCapability).join("");
+}
+
+function renderCapability(capability) {
+  const detail = capability.detail || {};
+  const rows = capabilityDetailRows(capability.id, detail);
+  const action = capability.action || {};
+  return `
+    <article class="readiness-capability ${escapeHtml(capability.status || "unknown")}">
+      <div class="readiness-capability-head">
+        <span class="status-pill ${statusClass(capability.status)}">${escapeHtml(t(statusLabel(capability.status)))}</span>
+        <strong>${escapeHtml(t(capability.title || "Capability"))}</strong>
+      </div>
+      <p>${escapeHtml(t(capability.summary || ""))}</p>
+      ${rows.length ? `<dl>${rows.join("")}</dl>` : ""}
+      ${action.href ? `<a class="button-link compact" href="${escapeHtml(action.href)}">${escapeHtml(t(action.label || "Open"))}</a>` : ""}
+    </article>
+  `;
+}
+
+function capabilityDetailRows(id, detail) {
+  const allow = {
+    answer: ["enabled", "provider", "model", "api_key_env", "api_key_present"],
+    embedding: ["provider", "model", "dimensions", "api_key_env", "api_key_present"],
+    ocr: ["enabled", "provider", "language"],
+    source_preview: ["enabled", "pdf_page_snapshots_enabled", "renderer_available", "source_preview_status", "page_snapshots_ready", "page_snapshots_failed"],
+  }[id] || [];
+  const rows = allow
+    .filter((key) => detail[key] !== undefined && detail[key] !== null && detail[key] !== "")
+    .map((key) => `<dt>${escapeHtml(t(humanizeKey(key)))}</dt><dd>${escapeHtml(formatValue(detail[key]))}</dd>`);
+  if (Array.isArray(detail.commands) && detail.commands.length) {
+    rows.push(
+      `<dt>${escapeHtml(t("Commands"))}</dt><dd>${escapeHtml(detail.commands.map((item) => `${item.label}: ${item.available ? t("available") : t("missing")}`).join(", "))}</dd>`
+    );
+  }
+  return rows;
+}
+
 function renderCard(card) {
   const detail = card.detail || {};
   const detailRows = Object.entries(detail)
@@ -246,6 +293,13 @@ function humanizeKey(key) {
     failed_rebuild_jobs: "Failed jobs",
     active_rebuild_jobs: "Active jobs",
     current_build_id: "Current build",
+    api_key_env: "API key env",
+    api_key_present: "API key present",
+    dimensions: "Dimensions",
+    language: "Language",
+    missing_commands: "Missing commands",
+    pdf_page_snapshots_enabled: "Page snapshots",
+    renderer_available: "Renderer available",
     source_preview_status: "Source preview",
     source_preview_message: "Preview note",
     page_snapshots_ready: "Page previews ready",

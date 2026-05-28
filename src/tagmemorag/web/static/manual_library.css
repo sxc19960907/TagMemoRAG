@@ -313,6 +313,7 @@ textarea {
 }
 
 .readiness-guide,
+.readiness-capability-pane,
 .readiness-recommendations-pane {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -320,11 +321,13 @@ textarea {
   box-shadow: var(--shadow);
 }
 
-.readiness-guide-header {
+.readiness-guide-header,
+.readiness-capability-header {
   align-items: center;
 }
 
-.readiness-guide-header p {
+.readiness-guide-header p,
+.readiness-capability-header p {
   margin: 0;
   color: var(--muted);
   font-weight: 800;
@@ -407,6 +410,71 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
+}
+
+.readiness-capabilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+}
+
+.readiness-capability {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.readiness-capability.not_ready {
+  border-color: #d88989;
+  background: #fff9f9;
+}
+
+.readiness-capability.needs_review {
+  border-color: #d9b66f;
+  background: #fffdf7;
+}
+
+.readiness-capability.ready {
+  border-color: #b9dac8;
+  background: #f7fcfa;
+}
+
+.readiness-capability-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.readiness-capability p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.readiness-capability dl {
+  display: grid;
+  grid-template-columns: minmax(105px, auto) minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.readiness-capability dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.readiness-capability dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .readiness-card {
