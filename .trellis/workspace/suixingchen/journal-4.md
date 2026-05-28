@@ -234,3 +234,34 @@ Added default-off tesseract_cli OCR provider using pdftoppm plus tesseract syste
 ### Next Steps
 
 - None - task complete
+
+
+## Session 149: Scan PDF OCR e2e smoke
+
+**Date**: 2026-05-28
+**Task**: Scan PDF OCR e2e smoke
+**Branch**: `master`
+
+### Summary
+
+Verified the generated image-only scanned PDF through OCR ingestion/indexing, retrieval, and QA smoke. Local tesseract_cli prerequisites report pdftoppm present and tesseract missing; fixture OCR build produced searchable scanned-document evidence including weak-steam guidance and STEAM-042.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
