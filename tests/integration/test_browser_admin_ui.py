@@ -489,9 +489,12 @@ def test_browser_pdf_source_preview_success_path_when_renderer_available(tmp_pat
 def test_browser_real_product_pdf_source_preview_user_flow(tmp_path):
     if importlib.util.find_spec("fitz") is None:
         pytest.skip("requires optional PyMuPDF/fitz for PDF page snapshot rendering")
-    real_pdf = Path("product_manuals/washer/ASKO W6564.pdf")
-    if not real_pdf.exists():
-        pytest.skip("requires local real product PDF sample")
+    real_pdfs = {
+        "washer": Path("product_manuals/washer/ASKO W6564.pdf"),
+        "oven": Path("product_manuals/oven/HISENSE BSA5221.pdf"),
+    }
+    if any(not path.exists() for path in real_pdfs.values()):
+        pytest.skip("requires local real product PDF samples")
     playwright = pytest.importorskip("playwright.sync_api")
     port = _free_port()
     config_path = _write_browser_config(tmp_path, answer_enabled=True, assets_enabled=True)
@@ -523,7 +526,7 @@ def test_browser_real_product_pdf_source_preview_user_flow(tmp_path):
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
-                _exercise_real_product_pdf_preview_flow(page, port, real_pdf)
+                _exercise_real_product_pdf_preview_flow(page, port, real_pdfs)
                 assert console_errors == []
             finally:
                 browser.close()
@@ -1280,21 +1283,36 @@ def _exercise_pdf_preview_success_flow(page, port: int, pdf_path: Path) -> None:
     assert len(asset_response.body()) > 100
 
 
-def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_path: Path) -> None:
+def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str, Path]) -> None:
     page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
     page.get_by_role("heading", name="Manual Library").wait_for()
     page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
-    _upload_manual_from_library_dialog(
-        page,
+    uploads = [
         {
-            "path": pdf_path,
+            "path": pdf_paths["washer"],
             "manual_id": "asko-w6564-real",
             "title": "ASKO W6564 Real Washer Manual",
             "source_file": "real/ASKO W6564.pdf",
             "tag": "real-pdf-preview",
             "ready_source": "real/ASKO W6564.pdf",
+            "question": "ASKO W6564 如何清潔過濾器和排水馬達？",
+            "source_name": "ASKO W6564.pdf",
+            "expected_terms": ["過濾器", "排水馬達", "清潔"],
         },
-    )
+        {
+            "path": pdf_paths["oven"],
+            "manual_id": "hisense-bsa5221-real",
+            "title": "HISENSE BSA5221 Real Oven Manual",
+            "source_file": "real/HISENSE BSA5221.pdf",
+            "tag": "real-pdf-preview",
+            "ready_source": "real/HISENSE BSA5221.pdf",
+            "question": "How do I use Steam Clean on the HISENSE BSA5221 oven?",
+            "source_name": "HISENSE BSA5221.pdf",
+            "expected_terms": ["Steam Clean", "70", "water", "damp cloth"],
+        },
+    ]
+    for upload in uploads:
+        _upload_manual_from_library_dialog(page, upload)
 
     diagnostics = page.evaluate(
         """
@@ -1307,35 +1325,38 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_path: Path) -> 
     )
     source_preview = diagnostics["last_rebuild"]["source_preview"]
     assert source_preview["status"] == "ready"
-    assert source_preview["page_snapshots_ready"] >= 1
+    assert source_preview["page_snapshots_ready"] >= 2
     assert source_preview["renderer_available"] is True
     assert "storage_key" not in json.dumps(source_preview)
 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
-    page.get_by_role("textbox", name="Q&A question").fill("ASKO W6564 如何清潔過濾器和排水馬達？")
-    page.get_by_role("button", name="Ask question").click()
-    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
-    answer_text = page.locator("#qa-answer").inner_text()
-    sources_text = page.locator("#qa-sources").inner_text()
-    assert "ASKO W6564.pdf" in sources_text
-    assert any(term in f"{answer_text}\n{sources_text}" for term in ["過濾器", "排水馬達", "清潔"])
-    page.locator(".qa-citation-chip").first.click()
-    active_source = page.locator(".qa-source-item.active")
-    active_source.wait_for()
-    preview = active_source.locator("[data-source-preview]").first
-    preview.wait_for()
-    assert "Open source preview" in active_source.inner_text()
-    preview_href = preview.get_attribute("href") or ""
-    assert preview_href.startswith("/assets/")
-    assert "kb_name=default" in preview_href
-    assert "storage_key" not in preview_href
-    assert "blob_key" not in preview_href
-    asset_response = page.request.get(f"http://127.0.0.1:{port}{preview_href}")
-    assert asset_response.status == 200
-    assert asset_response.headers.get("content-type", "").startswith("image/png")
-    assert asset_response.headers.get("x-document-asset-id")
-    assert len(asset_response.body()) > 10_000
+    for upload in uploads:
+        page.get_by_role("textbox", name="Q&A question").fill(str(upload["question"]))
+        page.get_by_role("button", name="Ask question").click()
+        page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
+        answer_text = page.locator("#qa-answer").inner_text()
+        sources_text = page.locator("#qa-sources").inner_text()
+        evidence_text = f"{answer_text}\n{sources_text}"
+        assert str(upload["source_name"]) in sources_text
+        assert any(term in evidence_text for term in upload["expected_terms"])
+        page.locator(".qa-citation-chip").first.click()
+        page.locator(".qa-source-item.active").wait_for()
+        source_card = page.locator(".qa-source-item").filter(has_text=str(upload["source_name"])).first
+        source_card.wait_for()
+        preview = source_card.locator("[data-source-preview]").first
+        preview.wait_for()
+        assert "Open source preview" in source_card.inner_text()
+        preview_href = preview.get_attribute("href") or ""
+        assert preview_href.startswith("/assets/")
+        assert "kb_name=default" in preview_href
+        assert "storage_key" not in preview_href
+        assert "blob_key" not in preview_href
+        asset_response = page.request.get(f"http://127.0.0.1:{port}{preview_href}")
+        assert asset_response.status == 200
+        assert asset_response.headers.get("content-type", "").startswith("image/png")
+        assert asset_response.headers.get("x-document-asset-id")
+        assert len(asset_response.body()) > 10_000
 
 
 def _assert_qa_layout(page) -> None:

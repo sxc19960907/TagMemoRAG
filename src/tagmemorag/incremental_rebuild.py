@@ -9,6 +9,15 @@ import numpy as np
 
 from .chunk_identity import ChunkIdentityMap, entry_from_chunk, entry_from_node, load_chunk_identity
 from .config import Settings
+from .document_assets import (
+    AssetExtractionSummary,
+    AssetManifest,
+    asset_inventory_summary,
+    extract_document_assets,
+    load_asset_manifest,
+    remove_document_assets,
+    replace_document_assets,
+)
 from .document_metadata import manual_node_attrs
 from .errors import RebuildFailedError
 from .epa_basis import retrain_report
@@ -100,6 +109,8 @@ class IncrementalPlan:
     chunk_identity_fallback_reason: str = ""
     ocr_summary: OCRSummary = OCRSummary()
     pdf_quality: PDFQualitySummary = PDFQualitySummary()
+    asset_manifest: AssetManifest | None = None
+    asset_summary: AssetExtractionSummary = field(default_factory=AssetExtractionSummary)
 
 
 def build_kb_incremental(
@@ -238,6 +249,8 @@ def build_kb_incremental(
             }
         if pdf_quality.documents:
             meta["pdf_quality"] = pdf_quality.to_dict()
+        if cfg.assets.enabled and plan.asset_manifest is not None:
+            meta["assets"] = asset_inventory_summary(plan.asset_manifest, plan.asset_summary)
         anchors_version = max(stored_anchor_version, old_state.anchors_version if old_state else 0)
         return IncrementalBuildResult(
             GraphState(
@@ -247,6 +260,7 @@ def build_kb_incremental(
                 build_id=build_id,
                 kb_name=kb_name,
                 meta=meta,
+                asset_manifest=plan.asset_manifest if cfg.assets.enabled else None,
                 unresolved_anchors=unresolved,
                 anchors_version=anchors_version,
             ),
@@ -294,7 +308,11 @@ def _build_plan(
         dirty_manual_ids=dirty_manual_ids,
         active_source_by_manual_id=active_source_by_manual_id,
         chunk_identity_fallback_reason=identity_fallback_reason,
+        asset_manifest=load_asset_manifest(kb_name, cfg) if cfg.assets.enabled else None,
     )
+    if cfg.assets.enabled and plan.asset_manifest is not None:
+        for manual_id in sorted(dirty_manual_ids - set(active_source_by_manual_id)):
+            plan.asset_manifest = remove_document_assets(plan.asset_manifest, manual_id, mark_deleted=True)
     ocr_provider = create_ocr_provider(cfg)
     old_node_ids = sorted(int(node_id) for node_id in old_state.graph.nodes)
     if old_node_ids and old_node_ids != list(range(len(old_node_ids))):
@@ -345,6 +363,10 @@ def _build_plan(
         )
         plan.ocr_summary = plan.ocr_summary.merge(parsed.ocr_summary)
         plan.pdf_quality = plan.pdf_quality.merge(parsed.pdf_quality)
+        if cfg.assets.enabled and plan.asset_manifest is not None:
+            document_assets, document_asset_summary = extract_document_assets(path, metadata, kb_name, cfg)
+            plan.asset_manifest = replace_document_assets(plan.asset_manifest, metadata.manual_id, document_assets)
+            plan.asset_summary = _merge_asset_extraction_summary(plan.asset_summary, document_asset_summary)
         for chunk in parsed.chunks:
             entry = entry_from_chunk(chunk)
             old_entry = identity_entries.get(entry.identity_key)
@@ -446,6 +468,19 @@ def _safe_non_negative_int(value: object) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, parsed)
+
+
+def _merge_asset_extraction_summary(left: AssetExtractionSummary, right: AssetExtractionSummary) -> AssetExtractionSummary:
+    reasons = dict(left.failure_reasons)
+    for reason, count in right.failure_reasons.items():
+        reasons[reason] = reasons.get(reason, 0) + int(count)
+    return AssetExtractionSummary(
+        attempted=left.attempted + right.attempted,
+        created=left.created + right.created,
+        skipped=left.skipped + right.skipped,
+        failed=left.failed + right.failed,
+        failure_reasons=reasons,
+    )
 
 
 def _identity_keys_by_manual_from_graph(state: GraphState) -> dict[str, set[str]]:

@@ -11,7 +11,7 @@ import pytest
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from tagmemorag.config import ManualLibraryConfig, ParserConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
+from tagmemorag.config import AssetConfig, ManualLibraryConfig, ParserConfig, SearchConfig, Settings, StorageConfig, VectorStoreConfig
 from tagmemorag.errors import ServiceError
 from tagmemorag.manual_library import (
     build_dirty_state_report,
@@ -31,9 +31,10 @@ from tagmemorag.manual_library import (
     validate_metadata,
 )
 from tagmemorag.manual_registry import create_registry
+from tagmemorag.document_assets import load_asset_manifest
 from tagmemorag.tag_store import upsert_manual_tags
 from tagmemorag.search_runtime import execute_search
-from tagmemorag.state import AppState, build_kb, start_library_rebuild
+from tagmemorag.state import AppState, build_kb, save_kb, start_library_rebuild
 from tests.unit.test_storage_state import FakeQdrantClient
 
 
@@ -417,6 +418,41 @@ def test_incremental_rebuild_preserves_pdf_quality_summary(library_config, fake_
     assert pdf_quality["documents"] == 1
     assert pdf_quality["pages_with_text"] == 1
     assert pdf_quality["pages_missing_text"] == 0
+
+
+def test_incremental_rebuild_updates_pdf_preview_assets(tmp_path, fake_embedder):
+    if pytest.importorskip("fitz") is None:
+        pytest.skip("requires optional PyMuPDF/fitz for PDF page snapshot rendering")
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        assets=AssetConfig(enabled=True, pdf_page_snapshots_enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    first_pdf = tmp_path / "first.pdf"
+    second_pdf = tmp_path / "second.pdf"
+    _write_text_pdf(first_pdf, "FIRST-11 confirms the washer filter page.")
+    _write_text_pdf(second_pdf, "SECOND-22 confirms the oven steam clean page.")
+    upsert_manual("default", _metadata("manuals/first.pdf", "first"), first_pdf.read_bytes(), cfg)
+    old_state = build_kb(library_root("default", cfg), "default", cfg, embedder=fake_embedder)
+    save_kb(old_state, cfg)
+    mark_pending("default", cfg, pending=False, build_id=old_state.build_id)
+    assert {asset.doc_id for asset in old_state.asset_manifest.assets.values()} == {"first"}
+    app = AppState(old_state)
+
+    upsert_manual("default", _metadata("manuals/second.pdf", "second"), second_pdf.read_bytes(), cfg)
+    task = start_library_rebuild(app, "default", cfg, embedder=fake_embedder, mode="incremental")
+    for _ in range(100):
+        if task.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert task.status == "done"
+    assert task.effective_mode == "incremental"
+    manifest = load_asset_manifest("default", cfg)
+    ready_docs = {asset.doc_id for asset in manifest.assets.values() if asset.status == "ready"}
+    assert ready_docs == {"first", "second"}
+    assert app.get_current("default").meta["assets"]["stats"]["by_type"]["page_snapshot"] == 2
 
 
 def test_incremental_rebuild_reuses_unchanged_dirty_manual_chunk(library_config, fake_embedder):

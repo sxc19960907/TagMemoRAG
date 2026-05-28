@@ -82,7 +82,62 @@ Tests should avoid network access by default. Heavy model tests should be opt-in
 - Treating `node_id` as stable across rebuilds.
 - Forgetting that `implement.jsonl` and `check.jsonl` determine what future agents automatically load.
 - Letting tests pass only because the developer workspace has optional extras or generated `.tmp/` reports. Tests for optional integrations should skip clearly when the extra is absent, and batch/CLI tests should create their own report fixtures instead of depending on local evaluation artifacts.
-- Updating full rebuild diagnostics while forgetting incremental rebuild. If full rebuild writes safe `GraphState.meta` summaries such as `pdf_quality` or `ocr`, incremental rebuild must either preserve the old summary, add dirty-document deltas, or intentionally fall back to full. Otherwise the Manual Library diagnostics page can lose PDF/OCR status after a normal small upload even though the indexed content is correct.
+- Updating full rebuild diagnostics or derived artifacts while forgetting incremental rebuild. If full rebuild writes safe `GraphState.meta` summaries such as `pdf_quality`, `ocr`, or `assets`, or writes derived stores such as `asset_manifest.json`, incremental rebuild must either preserve the old data, add dirty-document deltas, or intentionally fall back to full. Otherwise the Manual Library and QA source-preview pages can lose PDF/OCR/source-preview status after a normal small upload even though the indexed text is correct.
+
+## Scenario: Incremental Rebuild Derived Artifacts
+
+### 1. Scope / Trigger
+
+- Trigger: full rebuild and incremental rebuild both produce user-visible derived artifacts such as PDF quality summaries, OCR summaries, document asset manifests, or source preview readiness.
+
+### 2. Signatures
+
+- `build_kb(...) -> GraphState`
+- `build_kb_incremental(...) -> IncrementalBuildResult`
+- `GraphState.meta["assets"]`
+- `GraphState.asset_manifest`
+
+### 3. Contracts
+
+- Full rebuild and successful incremental rebuild must both return a `GraphState` whose derived metadata and manifests are internally consistent.
+- For document assets, incremental rebuild loads the existing manifest, updates assets for dirty active manuals, marks assets for removed/inactive dirty manuals as deleted, and preserves unchanged manuals' assets.
+- `save_kb(...)` remains the single persistence path for `GraphState.asset_manifest`.
+- User-facing APIs and pages must only receive safe asset URLs such as `/assets/{asset_id}?kb_name=...`; never expose storage keys, blob keys, local paths, checksums, or raw manifest rows.
+
+### 4. Validation & Error Matrix
+
+- Dirty active PDF with snapshots enabled -> extract/update that manual's page snapshot assets.
+- Dirty active non-PDF -> replace that manual's assets with an empty set while preserving other manuals.
+- Dirty disabled/deleted manual -> mark previous assets deleted or remove them according to the existing manifest operation.
+- Renderer unavailable with non-strict assets -> preserve rebuild success and record failed asset records/summary.
+- Asset extraction strict failure -> rebuild may fail or fall back according to the configured rebuild mode.
+
+### 5. Good/Base/Bad Cases
+
+- Good: upload PDF A, rebuild, upload PDF B incrementally, then QA source cards for both PDFs can open PNG previews.
+- Base: upload TXT after a PDF; incremental rebuild preserves the PDF's existing preview assets.
+- Bad: incremental rebuild updates chunks/vectors but returns `asset_manifest=None` or an assets summary containing only the latest dirty document.
+
+### 6. Tests Required
+
+- Unit: incremental rebuild after a persisted full rebuild preserves existing document assets and adds dirty PDF assets.
+- Browser: real `/qa` flow over multiple real PDFs verifies source cards expose preview links and `/assets/...` returns PNG without storage/blob key leakage.
+- Diagnostics: source preview readiness remains `ready` when at least one ready page snapshot exists after incremental rebuild.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+return GraphState(graph=graph, vectors=vectors, meta=meta)
+```
+
+#### Correct
+
+```python
+meta["assets"] = asset_inventory_summary(asset_manifest, asset_summary)
+return GraphState(graph=graph, vectors=vectors, meta=meta, asset_manifest=asset_manifest)
+```
 
 ## Scenario: HTTP Embedding Provider
 
