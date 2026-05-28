@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/architecture.md", "reason": "Verify QA page display boundary and source preview behavior remain spec-compliant."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify no unsafe debug/document fields leak and tests cover the changed behavior."}

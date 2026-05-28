@@ -644,6 +644,7 @@ function sanitizeRoute(route) {
 
 function sanitizeEvidence(item) {
   const provenance = sanitizeEvidenceProvenance(item?.provenance || {});
+  const assets = Array.isArray(item?.assets) ? item.assets.slice(0, 3).map(sanitizeEvidenceAsset).filter(Boolean) : [];
   return {
     evidence_id: item?.evidence_id || "",
     citation_id: item?.citation_id || "",
@@ -654,6 +655,7 @@ function sanitizeEvidence(item) {
     section_path: Array.isArray(item?.section_path) ? item.section_path.slice(0, 6) : [],
     confidence: typeof item?.confidence === "number" ? item.confidence : null,
     page_range: Array.isArray(item?.page_range) ? item.page_range.slice(0, 2) : [],
+    assets,
     provenance,
     retrieval_reason: item?.retrieval_reason || "",
   };
@@ -673,6 +675,26 @@ function sanitizeEvidenceProvenance(provenance) {
     ocr: Boolean(provenance?.ocr),
     confidence: typeof provenance?.confidence === "number" ? provenance.confidence : null,
   };
+}
+
+function sanitizeEvidenceAsset(asset) {
+  const url = safeAssetUrl(asset?.url || "");
+  if (!url) return null;
+  return {
+    asset_id: String(asset?.asset_id || "").slice(0, 120),
+    type: String(asset?.type || "").slice(0, 40),
+    url,
+    mime_type: String(asset?.mime_type || "").slice(0, 80),
+    page_number: Number.isFinite(Number(asset?.page_number)) ? Number(asset.page_number) : null,
+    alt_text: String(asset?.alt_text || "").slice(0, 180),
+  };
+}
+
+function safeAssetUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value.startsWith("/assets/")) return "";
+  if (value.includes("\\") || value.includes("//")) return "";
+  return value.slice(0, 320);
 }
 
 function sanitizeResult(item) {
@@ -1427,6 +1449,7 @@ function renderSourceItem(item) {
   const summary = summarizeSourceText(text);
   const canExpand = text.length > summary.length;
   const badges = sourceProvenanceBadges(item);
+  const verification = renderSourceVerification(item);
   return `
     <article id="qa-source-${safeCitation}" class="qa-source-item" data-citation-id="${safeCitation}">
       <div class="qa-source-card-head">
@@ -1437,11 +1460,57 @@ function renderSourceItem(item) {
         </div>
       </div>
       ${badges.length ? `<div class="qa-source-badges">${badges.map((badge) => `<span class="${badge.className}">${escapeHtml(badge.label)}</span>`).join("")}</div>` : ""}
+      ${verification}
       ${section ? `<p class="qa-source-section"><span>${t("Section")}</span>${escapeHtml(section)}</p>` : ""}
       <p class="qa-source-summary">${escapeHtml(summary)}</p>
       ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>${t("Show more")}</button>` : ""}
     </article>
   `;
+}
+
+function renderSourceVerification(item) {
+  const asset = previewAssetForEvidence(item);
+  const pageLabel = formatPageRange((item?.provenance || {}).page_range || item?.page_range);
+  if (asset) {
+    const detail = sourceVerificationDetail(item, asset, pageLabel);
+    return `
+      <div class="qa-source-verify has-preview">
+        <div>
+          <strong>${t("Verify original source")}</strong>
+          <small>${escapeHtml(detail)}</small>
+        </div>
+        <a class="qa-source-preview-link" href="${escapeHtml(asset.url)}" target="_blank" rel="noopener" data-source-preview>${t("Open source preview")}</a>
+      </div>
+    `;
+  }
+  const fallback = pageLabel
+    ? t("Preview unavailable. Use the cited passage and {page} to verify the source.", { page: pageLabel })
+    : t("Preview unavailable. Use the cited passage to verify the source.");
+  return `
+    <div class="qa-source-verify unavailable" data-source-preview-unavailable>
+      <div>
+        <strong>${t("Verify original source")}</strong>
+        <small>${escapeHtml(fallback)}</small>
+      </div>
+    </div>
+  `;
+}
+
+function previewAssetForEvidence(item) {
+  const assets = Array.isArray(item?.assets) ? item.assets : [];
+  return assets.find((asset) => asset && asset.url && (asset.type === "page_snapshot" || asset.type === "region_crop")) || assets.find((asset) => asset && asset.url) || null;
+}
+
+function sourceVerificationDetail(item, asset, pageLabel) {
+  const provenance = item?.provenance || {};
+  if (provenance.ocr) {
+    return pageLabel
+      ? t("OCR text should be checked against the page image for {page}.", { page: pageLabel })
+      : t("OCR text should be checked against the page image.");
+  }
+  if (pageLabel) return t("Preview opens the cited source image for {page}.", { page: pageLabel });
+  if (asset.page_number) return t("Preview opens source page {page}.", { page: asset.page_number });
+  return t("Preview opens the cited source image.");
 }
 
 function sourceDisplayName(item) {

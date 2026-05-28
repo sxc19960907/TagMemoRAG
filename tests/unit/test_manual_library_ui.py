@@ -1212,9 +1212,19 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-source-placeholder" in js.text
     assert "sanitizeEvidenceProvenance" in js.text
     assert "sourceProvenanceBadges" in js.text
+    assert "sanitizeEvidenceAsset" in js.text
+    assert "safeAssetUrl" in js.text
+    assert "renderSourceVerification" in js.text
+    assert "previewAssetForEvidence" in js.text
     assert "formatPageRange" in js.text
     assert "evidenceStrengthLabel" in js.text
     assert "qa-source-badges" in js.text
+    assert "qa-source-verify" in js.text
+    assert "data-source-preview" in js.text
+    assert "data-source-preview-unavailable" in js.text
+    assert "Verify original source" in js.text
+    assert "Open source preview" in js.text
+    assert "Preview unavailable" in js.text
     assert "Converted from DOCX" in js.text
     assert "Indexed as {source}" in js.text
     assert "OCR text" in js.text
@@ -1229,6 +1239,8 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "top_k:" not in js.text
     assert "source_k:" not in js.text
     assert "item?.node_id" not in js.text
+    assert "storage_key" not in js.text
+    assert "blob_key" not in js.text
     assert "qa-answer" in js.text
     assert "qa-kb-name" not in js.text
     assert "plan_id" in js.text

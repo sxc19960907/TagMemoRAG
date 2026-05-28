@@ -1042,9 +1042,23 @@ def _exercise_multiformat_upload_qa_user_flow(page, port: int, txt_path: Path, p
         page.locator(".qa-source-item.active").wait_for()
         assert page.locator(".qa-source-item.active").get_attribute("data-citation-id")
         page.locator(".qa-source-item.active .qa-source-badge").first.wait_for()
+        active_source = page.locator(".qa-source-item.active")
+        active_source.locator(".qa-source-verify").wait_for()
+        assert "Verify original source" in active_source.inner_text()
+        preview_links = active_source.locator("[data-source-preview]")
+        if preview_links.count():
+            preview_href = preview_links.first.get_attribute("href") or ""
+            assert preview_href.startswith("/assets/")
+            assert "kb_name=default" in preview_href
+            assert "storage_key" not in preview_href
+            assert "blob_key" not in preview_href
+        else:
+            active_source.locator("[data-source-preview-unavailable]").wait_for()
+            assert "Preview unavailable" in active_source.inner_text()
 
         if str(upload["manual_id"]) == "pdf-gasket-calibration":
             assert "Page" in sources_text or "Pages" in sources_text
+            assert "Verify original source" in active_source.inner_text()
         if str(upload["manual_id"]) == "docx-nozzle-care":
             assert "docx-nozzle-care.docx" in sources_text
             assert "Converted from DOCX" in sources_text
@@ -1065,6 +1079,7 @@ def _exercise_multiformat_upload_qa_user_flow(page, port: int, txt_path: Path, p
     history_item.click()
     assert "DOCX-19" in page.locator("#qa-answer").inner_text()
     assert "docx-nozzle-care.docx" in page.locator("#qa-sources").inner_text()
+    page.locator("#qa-sources .qa-source-verify").first.wait_for()
     _assert_qa_layout(page)
 
 
