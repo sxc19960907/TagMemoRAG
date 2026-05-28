@@ -397,3 +397,36 @@ Added safe evidence provenance to retrieve/QA payloads, rendered provenance badg
 ### Next Steps
 
 - None - task complete
+
+
+## Session 154: QA source preview verification
+
+**Date**: 2026-05-28
+**Task**: QA source preview verification
+**Branch**: `master`
+
+### Summary
+
+Added QA source verification controls that preserve safe asset preview descriptors, show open-preview actions for /assets evidence, provide fallback verification copy when no preview exists, and cover the browser QA source verification path.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e69b8c7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

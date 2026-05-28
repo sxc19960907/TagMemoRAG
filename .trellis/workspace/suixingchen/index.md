@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 153
+- **Total Sessions**: 154
 - **Last Active**: 2026-05-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~399 | Active |
+| `journal-4.md` | ~432 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 154 | 2026-05-28 | QA source preview verification | `e69b8c7` | `master` |
 | 153 | 2026-05-28 | QA evidence trust and browser regression | `035bd7b` | `master` |
 | 152 | 2026-05-28 | Browser multiformat document intake | `a24c7e0` | `master` |
 | 151 | 2026-05-28 | Scanned PDF OCR browser flow | `d5d5340` | `master` |
