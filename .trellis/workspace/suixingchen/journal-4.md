@@ -562,3 +562,36 @@ Redesigned the RAG readiness page into a browser-first setup guide with hero sta
 ### Next Steps
 
 - None - task complete
+
+
+## Session 159: RAG configuration onboarding cards
+
+**Date**: 2026-05-28
+**Task**: RAG configuration onboarding cards
+**Branch**: `master`
+
+### Summary
+
+Added local-only configuration capability cards to the RAG readiness guide for answer LLM, embeddings, OCR, and PDF source preview, with safe detail payloads, recommendations, i18n, unit coverage, browser validation, and non-performance regression checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d39a9f0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
