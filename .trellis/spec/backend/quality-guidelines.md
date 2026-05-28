@@ -198,6 +198,45 @@ model:
   api_key_env: SILICONFLOW_API_KEY
 ```
 
+## Scenario: Real Answer Provider Citation Gate
+
+### 1. Scope / Trigger
+
+- Trigger: `/answer`, `/qa`, or agent final-answer generation uses a non-deterministic answer provider such as `openai_compatible`.
+
+### 2. Signatures
+
+- `build_answer_prompt(question, retrieve_payload, prompt_version) -> AnswerPrompt`
+- `validate_generation_citations(generation, allowed_citation_ids, require_citations=False) -> AnswerGeneration`
+- `build_answer_response(request, retrieve_payload) -> dict`
+
+### 3. Contracts
+
+- `noop` may remain an offline deterministic extractive provider and can return no citations when no supported excerpt exists.
+- Real answer providers must not be accepted as successful grounded answers when retrieved citations are available but the generated text has no valid citation ids.
+- Invalid model-supplied citation ids are dropped before response serialization.
+- If citation validation is required and no valid citation remains, the caller must surface an answer-generation failure/refusal path instead of returning `answer.kind="answer"`.
+- Citation validation must use the prompt's `allowed_citation_ids`; never trust provider-supplied citation metadata by itself.
+
+### 4. Validation & Error Matrix
+
+- Real provider returns text with valid bracketed citation -> `answer.kind="answer"` and source cards can be inspected.
+- Real provider returns text with only unknown citations -> drop unknown ids and fail generation when citations are required.
+- Real provider returns text without citations while evidence citations exist -> fail generation when citations are required.
+- Noop provider unsupported evidence -> may return deterministic insufficient-evidence text with no citations.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `Steam Clean uses water and wiping afterward [cit_abc]`, where `cit_abc` is in the allowed set.
+- Base: provider emits both metadata citations and bracketed citations; validation keeps only allowed ids.
+- Bad: "Replace the pump immediately" with no valid citation, shown as a successful answer on `/qa`.
+
+### 6. Tests Required
+
+- Unit: citation validation rejects uncited real-provider generations when `require_citations=True`.
+- API: `/answer` converts uncited real-provider output into an error/refusal payload, not a successful answer.
+- Browser opt-in: real `/qa` flow with real manuals and real answer provider verifies visible citation chips and source cards.
+
 ## Scenario: Tesseract CLI OCR Provider
 
 ### 1. Scope / Trigger

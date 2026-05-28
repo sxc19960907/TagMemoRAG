@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tagmemorag.answer.base import AnswerCitation, AnswerGeneration
+from tagmemorag.answer.base import AnswerGenerationError
 from tagmemorag.answer.prompt import build_answer_prompt, validate_generation_citations
 
 
@@ -50,3 +51,17 @@ def test_validate_generation_citations_drops_unknown_text_extracted_ids():
 
     assert [c.citation_id for c in cleaned.citations] == ["cit_001"]
     assert "answer_dropped_invalid_citations" in cleaned.warnings
+
+
+def test_validate_generation_citations_can_require_valid_citations():
+    generation = AnswerGeneration(
+        text="Use steam wand without a citation.",
+        citations=(AnswerCitation("cit_fake"),),
+    )
+
+    try:
+        validate_generation_citations(generation, {"cit_001"}, require_citations=True)
+    except AnswerGenerationError as exc:
+        assert "valid citations" in str(exc)
+    else:  # pragma: no cover - explicit assertion message is clearer than bare fail imports
+        raise AssertionError("expected uncited generation to fail citation validation")

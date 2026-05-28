@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from tagmemorag import api
-from tagmemorag.answer.base import AnswerGenerationError
+from tagmemorag.answer.base import AnswerGeneration, AnswerGenerationError
 from tagmemorag.config import AnswerConfig, SearchConfig, Settings, StorageConfig
 from tagmemorag.state import AppState, build_kb
 
@@ -108,6 +108,29 @@ def test_answer_provider_failure_stays_in_answer_payload(tmp_path, fake_embedder
     assert body["answer"]["refusal_reason"] == "generation_failed"
     assert "answer_generation_failed:AnswerGenerationError" in body["warnings"]
     assert body["retrieve"]["evidence"]
+
+
+def test_openai_answer_without_valid_citations_stays_in_error_payload(tmp_path, fake_embedder, monkeypatch):
+    client, _state = _client_with_docs(
+        tmp_path,
+        fake_embedder,
+        answer=AnswerConfig(enabled=True, provider="openai_compatible", model_id="chat-model", api_key_env="ANSWER_KEY"),
+    )
+
+    class UncitedGenerator:
+        def generate(self, context):
+            return AnswerGeneration(text="The manual says to replace the pump immediately.", model_id="chat-model")
+
+    monkeypatch.setattr(api, "_answer_generator", lambda: UncitedGenerator())
+
+    response = client.post("/answer", json={"question": "蒸汽很小", "top_k": 1})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"]["kind"] == "error"
+    assert body["answer"]["refusal_reason"] == "generation_failed"
+    assert body["answer"]["citations"] == []
+    assert "answer_generation_failed:AnswerGenerationError" in body["warnings"]
 
 
 def test_answer_can_omit_retrieve_payload(tmp_path, fake_embedder):

@@ -494,7 +494,11 @@ def build_answer_response(request: AnswerRequest, retrieve_payload: dict) -> dic
     )
     try:
         generation = answer_generator().generate(context)
-        cleaned = validate_generation_citations(generation, prompt.allowed_citation_ids)
+        cleaned = validate_generation_citations(
+            generation,
+            prompt.allowed_citation_ids,
+            require_citations=settings.answer.provider != "noop",
+        )
         answer_obj = cleaned.to_answer_dict(confidence=float(answerability.get("confidence") or 0.0))
         warnings.extend(cleaned.warnings)
     except (AnswerGenerationError, ServiceError, ValueError) as exc:

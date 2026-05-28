@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import AnswerCitation, AnswerGeneration, AnswerPrompt
+from .base import AnswerCitation, AnswerGeneration, AnswerGenerationError, AnswerPrompt
 
 
 SYSTEM_PROMPT = (
@@ -65,6 +65,8 @@ def build_answer_prompt(
 def validate_generation_citations(
     generation: AnswerGeneration,
     allowed_citation_ids: set[str] | frozenset[str],
+    *,
+    require_citations: bool = False,
 ) -> AnswerGeneration:
     allowed = {str(item) for item in allowed_citation_ids if str(item)}
     valid: list[AnswerCitation] = []
@@ -77,6 +79,8 @@ def validate_generation_citations(
     warnings = list(generation.warnings)
     if dropped:
         warnings.append("answer_dropped_invalid_citations")
+    if require_citations and allowed and not valid:
+        raise AnswerGenerationError("answer generation did not include valid citations")
     return AnswerGeneration(
         text=generation.text,
         citations=tuple(valid),

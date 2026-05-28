@@ -22,6 +22,7 @@ from tagmemorag.retrieval_feedback import create_feedback
 
 
 RUN_BROWSER_UI = os.environ.get("TAGMEMORAG_RUN_BROWSER_UI") == "1"
+RUN_REAL_LLM_QA = os.environ.get("TAGMEMORAG_RUN_REAL_LLM_QA") == "1"
 pytestmark = pytest.mark.skipif(
     not RUN_BROWSER_UI,
     reason="set TAGMEMORAG_RUN_BROWSER_UI=1 to run browser admin UI integration tests",
@@ -527,6 +528,62 @@ def test_browser_real_product_pdf_source_preview_user_flow(tmp_path):
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
                 _exercise_real_product_pdf_preview_flow(page, port, real_pdfs)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
+def test_browser_real_llm_qa_provider_acceptance(tmp_path):
+    if not RUN_REAL_LLM_QA:
+        pytest.skip("set TAGMEMORAG_RUN_REAL_LLM_QA=1 to run real LLM QA browser acceptance")
+    api_key_env = os.environ.get("TAGMEMORAG_REAL_LLM_ANSWER_API_KEY_ENV", "DEEPSEEK_API_KEY")
+    if not os.environ.get(api_key_env):
+        pytest.skip(f"requires answer API key in ${api_key_env}")
+    real_pdfs = {
+        "washer": Path("product_manuals/washer/ASKO W6564.pdf"),
+        "oven": Path("product_manuals/oven/HISENSE BSA5221.pdf"),
+    }
+    if any(not path.exists() for path in real_pdfs.values()):
+        pytest.skip("requires local real product PDF samples")
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_real_llm_browser_config(tmp_path, api_key_env=api_key_env)
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_real_llm_qa_provider_flow(page, port, real_pdfs)
                 assert console_errors == []
             finally:
                 browser.close()
@@ -1392,6 +1449,64 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
         assert len(asset_response.body()) > 10_000
 
 
+def _exercise_real_llm_qa_provider_flow(page, port: int, pdf_paths: dict[str, Path]) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+    uploads = [
+        {
+            "path": pdf_paths["washer"],
+            "manual_id": "asko-w6564-real-llm",
+            "title": "ASKO W6564 Real LLM Washer Manual",
+            "source_file": "real-llm/ASKO W6564.pdf",
+            "tag": "real-llm-qa",
+            "ready_source": "real-llm/ASKO W6564.pdf",
+        },
+        {
+            "path": pdf_paths["oven"],
+            "manual_id": "hisense-bsa5221-real-llm",
+            "title": "HISENSE BSA5221 Real LLM Oven Manual",
+            "source_file": "real-llm/HISENSE BSA5221.pdf",
+            "tag": "real-llm-qa",
+            "ready_source": "real-llm/HISENSE BSA5221.pdf",
+        },
+    ]
+    for upload in uploads:
+        _upload_manual_from_library_dialog(page, upload)
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+
+    page.get_by_role("textbox", name="Q&A question").fill("How do I use Steam Clean on the HISENSE BSA5221 oven?")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=60000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    sources_text = page.locator("#qa-sources").inner_text()
+    evidence_text = f"{answer_text}\n{sources_text}"
+    evidence_text_casefold = evidence_text.casefold()
+    assert "HISENSE BSA5221.pdf" in sources_text
+    assert page.locator(".qa-citation-chip").count() >= 1
+    assert page.locator(".qa-source-item").count() >= 1
+    assert any(term in evidence_text_casefold for term in ["steam clean", "water", "damp cloth", "70"])
+    assert "ASKO W6564" not in answer_text
+    assert not any(leak in evidence_text for leak in ["storage_key", "blob_key", "checksum", "node_id", "anchor_key"])
+    page.locator(".qa-citation-chip").first.click()
+    page.locator(".qa-source-item.active").wait_for()
+
+    page.get_by_role("textbox", name="Q&A question").fill("ASKO W6564 排水馬達故障時是不是要直接換泵？")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=60000)
+    unsupported_answer = page.locator("#qa-answer").inner_text()
+    unsupported_sources = page.locator("#qa-sources").inner_text()
+    combined = f"{unsupported_answer}\n{unsupported_sources}"
+    assert "直接換泵" not in unsupported_answer
+    assert "直接换泵" not in unsupported_answer
+    assert "must replace" not in unsupported_answer.casefold()
+    assert "should replace" not in unsupported_answer.casefold()
+    assert "HISENSE BSA5221" not in unsupported_answer
+    assert not any(leak in combined for leak in ["storage_key", "blob_key", "checksum", "node_id", "anchor_key"])
+
+
 def _assert_qa_layout(page) -> None:
     metrics = page.evaluate(
         """
@@ -1684,6 +1799,40 @@ auth:
 {answer_block}
 {ocr_block}
 {assets_block}
+""",
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def _write_real_llm_browser_config(tmp_path: Path, *, api_key_env: str) -> Path:
+    model_id = os.environ.get("TAGMEMORAG_REAL_LLM_ANSWER_MODEL", "deepseek-v4-flash")
+    base_url = os.environ.get("TAGMEMORAG_REAL_LLM_ANSWER_BASE_URL", "https://api.deepseek.com")
+    config_path = tmp_path / "browser-real-llm-config.yaml"
+    config_path.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+server:
+  host: 127.0.0.1
+  port: 0
+auth:
+  enabled: false
+answer:
+  enabled: true
+  provider: openai_compatible
+  model_id: {model_id}
+  base_url: {base_url}
+  api_key_env: {api_key_env}
+  timeout_seconds: 45
+  max_output_tokens: 768
+  temperature: 0
 """,
         encoding="utf-8",
     )
