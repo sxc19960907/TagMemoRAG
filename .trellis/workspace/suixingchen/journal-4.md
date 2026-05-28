@@ -595,3 +595,36 @@ Added local-only configuration capability cards to the RAG readiness guide for a
 ### Next Steps
 
 - None - task complete
+
+
+## Session 160: QA context reset clarity
+
+**Date**: 2026-05-28
+**Task**: QA context reset clarity
+**Branch**: `master`
+
+### Summary
+
+Added a visible context mode indicator to the user-facing QA composer, clarified when short questions continue from earlier context, preserved the Ask as new reset path with empty conversation_context, and covered the behavior with unit/static checks plus a real browser upload-rebuild-QA flow.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d7d35ab` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
