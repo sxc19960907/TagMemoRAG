@@ -496,3 +496,36 @@ Hardened deterministic QA answer behavior for unsupported repair questions, expa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 157: Real LLM QA provider acceptance
+
+**Date**: 2026-05-28
+**Task**: Real LLM QA provider acceptance
+**Branch**: `master`
+
+### Summary
+
+Added a citation gate for real answer providers, opt-in real LLM browser QA acceptance over real manuals, focused tests, and backend spec guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ebeda6e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
