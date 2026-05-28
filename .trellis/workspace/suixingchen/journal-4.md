@@ -364,3 +364,36 @@ Validated browser-first intake for TXT, text PDF, DOCX, and existing scanned-PDF
 ### Next Steps
 
 - None - task complete
+
+
+## Session 153: QA evidence trust and browser regression
+
+**Date**: 2026-05-28
+**Task**: QA evidence trust and browser regression
+**Branch**: `master`
+
+### Summary
+
+Added safe evidence provenance to retrieve/QA payloads, rendered provenance badges and evidence strength on QA source cards, hardened QA history/status interactions, and expanded browser regression coverage for user-facing citation/source inspection.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `035bd7b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
