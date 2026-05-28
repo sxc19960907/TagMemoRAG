@@ -656,9 +656,15 @@ function sanitizeEvidence(item) {
     confidence: typeof item?.confidence === "number" ? item.confidence : null,
     page_range: Array.isArray(item?.page_range) ? item.page_range.slice(0, 2) : [],
     assets,
+    asset_warnings: Array.isArray(item?.asset_warnings) ? item.asset_warnings.slice(0, 5).map(safeAssetWarning).filter(Boolean) : [],
     provenance,
     retrieval_reason: item?.retrieval_reason || "",
   };
+}
+
+function safeAssetWarning(value) {
+  const warning = String(value || "").trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "_").slice(0, 80);
+  return warning || "";
 }
 
 function sanitizeEvidenceProvenance(provenance) {
@@ -1483,9 +1489,7 @@ function renderSourceVerification(item) {
       </div>
     `;
   }
-  const fallback = pageLabel
-    ? t("Preview unavailable. Use the cited passage and {page} to verify the source.", { page: pageLabel })
-    : t("Preview unavailable. Use the cited passage to verify the source.");
+  const fallback = sourcePreviewFallbackDetail(item, pageLabel);
   return `
     <div class="qa-source-verify unavailable" data-source-preview-unavailable>
       <div>
@@ -1499,6 +1503,27 @@ function renderSourceVerification(item) {
 function previewAssetForEvidence(item) {
   const assets = Array.isArray(item?.assets) ? item.assets : [];
   return assets.find((asset) => asset && asset.url && (asset.type === "page_snapshot" || asset.type === "region_crop")) || assets.find((asset) => asset && asset.url) || null;
+}
+
+function sourcePreviewFallbackDetail(item, pageLabel) {
+  const warnings = Array.isArray(item?.asset_warnings) ? item.asset_warnings : [];
+  if (warnings.includes("asset_manifest_missing")) {
+    return t("Preview unavailable. Source preview assets have not been built for this knowledge base.");
+  }
+  if (warnings.includes("asset_failed_renderer_unavailable")) {
+    return t("Preview unavailable. The PDF snapshot renderer is missing.");
+  }
+  if (warnings.some((warning) => String(warning).startsWith("asset_failed_"))) {
+    return t("Preview unavailable. PDF snapshot extraction needs review.");
+  }
+  if (warnings.includes("no_matching_assets") || warnings.includes("visual_asset_missing")) {
+    return pageLabel
+      ? t("Preview unavailable. Use the cited passage and {page} to verify the source.", { page: pageLabel })
+      : t("Preview unavailable. Use the cited passage to verify the source.");
+  }
+  return pageLabel
+    ? t("Preview unavailable. Use the cited passage and {page} to verify the source.", { page: pageLabel })
+    : t("Preview unavailable. Use the cited passage to verify the source.");
 }
 
 function sourceVerificationDetail(item, asset, pageLabel) {

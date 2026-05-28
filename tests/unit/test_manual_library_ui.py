@@ -11,7 +11,7 @@ import numpy as np
 
 from tagmemorag import api, api_eval_report, api_eval_runs
 from tagmemorag.auth.config_store import ConfigAuthStore
-from tagmemorag.config import ApiKeyConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
+from tagmemorag.config import ApiKeyConfig, AssetConfig, AuthConfig, ManualLibraryConfig, Settings, StorageConfig
 from tagmemorag.state import AppState
 from tagmemorag.types import GraphState
 
@@ -99,6 +99,9 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "install_ocr_commands" in js.text
     assert "review_ocr_output" in js.text
     assert "review_pdf_quality" in js.text
+    assert "Source Preview" in js.text
+    assert "install_pdf_snapshot_renderer" in js.text
+    assert "enable_pdf_page_snapshots" in js.text
     assert "manual-library/registry/audit" in js.text
     assert "manual-library/rebuild-jobs" in js.text
     assert "dirtyManualCount" in js.text
@@ -345,6 +348,8 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "primary_action" in js.text
     assert "action_label" in js.text
     assert "button-link compact" in js.text
+    assert "source_preview_status" in js.text
+    assert "Source preview" in js.text
     assert "/admin/rag-workbench" in js.text
     assert "/admin/manual-library" in js.text
     assert "/admin/eval-report" in js.text
@@ -406,6 +411,79 @@ def test_rag_readiness_summary_reports_review_when_eval_missing(tmp_path, fake_e
     recommendations = {item["code"]: item for item in body["recommendations"]}
     assert recommendations["run_eval"]["action_label"] == "Open Eval Report"
     assert recommendations["run_eval"]["href"] == "/admin/eval-report?kb_name=default"
+
+
+def test_rag_readiness_summary_reports_source_preview_review_for_pdfs(tmp_path, fake_embedder, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    client = _client(tmp_path, fake_embedder)
+    api.settings = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        assets=AssetConfig(enabled=True, pdf_page_snapshots_enabled=False, root_dir=str(tmp_path / "assets")),
+        model={"provider": "hashing", "dim": 64},
+    )
+    graph = nx.Graph()
+    graph.add_node(1, text="ready")
+    api.app_state.mark_embedder_ready()
+    api.app_state.swap_kb(
+        "default",
+        GraphState(
+            graph=graph,
+            vectors=np.zeros((1, 64), dtype=np.float32),
+            build_id="build-ready",
+            kb_name="default",
+            meta={"pdf_quality": {"documents": 1, "pages_total": 1, "pages_with_text": 1, "pages_missing_text": 0}},
+        ),
+    )
+
+    response = client.get("/admin/rag-readiness/summary?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    cards = {item["id"]: item for item in body["cards"]}
+    assert cards["manuals"]["status"] == "needs_review"
+    assert cards["manuals"]["detail"]["source_preview_status"] == "needs_review"
+    assert cards["qa"]["status"] == "ready"
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["review_source_previews"]["href"] == "/admin/manual-library?kb_name=default"
+    assert "PDF page snapshots are disabled" in recommendations["review_source_previews"]["label"]
+
+
+def test_manual_library_diagnostics_include_source_preview_recommendation(tmp_path, fake_embedder):
+    client = _client(tmp_path, fake_embedder)
+    api.settings = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        manual_library=ManualLibraryConfig(root_dir=str(tmp_path / "manuals")),
+        assets=AssetConfig(enabled=True, pdf_page_snapshots_enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"provider": "hashing", "dim": 64},
+    )
+    graph = nx.Graph()
+    graph.add_node(1, text="ready")
+    api.app_state.mark_embedder_ready()
+    api.app_state.swap_kb(
+        "default",
+        GraphState(
+            graph=graph,
+            vectors=np.zeros((1, 64), dtype=np.float32),
+            build_id="build-ready",
+            kb_name="default",
+            meta={
+                "pdf_quality": {"documents": 1, "pages_total": 1, "pages_with_text": 1, "pages_missing_text": 0},
+                "assets": {"extraction": {"failed": 1, "failure_reasons": {"renderer_unavailable": 1}}},
+            },
+        ),
+    )
+
+    response = client.get("/manual-library/diagnostics?kb_name=default")
+
+    assert response.status_code == 200
+    body = response.json()
+    source_preview = body["last_rebuild"]["source_preview"]
+    assert source_preview["status"] == "needs_review"
+    assert source_preview["failure_reasons"] == {"renderer_unavailable": 1}
+    assert "storage_key" not in json.dumps(source_preview)
+    recommendations = {item["code"]: item for item in body["recommendations"]}
+    assert recommendations["install_pdf_snapshot_renderer"]["label"] == "Install PyMuPDF for PDF page previews"
 
 
 def test_rag_readiness_summary_links_failed_latest_eval_report(tmp_path, fake_embedder, monkeypatch):
@@ -1225,6 +1303,9 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "Verify original source" in js.text
     assert "Open source preview" in js.text
     assert "Preview unavailable" in js.text
+    assert "sourcePreviewFallbackDetail" in js.text
+    assert "The PDF snapshot renderer is missing" in js.text
+    assert "asset_warnings" in js.text
     assert "Converted from DOCX" in js.text
     assert "Indexed as {source}" in js.text
     assert "OCR text" in js.text

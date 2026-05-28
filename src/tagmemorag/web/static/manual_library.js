@@ -605,6 +605,7 @@ function renderDiagnostics(errorMessage = "") {
   const last = diagnostics.last_rebuild || {};
   const pdfQuality = last.pdf_quality || {};
   const ocr = last.ocr || {};
+  const sourcePreview = last.source_preview || {};
   const pdfWarningCount = Object.values(pdfQuality.warning_counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
   const missingOcrCommandCount = (ocr.commands || []).filter((command) => command && command.available === false).length;
   const queue = diagnostics.rebuild_queue || {};
@@ -618,6 +619,7 @@ function renderDiagnostics(errorMessage = "") {
     [t("Qdrant"), last.qdrant_sync ? `${last.qdrant_sync.strategy || "sync"} up ${last.qdrant_sync.points_upserted || 0}` : t("not reported"), last.qdrant_sync?.fallback_reason ? "warn" : "off"],
     [t("PDF Quality"), pdfQuality.documents ? `${pdfQuality.pages_with_text || 0}/${pdfQuality.pages_total || 0} ${t("text pages")}, ${pdfQuality.pages_missing_text || 0} ${t("missing")}, ${pdfWarningCount} ${t("warnings")}` : t("not reported"), (pdfQuality.pages_missing_text || pdfWarningCount) ? "warn" : "off"],
     [t("OCR"), ocr.enabled ? `${ocr.provider || "ocr"} · ${ocr.created || 0} ${t("chunks")} · ${ocr.failed || 0} ${t("failed")}${missingOcrCommandCount ? ` · ${missingOcrCommandCount} ${t("missing commands")}` : ""}` : t("disabled"), missingOcrCommandCount || ocr.failed ? "warn" : ocr.enabled ? "ok" : "off"],
+    [t("Source Preview"), sourcePreview.message || t("not reported"), sourcePreview.status === "ready" ? "ok" : sourcePreview.status === "needs_review" ? "warn" : "off"],
   ].forEach(([label, value, kind]) => {
     const div = document.createElement("div");
     div.className = "ops-card";
@@ -710,6 +712,10 @@ function recommendationLabel(code, fallback) {
     review_ocr_output: "Review OCR output; scanned pages were detected but OCR produced no indexed pages",
     install_ocr_commands: "Install missing OCR commands such as tesseract or pdftoppm",
     review_pdf_quality: "Review PDF parser quality; missing text pages may need OCR or a cleaner PDF",
+    enable_document_assets: "Enable document assets for source previews",
+    enable_pdf_page_snapshots: "Enable PDF page snapshots for source previews",
+    install_pdf_snapshot_renderer: "Install PyMuPDF for PDF page previews",
+    review_source_preview_assets: "Review PDF source preview asset extraction",
     file_sidecar_mode: "Registry disabled; file sidecar mode is normal",
   };
   return labels[code] || fallback || code || "Review diagnostics";

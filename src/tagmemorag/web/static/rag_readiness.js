@@ -163,7 +163,13 @@ function statusLabel(status) {
 }
 
 function humanizeKey(key) {
-  return String(key || "").replaceAll("_", " ");
+  const labels = {
+    source_preview_status: "Source preview",
+    source_preview_message: "Preview note",
+    page_snapshots_ready: "Page previews ready",
+    page_snapshots_failed: "Page previews failed",
+  };
+  return labels[key] || String(key || "").replaceAll("_", " ");
 }
 
 function formatValue(value) {

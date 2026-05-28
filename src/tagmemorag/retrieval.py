@@ -973,15 +973,17 @@ def _candidate_assets(
     for asset in assets_by_id.values():
         if asset.kb_name != kb_name:
             continue
-        if asset.status != "ready":
-            continue
         if asset.type not in {"page_snapshot", "region_crop"}:
             continue
-        if doc_id and asset.doc_id == doc_id and _page_overlaps(asset.page_number, page_range):
-            inferred.append(asset)
+        matches_source = bool(doc_id and asset.doc_id == doc_id and _page_overlaps(asset.page_number, page_range))
+        if not matches_source and not doc_id and asset.source_file == result.source_file and _page_overlaps(asset.page_number, page_range):
+            matches_source = True
+        if not matches_source:
             continue
-        if not doc_id and asset.source_file == result.source_file and _page_overlaps(asset.page_number, page_range):
+        if asset.status == "ready":
             inferred.append(asset)
+        elif asset.status == "failed" and asset.failure_reason:
+            warnings.append(f"asset_failed_{asset.failure_reason}")
     if not inferred:
         warnings.append("no_matching_assets")
     return _sort_assets(inferred, page_range), warnings

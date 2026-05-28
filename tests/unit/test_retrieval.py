@@ -88,6 +88,7 @@ def _asset(
     doc_id="doc-1",
     page_number=12,
     status="ready",
+    failure_reason="",
     caption="",
     nearby_text="",
 ):
@@ -108,6 +109,7 @@ def _asset(
         caption=caption,
         nearby_text=nearby_text,
         status=status,
+        failure_reason=failure_reason,
     )
 
 
@@ -685,6 +687,26 @@ def test_build_retrieve_response_attaches_explicit_asset_ref_and_filters_wrong_k
     evidence = payload["evidence"][0]
     assert [asset["asset_id"] for asset in evidence["assets"]] == ["asset:sha256:good"]
     assert evidence["asset_warnings"] == ["asset_wrong_kb", "asset_status_failed", "asset_ref_missing"]
+
+
+def test_build_retrieve_response_reports_safe_failed_inferred_asset_reason():
+    failed = _asset("asset:sha256:failed", status="failed", page_number=12, failure_reason="renderer_unavailable")
+    manifest = AssetManifest(kb_name="default", assets={failed.asset_id: failed})
+
+    payload = build_retrieve_response(
+        results=[_result()],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        visual_resolver=VisualEvidenceResolver(kb_name="default", manifest=manifest),
+    )
+
+    evidence = payload["evidence"][0]
+    assert evidence["assets"] == []
+    assert evidence["asset_warnings"] == ["asset_failed_renderer_unavailable", "no_matching_assets"]
+    assert "storage_key" not in str(payload)
 
 
 def test_build_retrieve_response_missing_manifest_degrades_to_text_only():

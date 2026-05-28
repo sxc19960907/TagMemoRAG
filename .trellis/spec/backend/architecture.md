@@ -418,6 +418,7 @@ The endpoint reuses `/retrieve`'s evidence and citation policy. It degrades in-b
 - Route: `GET /qa` renders `qa_page.html` with `default_kb_name`, `api_base_path`, and `auth_enabled`, matching the existing page config pattern. `kb_name` may still appear in the URL for compatibility, but the user page must not render it as an editable concept.
 - Client call: `qa_page.js` submits `POST /qa/answer` with only the question and display options. The browser does not choose a KB.
 - Display boundary: the user page renders answer text/refusal/error state and cited source snippets only. It must not surface plan ids, build ids, raw top results, answerability internals, low-level node ids, or tuning controls; `/admin/rag-workbench` remains the debugging surface for those fields. Numbered answer lines may be rendered as a step list, inline `[cit_###]` markers may become clickable citation chips that focus cited source cards, and source cards may show a concise summary with a local expand/collapse affordance plus safe provenance labels such as original source file, page range, OCR marker, conversion note, and evidence strength. Source cards may link to safe `/assets/{asset_id}` preview URLs returned in evidence descriptors, but must discard storage keys, blob keys, checksums, local paths, and non-asset URLs; when no preview asset exists they should show a clear non-clickable fallback instead of a broken link.
+- Source preview fallback: if evidence has no safe preview URL, the page may consume bounded `asset_warnings` values such as `asset_manifest_missing`, `asset_failed_renderer_unavailable`, `asset_failed_<bounded_reason>`, `no_matching_assets`, or `visual_asset_missing` to render user-readable fallback copy. The browser must sanitize those warning tokens before storing/rendering them and must not request admin diagnostics from the user page.
 - Local UX affordances: the page may render non-persistent feedback controls, follow-up question suggestions, staged loading copy, local conversation history, and richer empty states as client-only UI. Conversation history may be kept in browser `sessionStorage` for tab-session refresh recovery, but this must stay bounded, sanitized, and free of debug identifiers. Read-only status indicators must not intercept pointer events for nearby controls. These affordances must reuse the same `/qa/answer` ask flow and must not imply durable backend feedback or conversation storage unless a backend persistence contract is added.
 - Auth: when API auth is enabled, the page can send a Bearer token. When auth is disabled, the token field is hidden.
 - Error UX: known readiness failures such as an unloaded KB are mapped to user-readable copy. The underlying structured API error remains unchanged.
@@ -485,6 +486,61 @@ These are different responsibilities. The archive design conflated them. A manag
 - Fusion appends visual-only evidence after text evidence, deduping assets already attached to text evidence. This preserves text result order and avoids destabilizing existing retrieval quality.
 - Public payloads use existing asset descriptors and must not expose storage keys, checksums, vectors, local paths, raw bytes, or secrets.
 - `visual_evidence.retrieval` contains bounded counts/reasons for diagnostics.
+
+##### Scenario: Source Preview Readiness Diagnostics
+
+###### 1. Scope / Trigger
+
+- Trigger: admin or readiness UI needs to explain whether PDF page source previews can be opened from Q&A citations.
+
+###### 2. Signatures
+
+- `manual_library_diagnostics(...).last_rebuild.source_preview -> dict[str, object]`
+- `rag_readiness_summary(...).cards[].detail.source_preview_status -> str`
+
+###### 3. Contracts
+
+- `source_preview` fields are bounded and safe: `enabled`, `pdf_page_snapshots_enabled`, `renderer`, `renderer_available`, `status`, `pdf_documents`, `page_snapshots_ready`, `page_snapshots_failed`, `failure_reasons`, and `message`.
+- `status` is `ready`, `needs_review`, or `disabled`.
+- `renderer` is a public label such as `pymupdf`; do not include import paths, local binary paths, storage keys, checksums, blob keys, or manifest records.
+- Manual Library may recommend `enable_document_assets`, `enable_pdf_page_snapshots`, `install_pdf_snapshot_renderer`, or `review_source_preview_assets`.
+- RAG Readiness may mark the Manual Library card `needs_review` for source preview issues, but the Q&A card remains ready when the KB is loaded because previews are a trust enhancement, not a retrieval blocker.
+
+###### 4. Validation & Error Matrix
+
+- No PDF documents -> `status` is informational (`ready` or `disabled` depending on config), no warning recommendation.
+- PDFs exist and assets disabled -> `needs_review` plus `enable_document_assets`.
+- PDFs exist and page snapshots disabled -> `needs_review` plus `enable_pdf_page_snapshots`.
+- PDFs exist and renderer missing / extraction has `renderer_unavailable` -> `needs_review` plus `install_pdf_snapshot_renderer`.
+- PDFs exist, ready snapshots present, no failures -> `ready`.
+- PDFs exist, partial or failed extraction -> `needs_review` plus `review_source_preview_assets`.
+
+###### 5. Good/Base/Bad Cases
+
+- Good: text PDF rebuild creates page snapshots; QA source card opens `/assets/{asset_id}?kb_name=...`.
+- Base: PDF is searchable but preview renderer is absent; QA still answers and shows a non-clickable renderer-missing fallback.
+- Bad: readiness or QA exposes `storage_key`, `blob_key`, checksum, local path, raw manifest row, or node id.
+
+###### 6. Tests Required
+
+- Diagnostics API tests assert sanitized `source_preview` and recommendation codes.
+- Readiness tests assert source preview detail/recommendation without turning Q&A `not_ready`.
+- Retrieval tests assert failed inferred assets produce bounded `asset_failed_<reason>` warnings without leaking storage details.
+- UI/static/browser tests assert fallback copy is visible and safe asset URL filtering still applies.
+
+###### 7. Wrong vs Correct
+
+Wrong:
+
+```json
+{"source_preview": {"storage_key": "default/doc/page_snapshot/asset.png", "status": "failed"}}
+```
+
+Correct:
+
+```json
+{"source_preview": {"status": "needs_review", "failure_reasons": {"renderer_unavailable": 1}, "message": "PDF page snapshot renderer is unavailable."}}
+```
 
 **Deferred.** Production visual encoder selection, production visual reranker selection, vector/late-interaction storage, training or finetuning, automatic region detection/cropping, UI image galleries, and visual answer generation remain follow-up work.
 

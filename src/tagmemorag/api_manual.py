@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 from typing import cast
@@ -9,6 +10,7 @@ from fastapi import UploadFile
 from .api_models import SearchFilters, SearchRequest
 from .auth.base import ApiKey
 from .config import Settings
+from .document_assets import PDF_RENDERER_UNAVAILABLE, load_asset_manifest
 from .errors import ErrorCode, ServiceError
 from .manual_bulk_import import BulkImportMode, BulkUploadedFile
 from .manual_library import build_dirty_state_report, registry_inspect, verify_registry_blobs
@@ -206,6 +208,7 @@ def manual_library_diagnostics(
     operations = dirty_report.get("operations_summary") if isinstance(dirty_report.get("operations_summary"), dict) else {}
     pdf_quality = _safe_pdf_quality(graph_state)
     ocr = _safe_ocr_status(graph_state, settings)
+    source_preview = _safe_source_preview_status(kb_name, graph_state, settings, pdf_quality)
     return {
         "kb_name": kb_name,
         "registry": registry,
@@ -225,6 +228,7 @@ def manual_library_diagnostics(
             "qdrant_sync": dirty_report.get("last_qdrant_sync") or (operations or {}).get("qdrant_sync"),
             "pdf_quality": pdf_quality,
             "ocr": ocr,
+            "source_preview": source_preview,
         },
         "recommendations": diagnostic_recommendations(
             registry,
@@ -233,6 +237,7 @@ def manual_library_diagnostics(
             jobs,
             pdf_quality=pdf_quality,
             ocr=ocr,
+            source_preview=source_preview,
         ),
     }
 
@@ -245,6 +250,7 @@ def diagnostic_recommendations(
     *,
     pdf_quality: dict[str, object] | None = None,
     ocr: dict[str, object] | None = None,
+    source_preview: dict[str, object] | None = None,
 ) -> list[dict[str, str]]:
     recommendations: list[dict[str, str]] = []
     if registry.get("enabled") and not blob_health.get("checked"):
@@ -273,6 +279,16 @@ def diagnostic_recommendations(
         recommendations.append({"code": "install_ocr_commands", "label": "Install missing OCR system commands", "severity": "warning"})
     if pages_missing_text > 0 or bool(warning_counts):
         recommendations.append({"code": "review_pdf_quality", "label": "Review PDF parser quality summary", "severity": "warning"})
+    source_preview = source_preview or {}
+    if source_preview.get("status") == "needs_review":
+        if not bool(source_preview.get("enabled")):
+            recommendations.append({"code": "enable_document_assets", "label": "Enable document assets for source previews", "severity": "info"})
+        elif not bool(source_preview.get("pdf_page_snapshots_enabled")):
+            recommendations.append({"code": "enable_pdf_page_snapshots", "label": "Enable PDF page snapshots for source previews", "severity": "info"})
+        elif not bool(source_preview.get("renderer_available")):
+            recommendations.append({"code": "install_pdf_snapshot_renderer", "label": "Install PyMuPDF for PDF page previews", "severity": "warning"})
+        else:
+            recommendations.append({"code": "review_source_preview_assets", "label": "Review PDF source preview asset extraction", "severity": "warning"})
     if not registry.get("enabled"):
         recommendations.append({"code": "file_sidecar_mode", "label": "Registry disabled; using file sidecars", "severity": "info"})
     return recommendations
@@ -326,6 +342,97 @@ def _safe_ocr_status(graph_state: object | None, settings: Settings) -> dict[str
             _ocr_command_status("ocr.tesseract_command", cfg.tesseract_command),
         ]
     return status
+
+
+def _safe_source_preview_status(
+    kb_name: str,
+    graph_state: object | None,
+    settings: Settings,
+    pdf_quality: dict[str, object],
+) -> dict[str, object]:
+    pdf_documents = _safe_non_negative_int(pdf_quality.get("documents"))
+    assets_meta = _safe_assets_meta(graph_state)
+    stats = assets_meta.get("stats") if isinstance(assets_meta.get("stats"), dict) else {}
+    by_type = stats.get("by_type") if isinstance(stats.get("by_type"), dict) else {}
+    by_status = stats.get("by_status") if isinstance(stats.get("by_status"), dict) else {}
+    extraction = assets_meta.get("extraction") if isinstance(assets_meta.get("extraction"), dict) else {}
+    failure_reasons = _safe_ocr_reason_counts(extraction.get("failure_reasons"))
+    manifest_counts = _source_preview_manifest_counts(kb_name, settings) if settings.assets.enabled else {}
+    ready_count = max(
+        _safe_non_negative_int(manifest_counts.get("ready")),
+        _safe_non_negative_int(by_type.get("page_snapshot")) if _safe_non_negative_int(by_status.get("ready")) else 0,
+    )
+    failed_count = max(
+        _safe_non_negative_int(manifest_counts.get("failed")),
+        _safe_non_negative_int(extraction.get("failed")),
+        _safe_non_negative_int(by_status.get("failed")),
+    )
+    renderer_available = _pdf_snapshot_renderer_available()
+    enabled = bool(settings.assets.enabled)
+    snapshots_enabled = bool(settings.assets.pdf_page_snapshots_enabled)
+    if pdf_documents <= 0:
+        status = "disabled" if not enabled or not snapshots_enabled else "ready"
+        message = "No PDF documents require page preview snapshots."
+    elif not enabled:
+        status = "needs_review"
+        message = "Document assets are disabled, so PDF page previews are unavailable."
+    elif not snapshots_enabled:
+        status = "needs_review"
+        message = "PDF page snapshots are disabled, so source previews are unavailable."
+    elif not renderer_available or failure_reasons.get(PDF_RENDERER_UNAVAILABLE):
+        status = "needs_review"
+        message = "PDF page snapshot renderer is unavailable."
+    elif ready_count > 0 and failed_count == 0:
+        status = "ready"
+        message = "PDF page previews are available for cited source verification."
+    elif ready_count > 0:
+        status = "needs_review"
+        message = "Some PDF page previews were created, but extraction had failures."
+    else:
+        status = "needs_review"
+        message = "No PDF page preview assets are available yet."
+    return {
+        "enabled": enabled,
+        "pdf_page_snapshots_enabled": snapshots_enabled,
+        "renderer": "pymupdf",
+        "renderer_available": renderer_available,
+        "status": status,
+        "pdf_documents": pdf_documents,
+        "page_snapshots_ready": ready_count,
+        "page_snapshots_failed": failed_count,
+        "failure_reasons": failure_reasons,
+        "message": message,
+    }
+
+
+def _safe_assets_meta(graph_state: object | None) -> dict[str, object]:
+    meta = getattr(graph_state, "meta", None)
+    assets = meta.get("assets") if isinstance(meta, dict) else None
+    return assets if isinstance(assets, dict) else {}
+
+
+def _source_preview_manifest_counts(kb_name: str, settings: Settings) -> dict[str, int]:
+    try:
+        manifest = load_asset_manifest(kb_name, settings)
+    except ServiceError:
+        return {}
+    ready = 0
+    failed = 0
+    for asset in manifest.assets.values():
+        if asset.type != "page_snapshot":
+            continue
+        if asset.status == "ready":
+            ready += 1
+        elif asset.status == "failed":
+            failed += 1
+    return {"ready": ready, "failed": failed}
+
+
+def _pdf_snapshot_renderer_available() -> bool:
+    try:
+        return importlib.util.find_spec("fitz") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def _safe_ocr_reason_counts(value: object) -> dict[str, int]:

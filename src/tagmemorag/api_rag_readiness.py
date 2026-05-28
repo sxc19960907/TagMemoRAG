@@ -103,6 +103,7 @@ def _manual_card(
     dirty = _safe_dict(diagnostics.get("dirty"))
     blob = _safe_dict(diagnostics.get("blob_health"))
     queue = _safe_dict(diagnostics.get("rebuild_queue"))
+    source_preview = _safe_dict(_safe_dict(diagnostics.get("last_rebuild")).get("source_preview"))
     jobs = queue.get("jobs") if isinstance(queue.get("jobs"), list) else []
     failed_jobs = [job for job in jobs if isinstance(job, dict) and str(job.get("status")) == "failed"]
     active_jobs = [
@@ -112,6 +113,7 @@ def _manual_card(
     ]
     pending = bool(dirty.get("pending_changes"))
     missing_count = int(blob.get("missing_count") or 0)
+    source_preview_needs_review = str(source_preview.get("status") or "") == STATUS_NEEDS_REVIEW
     if failed_jobs or missing_count > 0:
         status = STATUS_NEEDS_REVIEW
         summary = "Manual library has failed rebuild work or missing blob objects."
@@ -121,6 +123,9 @@ def _manual_card(
     elif active_jobs:
         status = STATUS_NEEDS_REVIEW
         summary = "Manual rebuild work is still in progress."
+    elif source_preview_needs_review:
+        status = STATUS_NEEDS_REVIEW
+        summary = "Manual library is searchable, but PDF source previews need review."
     else:
         status = STATUS_READY
         summary = "Manual library has no pending rebuild blockers."
@@ -136,6 +141,10 @@ def _manual_card(
             "failed_rebuild_jobs": len(failed_jobs),
             "active_rebuild_jobs": len(active_jobs),
             "current_build_id": str(_safe_dict(diagnostics.get("last_rebuild")).get("current_build_id") or ""),
+            "source_preview_status": str(source_preview.get("status") or ""),
+            "source_preview_message": str(source_preview.get("message") or ""),
+            "page_snapshots_ready": int(source_preview.get("page_snapshots_ready") or 0),
+            "page_snapshots_failed": int(source_preview.get("page_snapshots_failed") or 0),
         },
     )
 
@@ -218,14 +227,26 @@ def _recommendations(cards: list[dict[str, Any]], kb_name: str) -> list[dict[str
                 "warning",
             ))
         elif card.get("id") == "manuals":
-            recommendations.append(_recommendation(
-                "review_manuals",
-                "Open Manual Library and resolve pending rebuild or blob issues.",
-                "warning",
-                "Review manuals",
-                _kb_href("manual-library", kb_name),
-                "warning",
-            ))
+            source_preview_status = str(detail.get("source_preview_status") or "")
+            source_preview_message = str(detail.get("source_preview_message") or "")
+            if source_preview_status == STATUS_NEEDS_REVIEW and source_preview_message:
+                recommendations.append(_recommendation(
+                    "review_source_previews",
+                    source_preview_message,
+                    "warning",
+                    "Review manuals",
+                    _kb_href("manual-library", kb_name),
+                    "warning",
+                ))
+            else:
+                recommendations.append(_recommendation(
+                    "review_manuals",
+                    "Open Manual Library and resolve pending rebuild or blob issues.",
+                    "warning",
+                    "Review manuals",
+                    _kb_href("manual-library", kb_name),
+                    "warning",
+                ))
         elif card.get("id") == "eval":
             report_path = str(detail.get("report_path") or "")
             recommendations.append(_recommendation(
