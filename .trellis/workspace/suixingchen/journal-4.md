@@ -201,3 +201,36 @@ Added bounded PDF parser quality metadata, diagnostics API/UI surfacing, and tes
 ### Next Steps
 
 - None - task complete
+
+
+## Session 148: Tesseract CLI OCR provider
+
+**Date**: 2026-05-28
+**Task**: Tesseract CLI OCR provider
+**Branch**: `master`
+
+### Summary
+
+Added default-off tesseract_cli OCR provider using pdftoppm plus tesseract system commands, config validation command checks, specs, and focused mocked tests without requiring OCR tools in CI.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1369d07` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

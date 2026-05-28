@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 147
-- **Last Active**: 2026-05-27
+- **Total Sessions**: 148
+- **Last Active**: 2026-05-28
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~203 | Active |
+| `journal-4.md` | ~236 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 148 | 2026-05-28 | Tesseract CLI OCR provider | `1369d07` | `master` |
 | 147 | 2026-05-27 | PDF parser quality summary | `c02f334` | `master` |
 | 146 | 2026-05-27 | Docx direct manual intake | `159e6b0` | `master` |
 | 145 | 2026-05-27 | Real PDF and document intake test | `5522934` | `master` |
