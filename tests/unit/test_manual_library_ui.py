@@ -1210,6 +1210,16 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "qa-source-summary" in js.text
     assert "qa-source-toggle" in js.text
     assert "qa-source-placeholder" in js.text
+    assert "sanitizeEvidenceProvenance" in js.text
+    assert "sourceProvenanceBadges" in js.text
+    assert "formatPageRange" in js.text
+    assert "evidenceStrengthLabel" in js.text
+    assert "qa-source-badges" in js.text
+    assert "Converted from DOCX" in js.text
+    assert "Indexed as {source}" in js.text
+    assert "OCR text" in js.text
+    assert "Strong evidence" in js.text
+    assert "Page {page}" in js.text
     assert "Click a citation in the answer to focus a source" in js.text
     assert "qa-citation-chip" in js.text
     assert 'normalized === "no results"' in js.text
@@ -1218,6 +1228,7 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "scrollIntoView" in js.text
     assert "top_k:" not in js.text
     assert "source_k:" not in js.text
+    assert "item?.node_id" not in js.text
     assert "qa-answer" in js.text
     assert "qa-kb-name" not in js.text
     assert "plan_id" in js.text

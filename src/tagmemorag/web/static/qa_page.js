@@ -643,23 +643,40 @@ function sanitizeRoute(route) {
 }
 
 function sanitizeEvidence(item) {
+  const provenance = sanitizeEvidenceProvenance(item?.provenance || {});
   return {
     evidence_id: item?.evidence_id || "",
     citation_id: item?.citation_id || "",
     context_item_id: item?.context_item_id || "",
-    node_id: typeof item?.node_id === "number" ? item.node_id : null,
     text: String(item?.text || item?.content || "").slice(0, 1800),
-    source: item?.source || item?.source_file || "",
-    source_file: item?.source_file || item?.source || "",
+    source: provenance.display_source || item?.source || item?.source_file || "",
+    source_file: item?.source_file || item?.source || provenance.source_file || "",
     section_path: Array.isArray(item?.section_path) ? item.section_path.slice(0, 6) : [],
     confidence: typeof item?.confidence === "number" ? item.confidence : null,
+    page_range: Array.isArray(item?.page_range) ? item.page_range.slice(0, 2) : [],
+    provenance,
     retrieval_reason: item?.retrieval_reason || "",
+  };
+}
+
+function sanitizeEvidenceProvenance(provenance) {
+  const pageRange = Array.isArray(provenance?.page_range)
+    ? provenance.page_range.slice(0, 2).map((item) => Number(item)).filter(Number.isFinite)
+    : [];
+  return {
+    source_format: String(provenance?.source_format || "").slice(0, 32),
+    source_file: String(provenance?.source_file || "").slice(0, 180),
+    original_source_file: String(provenance?.original_source_file || "").slice(0, 180),
+    display_source: String(provenance?.display_source || "").slice(0, 180),
+    page_range: pageRange,
+    parser_profile: String(provenance?.parser_profile || "").slice(0, 80),
+    ocr: Boolean(provenance?.ocr),
+    confidence: typeof provenance?.confidence === "number" ? provenance.confidence : null,
   };
 }
 
 function sanitizeResult(item) {
   return {
-    node_id: typeof item?.node_id === "number" ? item.node_id : null,
     anchor_key: item?.anchor_key || "",
     source_file: item?.source_file || "",
     header: item?.header || "",
@@ -1233,7 +1250,6 @@ function selectedResultsForFeedback(retrieve) {
   if (results.length > 0) {
     return results.slice(0, 8).map((item, index) => ({
       rank: index + 1,
-      node_id: typeof item.node_id === "number" ? item.node_id : null,
       anchor_key: item.anchor_key || "",
       source_file: item.source_file || "",
       header: item.header || "",
@@ -1243,7 +1259,6 @@ function selectedResultsForFeedback(retrieve) {
   const evidence = Array.isArray(retrieve?.evidence) ? retrieve.evidence : [];
   return evidence.slice(0, 8).map((item, index) => ({
     rank: index + 1,
-    node_id: typeof item.node_id === "number" ? item.node_id : null,
     anchor_key: "",
     source_file: item.source_file || item.source || "",
     header: Array.isArray(item.section_path) ? item.section_path.at(-1) || "" : "",
@@ -1406,25 +1421,64 @@ function renderClarificationCandidates(candidates) {
 function renderSourceItem(item) {
   const citation = item.citation_id || item.evidence_id || t("source");
   const safeCitation = escapeHtml(citation);
-  const source = item.source || item.source_file || "";
+  const source = sourceDisplayName(item);
   const section = Array.isArray(item.section_path) ? item.section_path.join(" / ") : "";
   const text = item.text || item.content || "";
   const summary = summarizeSourceText(text);
   const canExpand = text.length > summary.length;
+  const badges = sourceProvenanceBadges(item);
   return `
     <article id="qa-source-${safeCitation}" class="qa-source-item" data-citation-id="${safeCitation}">
       <div class="qa-source-card-head">
         <span class="badge">${safeCitation}</span>
         <div>
           <strong>${escapeHtml(source || t("Manual source"))}</strong>
-          <small>${t("Cited manual passage")}</small>
+          <small>${escapeHtml(evidenceStrengthLabel(item.confidence))}</small>
         </div>
       </div>
+      ${badges.length ? `<div class="qa-source-badges">${badges.map((badge) => `<span class="${badge.className}">${escapeHtml(badge.label)}</span>`).join("")}</div>` : ""}
       ${section ? `<p class="qa-source-section"><span>${t("Section")}</span>${escapeHtml(section)}</p>` : ""}
       <p class="qa-source-summary">${escapeHtml(summary)}</p>
       ${canExpand ? `<p class="qa-source-full" hidden>${escapeHtml(text)}</p><button class="qa-source-toggle" type="button" data-source-toggle>${t("Show more")}</button>` : ""}
     </article>
   `;
+}
+
+function sourceDisplayName(item) {
+  const provenance = item?.provenance || {};
+  return provenance.display_source || item?.source || item?.source_file || "";
+}
+
+function sourceProvenanceBadges(item) {
+  const provenance = item?.provenance || {};
+  const badges = [{ label: t("Cited manual passage"), className: "qa-source-badge" }];
+  const pageRange = provenance.page_range && provenance.page_range.length ? provenance.page_range : item?.page_range;
+  const pageLabel = formatPageRange(pageRange);
+  if (pageLabel) badges.push({ label: pageLabel, className: "qa-source-badge" });
+  if (provenance.ocr) badges.push({ label: t("OCR text"), className: "qa-source-badge qa-source-badge-ocr" });
+  if (provenance.source_format === "docx" && provenance.original_source_file) {
+    badges.push({ label: t("Converted from DOCX"), className: "qa-source-badge qa-source-badge-converted" });
+  }
+  if (provenance.source_file && provenance.original_source_file && provenance.source_file !== provenance.original_source_file) {
+    badges.push({ label: t("Indexed as {source}", { source: provenance.source_file }), className: "qa-source-badge qa-source-badge-indexed" });
+  }
+  return badges;
+}
+
+function formatPageRange(pageRange) {
+  if (!Array.isArray(pageRange) || pageRange.length === 0) return "";
+  const start = Number(pageRange[0]);
+  const end = Number(pageRange[1] ?? pageRange[0]);
+  if (!Number.isFinite(start)) return "";
+  if (!Number.isFinite(end) || end === start) return t("Page {page}", { page: start });
+  return t("Pages {start}-{end}", { start, end });
+}
+
+function evidenceStrengthLabel(confidence) {
+  if (typeof confidence !== "number") return t("Evidence strength unknown");
+  if (confidence >= 0.75) return t("Strong evidence");
+  if (confidence >= 0.45) return t("Moderate evidence");
+  return t("Weak evidence");
 }
 
 function summarizeSourceText(text) {

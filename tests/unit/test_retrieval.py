@@ -137,6 +137,14 @@ def test_build_retrieve_response_shapes_text_evidence_and_context():
     assert evidence["chunk_id"] == "chunk-1"
     assert evidence["page_range"] == [12, 13]
     assert evidence["section_path"] == ["Maintenance", "Filter cleaning"]
+    assert evidence["provenance"] == {
+        "source_format": "pdf",
+        "source_file": "washer.pdf",
+        "display_source": "washer.pdf",
+        "page_range": [12, 13],
+        "ocr": False,
+        "confidence": 0.82,
+    }
     assert evidence["assets"] == []
     assert evidence["asset_warnings"] == []
     assert payload["citations"][0]["evidence_id"] == "ev_001"
@@ -203,6 +211,35 @@ def test_build_retrieve_response_expands_sparse_pdf_heading_with_adjacent_body()
     assert "USING THE STEAM CLEAN FUNCTION TO" in first_evidence
     assert "Pour 0.6 l of water into a glass dish" in first_evidence
     assert payload["context_pack"]["items"][0]["content"] == first_evidence
+
+
+def test_build_retrieve_response_adds_safe_docx_ocr_provenance():
+    result = _result(
+        source_format="docx",
+        remote_id="/Users/timmy/private/uploads/mixed/docx-nozzle-care.docx",
+        parser_profile="pdf_ocr:product_manual",
+        ocr_provider="tesseract_cli",
+    )
+    payload = build_retrieve_response(
+        results=[result],
+        build_id="b1",
+        kb_name="default",
+        trace_id="trace-1",
+        search_id="search-1",
+        retrieve_id="retrieve-1",
+        token_budget=100,
+    )
+
+    provenance = payload["evidence"][0]["provenance"]
+    assert provenance["source_format"] == "docx"
+    assert provenance["source_file"] == "washer.pdf"
+    assert provenance["original_source_file"] == "mixed/docx-nozzle-care.docx"
+    assert provenance["display_source"] == "mixed/docx-nozzle-care.docx"
+    assert provenance["page_range"] == [12, 13]
+    assert provenance["parser_profile"] == "pdf_ocr:product_manual"
+    assert provenance["ocr"] is True
+    assert provenance["confidence"] == 0.82
+    assert "/Users/timmy" not in str(provenance)
 
 
 def test_build_retrieve_response_no_results_is_insufficient_evidence():

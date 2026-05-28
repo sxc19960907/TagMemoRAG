@@ -1036,6 +1036,37 @@ def _exercise_multiformat_upload_qa_user_flow(page, port: int, txt_path: Path, p
         assert Path(upload["ready_source"]).name in sources_text
         assert any(expected in evidence_text for expected in upload["expected"])
 
+        first_chip = page.locator(".qa-citation-chip").first
+        first_chip.wait_for()
+        first_chip.click()
+        page.locator(".qa-source-item.active").wait_for()
+        assert page.locator(".qa-source-item.active").get_attribute("data-citation-id")
+        page.locator(".qa-source-item.active .qa-source-badge").first.wait_for()
+
+        if str(upload["manual_id"]) == "pdf-gasket-calibration":
+            assert "Page" in sources_text or "Pages" in sources_text
+        if str(upload["manual_id"]) == "docx-nozzle-care":
+            assert "docx-nozzle-care.docx" in sources_text
+            assert "Converted from DOCX" in sources_text
+            assert "Indexed as mixed/docx-nozzle-care.md" in sources_text
+            page.locator(".qa-source-item").filter(has_text="docx-nozzle-care.docx").get_by_text("Converted from DOCX").wait_for()
+
+        toggle = page.locator(".qa-source-item.active [data-source-toggle]").first
+        if toggle.count():
+            toggle.click()
+            assert "Show less" in page.locator(".qa-source-item.active").inner_text()
+
+    page.locator("#ui-language-switcher select").select_option("zh")
+    page.get_by_text("手册问答", exact=True).wait_for()
+    page.locator("#ui-language-switcher select").select_option("en")
+
+    history_item = page.locator(".qa-history-item").filter(has_text="DOCX-19").first
+    history_item.wait_for()
+    history_item.click()
+    assert "DOCX-19" in page.locator("#qa-answer").inner_text()
+    assert "docx-nozzle-care.docx" in page.locator("#qa-sources").inner_text()
+    _assert_qa_layout(page)
+
 
 def _upload_manual_from_library_dialog(page, upload: dict[str, object]) -> None:
     page.locator("#open-upload").click()

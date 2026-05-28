@@ -201,6 +201,7 @@ def _evidence_from_result(
     section_path = _section_path(result, metadata)
     page_range = _page_range(metadata)
     assets, asset_warnings = _assets_for_result(result, metadata, doc_id=doc_id, page_range=page_range, citation_id=citation_id, visual_resolver=visual_resolver)
+    confidence = _confidence(result.score)
     return {
         "evidence_id": evidence_id,
         "citation_id": citation_id,
@@ -212,7 +213,13 @@ def _evidence_from_result(
         "section_path": section_path,
         "text": _snippet(_evidence_text(result, adjacent_results)),
         "score": float(result.score),
-        "confidence": _confidence(result.score),
+        "confidence": confidence,
+        "provenance": _evidence_provenance(
+            source_file=result.source_file,
+            metadata=metadata,
+            page_range=page_range,
+            confidence=confidence,
+        ),
         "reason": _reason(result, section_path, page_range),
         "matched_chunk_ids": [chunk_id] if chunk_id else [],
         "assets": assets,
@@ -678,6 +685,78 @@ def _page_range(metadata: dict[str, Any]) -> list[int]:
     if end is None:
         end = start
     return [int(start), int(end)]
+
+
+def _evidence_provenance(
+    *,
+    source_file: str,
+    metadata: dict[str, Any],
+    page_range: list[int],
+    confidence: float,
+) -> dict[str, Any]:
+    indexed_source = _safe_source_ref(source_file)
+    original_source = _safe_source_ref(metadata.get("remote_id"))
+    source_format = _source_format(metadata, original_source or indexed_source)
+    parser_profile = _safe_parser_profile(metadata.get("parser_profile"))
+    ocr = _is_ocr_metadata(metadata, parser_profile)
+    display_source = original_source if original_source and original_source != indexed_source else indexed_source
+    provenance: dict[str, Any] = {
+        "source_format": source_format,
+        "source_file": indexed_source,
+        "display_source": display_source,
+        "page_range": list(page_range),
+        "ocr": ocr,
+        "confidence": confidence,
+    }
+    if original_source and original_source != indexed_source:
+        provenance["original_source_file"] = original_source
+    if parser_profile:
+        provenance["parser_profile"] = parser_profile
+    return provenance
+
+
+def _source_format(metadata: dict[str, Any], source_file: str) -> str:
+    raw = str(metadata.get("source_format") or "").strip().lower()
+    if raw:
+        return _bounded_token(raw)
+    suffix = ""
+    match = re.search(r"\.([a-z0-9]{1,12})(?:$|[?#])", str(source_file or "").lower())
+    if match:
+        suffix = match.group(1)
+    return _bounded_token(suffix)
+
+
+def _is_ocr_metadata(metadata: dict[str, Any], parser_profile: str) -> bool:
+    if parser_profile.startswith("pdf_ocr:"):
+        return True
+    return any(str(metadata.get(key) or "").strip() for key in ("ocr_provider", "ocr_version", "ocr_trigger", "ocr_source"))
+
+
+def _safe_parser_profile(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return _bounded_token(text, max_chars=80, extra_chars=":-.")
+
+
+def _safe_source_ref(value: Any) -> str:
+    text = str(value or "").replace("\\", "/").strip()
+    if not text:
+        return ""
+    text = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", "", text)
+    text = text.split("?", 1)[0].split("#", 1)[0]
+    parts = [part for part in text.split("/") if part and part not in {".", ".."}]
+    if not parts:
+        return ""
+    if text.startswith("/") or re.match(r"^[a-zA-Z]:/", text):
+        parts = parts[-2:]
+    safe_parts = [re.sub(r"[^A-Za-z0-9._@ -]+", "-", part).strip(" .") for part in parts[-4:]]
+    return "/".join(part for part in safe_parts if part)[:160]
+
+
+def _bounded_token(value: str, *, max_chars: int = 32, extra_chars: str = "") -> str:
+    allowed = rf"[^a-z0-9_{re.escape(extra_chars)}-]+"
+    return re.sub(allowed, "", str(value or "").lower())[:max_chars]
 
 
 def _optional_int(value: Any) -> int | None:

@@ -1361,6 +1361,47 @@ textarea {
   margin-top: 2px;
 }
 
+.qa-source-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.qa-source-badge {
+  min-height: 22px;
+  border: 1px solid #dbe4ef;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: #41566f;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.qa-source-badge-ocr {
+  border-color: #bdd7d0;
+  background: #f1faf7;
+  color: #2d6f5f;
+}
+
+.qa-source-badge-converted {
+  border-color: #d9c6ef;
+  background: #faf7ff;
+  color: #63428d;
+}
+
+.qa-source-badge-indexed {
+  border-color: #d7e0ea;
+  background: #f8fbff;
+  color: #4b647f;
+}
+
 .qa-source-item p {
   margin: 8px 0 0;
 }
@@ -1512,6 +1553,12 @@ main {
   background: var(--surface);
   padding: 10px 12px;
   box-shadow: var(--shadow);
+}
+
+.qa-status {
+  margin: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .status-strip:empty::before {
