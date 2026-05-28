@@ -331,3 +331,36 @@ Added an opt-in browser integration smoke for uploading a scanned PDF through Ma
 ### Next Steps
 
 - None - task complete
+
+
+## Session 152: Browser multiformat document intake
+
+**Date**: 2026-05-28
+**Task**: Browser multiformat document intake
+**Branch**: `master`
+
+### Summary
+
+Validated browser-first intake for TXT, text PDF, DOCX, and existing scanned-PDF OCR flow. Added a browser integration covering upload, rebuild, diagnostics safety, provenance, and QA evidence across formats; fixed incremental rebuild to preserve and update safe OCR/PDF quality metadata; added unit regression and backend spec note.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a24c7e0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
