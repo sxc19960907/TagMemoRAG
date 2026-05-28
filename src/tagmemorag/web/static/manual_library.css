@@ -224,14 +224,14 @@ textarea {
 
 .readiness-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
   align-items: stretch;
   border: 1px solid #c9d7e8;
   border-radius: 8px;
-  background: linear-gradient(135deg, #ffffff 0%, #f4f8fc 58%, #edf7f2 100%);
-  padding: 20px;
-  box-shadow: var(--shadow);
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgb(22 38 55 / 0.06);
 }
 
 .readiness-hero-copy,
@@ -266,8 +266,8 @@ textarea {
 
 .readiness-hero h2 {
   margin-top: 12px;
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: 26px;
+  line-height: 1.15;
 }
 
 .readiness-hero p {
@@ -284,9 +284,9 @@ textarea {
   display: grid;
   gap: 12px;
   align-content: start;
-  border: 1px solid #d5e1ec;
+  border: 1px solid #cbd8e6;
   border-radius: 8px;
-  background: rgb(255 255 255 / 0.78);
+  background: #f7fafc;
   padding: 14px;
 }
 
@@ -319,7 +319,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 20px rgb(22 38 55 / 0.05);
 }
 
 .readiness-guide-header,
@@ -339,8 +339,9 @@ textarea {
 .readiness-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
+  gap: 10px;
   border-top: 1px solid var(--line);
+  padding: 12px;
 }
 
 .readiness-step {
@@ -348,24 +349,25 @@ textarea {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
-  border-right: 1px solid var(--line);
-  padding: 14px;
-}
-
-.readiness-step:last-child {
-  border-right: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px;
 }
 
 .readiness-step.ready {
-  background: #f3fbf7;
+  border-color: #b9dac8;
+  background: #f7fcfa;
 }
 
 .readiness-step.needs_review {
-  background: #fffaf0;
+  border-color: #d9b66f;
+  background: #fffdf7;
 }
 
 .readiness-step.not_ready {
-  background: #fff7f7;
+  border-color: #d88989;
+  background: #fff9f9;
 }
 
 .readiness-step-number {
@@ -563,7 +565,7 @@ textarea {
   border-radius: 8px;
   background: var(--surface);
   padding: 14px;
-  box-shadow: 0 8px 18px rgb(22 38 55 / 0.05);
+  box-shadow: none;
 }
 
 .readiness-card.not_ready {
@@ -2996,6 +2998,77 @@ td {
   color: var(--muted);
 }
 
+.manual-first-run {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.95fr) minmax(320px, 1.35fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgb(22 38 55 / 0.05);
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.manual-first-run[hidden] {
+  display: none;
+}
+
+.manual-first-run-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.manual-first-run h3,
+.manual-first-run p,
+.manual-first-run ol {
+  margin: 0;
+}
+
+.manual-first-run h3 {
+  font-size: 18px;
+}
+
+.manual-first-run p,
+.manual-first-run li span {
+  color: var(--muted);
+}
+
+.manual-first-run-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.manual-first-run-steps li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid #d8e3ed;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.manual-first-run-steps strong {
+  color: #17324d;
+}
+
+.manual-first-run-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.manual-first-run-actions .button-link,
+.manual-first-run-actions button {
+  width: 100%;
+}
+
 .detail-pane {
   position: sticky;
   top: 88px;
@@ -3361,12 +3434,7 @@ dialog::backdrop {
   }
 
   .readiness-step {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .readiness-step:last-child {
-    border-bottom: 0;
+    border-right: 1px solid var(--line);
   }
 
   .top-actions {
@@ -3382,6 +3450,8 @@ dialog::backdrop {
 @media (max-width: 640px) {
   .field-grid,
   .kb-form,
+  .manual-first-run,
+  .manual-first-run-steps,
   .people-generate-row,
   .people-summary,
   .qa-composer {

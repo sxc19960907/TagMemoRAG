@@ -801,6 +801,19 @@ def _exercise_manual_library(page, port: int) -> None:
     page.locator("#status-strip").wait_for()
     assert "Loaded 0 manuals from ui." in page.locator("#status-strip").inner_text()
     assert "No managed manuals found." in page.locator("#table-empty").inner_text()
+    first_run = page.locator("#manual-first-run")
+    assert first_run.is_visible()
+    assert "Start with your first manual" in first_run.inner_text()
+    assert "Upload" in first_run.inner_text()
+    assert "Rebuild" in first_run.inner_text()
+    assert "Ask" in first_run.inner_text()
+    assert page.locator("#first-run-readiness").get_attribute("href") == "/admin/rag-readiness?kb_name=ui"
+    assert page.locator("#first-run-qa").get_attribute("href") == "/qa?kb_name=ui"
+
+    page.locator("#first-run-upload").click()
+    assert page.locator("#upload-dialog").is_visible()
+    page.locator("#close-upload").click()
+    assert not page.locator("#upload-dialog").is_visible()
 
     page.locator("#filter-text").fill("washer")
     assert "0 of 0 manuals" in page.locator("#manual-count").inner_text()
@@ -1729,6 +1742,9 @@ def _exercise_rag_failure_states(page, port: int, upload_path: Path) -> None:
     page.get_by_role("heading", name="Manual Library").wait_for()
     page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
     assert "No managed manuals found." in page.locator("#table-empty").inner_text()
+    assert page.locator("#manual-first-run").is_visible()
+    assert page.locator("#first-run-readiness").get_attribute("href") == "/admin/rag-readiness?kb_name=default"
+    assert page.locator("#first-run-qa").get_attribute("href") == "/qa?kb_name=default"
 
     page.locator("#open-upload").click()
     assert page.locator("#upload-dialog").is_visible()

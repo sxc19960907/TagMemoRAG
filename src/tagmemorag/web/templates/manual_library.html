@@ -52,6 +52,32 @@
       <main>
         <section class="status-strip" id="status-strip" role="status" aria-live="polite"></section>
         <section class="next-step-panel" id="library-next-step" aria-label="Library next step" hidden></section>
+        <section id="manual-first-run" class="manual-first-run" aria-label="First manual setup" hidden>
+          <div class="manual-first-run-copy">
+            <span class="eyebrow">First run</span>
+            <h3>Start with your first manual</h3>
+            <p>Upload a manual, rebuild the search index, then open Q&A to try a real user question.</p>
+          </div>
+          <ol class="manual-first-run-steps">
+            <li>
+              <strong>Upload</strong>
+              <span>Add a PDF, DOCX, Markdown, or text manual with product metadata.</span>
+            </li>
+            <li>
+              <strong>Rebuild</strong>
+              <span>Index the manual so retrieval and citations can find it.</span>
+            </li>
+            <li>
+              <strong>Ask</strong>
+              <span>Use the Q&A page to verify the answer and cited sources.</span>
+            </li>
+          </ol>
+          <div class="manual-first-run-actions">
+            <button id="first-run-upload" type="button" class="primary">Upload first manual</button>
+            <a id="first-run-readiness" class="button-link" href="/admin/rag-readiness?kb_name={{ default_kb_name }}">Check readiness</a>
+            <a id="first-run-qa" class="button-link" href="/qa?kb_name={{ default_kb_name }}">Open Q&A</a>
+          </div>
+        </section>
 
         <section class="operations-band" aria-label="Manual library diagnostics">
           <div class="ops-toolbar">

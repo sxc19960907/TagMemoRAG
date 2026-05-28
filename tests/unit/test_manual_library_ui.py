@@ -68,6 +68,13 @@ def test_manual_library_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'href="/admin/people?kb_name=ops"' in body
     assert 'id="manual-library-qa-link"' in body
     assert 'href="/qa?kb_name=ops"' in body
+    assert 'id="manual-first-run"' in body
+    assert "Start with your first manual" in body
+    assert 'id="first-run-upload"' in body
+    assert 'id="first-run-readiness"' in body
+    assert 'href="/admin/rag-readiness?kb_name=ops"' in body
+    assert 'id="first-run-qa"' in body
+    assert 'href="/qa?kb_name=ops"' in body
     assert 'id="open-tag-governance"' in body
     assert 'id="tag-stat-rows"' in body
     assert 'id="rewrite-preview-rows"' in body
@@ -118,6 +125,9 @@ def test_manual_library_static_assets_are_served(tmp_path, fake_embedder):
     assert "/admin/retrieval-quality" in js.text
     assert "/admin/people" in js.text
     assert "/qa?kb_name=" in js.text
+    assert "firstRunUpload" in js.text
+    assert "manual-first-run" in css.text
+    assert "manual-first-run-steps" in css.text
 
 
 def test_admin_token_static_asset_is_served(tmp_path, fake_embedder):
@@ -331,6 +341,7 @@ def test_rag_readiness_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="readiness-progress-label"' in body
     assert 'id="readiness-capabilities"' in body
     assert 'id="readiness-delivery"' in body
+    assert 'class="pane-header readiness-delivery-header"' in body
     assert "Handoff checklist" in body
     assert 'id="readiness-cards"' in body
     assert 'id="readiness-recommendations"' in body
@@ -372,6 +383,7 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert i18n.status_code == 200
     assert "Start Q&A" in i18n.text
     assert "Review manuals" in i18n.text
+    assert "Start with your first manual" in i18n.text
     assert "Open latest report" in i18n.text
     assert "Answer LLM" in i18n.text
     assert "Capability setup" in i18n.text

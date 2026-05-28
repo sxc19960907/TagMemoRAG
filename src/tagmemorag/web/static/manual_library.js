@@ -52,6 +52,10 @@ const el = {
   retrievalQualityLink: document.getElementById("manual-library-retrieval-quality"),
   peopleLink: document.getElementById("manual-library-people"),
   qaLink: document.getElementById("manual-library-qa-link"),
+  firstRun: document.getElementById("manual-first-run"),
+  firstRunUpload: document.getElementById("first-run-upload"),
+  firstRunReadiness: document.getElementById("first-run-readiness"),
+  firstRunQa: document.getElementById("first-run-qa"),
   rows: document.getElementById("manual-rows"),
   empty: document.getElementById("table-empty"),
   count: document.getElementById("manual-count"),
@@ -181,6 +185,8 @@ function updateLinks() {
   el.retrievalQualityLink.href = `/admin/retrieval-quality?kb_name=${kb}`;
   el.peopleLink.href = `/admin/people?kb_name=${kb}`;
   el.qaLink.href = `/qa?kb_name=${kb}`;
+  if (el.firstRunReadiness) el.firstRunReadiness.href = `/admin/rag-readiness?kb_name=${kb}`;
+  if (el.firstRunQa) el.firstRunQa.href = `/qa?kb_name=${kb}`;
 }
 
 function renderNextStep(kind = "", options = {}) {
@@ -930,6 +936,7 @@ function renderTable() {
     });
     el.rows.appendChild(tr);
   });
+  if (el.firstRun) el.firstRun.hidden = state.loading || state.manuals.length > 0;
   el.empty.hidden = state.loading || rows.length > 0;
   if (!state.loading && rows.length === 0) {
     el.empty.textContent = state.manuals.length ? t("No manuals match the current filters.") : t("No managed manuals found.");
@@ -1147,6 +1154,12 @@ el.openUpload.addEventListener("click", () => {
   if (typeof el.uploadDialog.showModal === "function") el.uploadDialog.showModal();
   else el.uploadDialog.setAttribute("open", "");
 });
+
+if (el.firstRunUpload) {
+  el.firstRunUpload.addEventListener("click", () => {
+    el.openUpload.click();
+  });
+}
 
 el.closeUpload.addEventListener("click", () => el.uploadDialog.close());
 
