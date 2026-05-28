@@ -150,6 +150,50 @@ def test_browser_eval_report_viewer(tmp_path):
         report_path.unlink(missing_ok=True)
 
 
+def test_browser_rag_readiness_onboarding_guide(tmp_path):
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path)
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_rag_readiness_onboarding(page, port)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
 def test_browser_manual_library_to_qa_user_flow(tmp_path):
     playwright = pytest.importorskip("playwright.sync_api")
     port = _free_port()
@@ -808,6 +852,55 @@ def _exercise_retrieval_quality(page, port: int) -> None:
     assert "feedback-fb-ui-1" in page.locator("#quality-promotion-summary").inner_text()
     preview = page.locator("#quality-promotion-preview").inner_text()
     assert "washer filter blocked" in preview
+
+
+def _exercise_rag_readiness_onboarding(page, port: int) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/rag-readiness?kb_name=default")
+    page.get_by_role("heading", name="RAG Setup Guide").wait_for()
+    page.locator("#readiness-status").get_by_text("Readiness loaded.").wait_for(timeout=10000)
+    hero_text = page.locator(".readiness-hero").inner_text()
+    assert "Next best action" in hero_text
+    assert "Finish setup before Q&A" in hero_text
+    assert "KB default" in hero_text
+    assert "Manual Library" in page.locator("#readiness-primary-action").inner_text()
+    assert page.locator("#readiness-primary-action a").get_attribute("href") == "/admin/manual-library?kb_name=default"
+    steps_text = page.locator("#readiness-steps").inner_text()
+    assert "Load the knowledge base" in steps_text
+    assert "Index manuals" in steps_text
+    assert "Check retrieval quality" in steps_text
+    assert "Start Q&A" in steps_text
+    progress_text = page.locator("#readiness-progress-label").inner_text()
+    assert "of 4 steps ready" in progress_text
+    cards_text = page.locator("#readiness-cards").inner_text()
+    assert "KB Loaded" in cards_text
+    assert "Manual Library" in cards_text
+    assert "Retrieval Eval" in cards_text
+    assert "User Q&A" in cards_text
+    recommendations = page.locator("#readiness-recommendations").inner_text()
+    assert "Build or load this KB before using Q&A." in recommendations
+    assert "storage_key" not in page.locator("body").inner_text()
+    assert "blob_key" not in page.locator("body").inner_text()
+    metrics = page.evaluate(
+        """
+        () => {
+          const hero = document.querySelector(".readiness-hero").getBoundingClientRect();
+          const steps = [...document.querySelectorAll(".readiness-step")].map((item) => item.getBoundingClientRect());
+          const cards = [...document.querySelectorAll(".readiness-card")].map((item) => item.getBoundingClientRect());
+          return {
+            heroHeight: Math.round(hero.height),
+            stepCount: steps.length,
+            cardCount: cards.length,
+            minStepWidth: Math.round(Math.min(...steps.map((box) => box.width))),
+            minCardWidth: Math.round(Math.min(...cards.map((box) => box.width))),
+          };
+        }
+        """
+    )
+    assert metrics["heroHeight"] > 140
+    assert metrics["stepCount"] == 4
+    assert metrics["cardCount"] == 4
+    assert metrics["minStepWidth"] > 220
+    assert metrics["minCardWidth"] > 220
 
 
 def _exercise_library_qa_user_flow(page, port: int) -> None:

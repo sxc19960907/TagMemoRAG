@@ -14,9 +14,14 @@ const el = {
   token: document.getElementById("readiness-api-token"),
   status: document.getElementById("readiness-status"),
   state: document.getElementById("readiness-state"),
+  kbChip: document.getElementById("readiness-kb-chip"),
   title: document.getElementById("readiness-title"),
   summary: document.getElementById("readiness-summary"),
+  guidance: document.getElementById("readiness-guidance"),
+  primaryAction: document.getElementById("readiness-primary-action"),
   actions: document.getElementById("readiness-actions"),
+  progressLabel: document.getElementById("readiness-progress-label"),
+  steps: document.getElementById("readiness-steps"),
   cards: document.getElementById("readiness-cards"),
   recommendationCount: document.getElementById("readiness-recommendation-count"),
   recommendations: document.getElementById("readiness-recommendations"),
@@ -78,9 +83,12 @@ function renderSummary(body) {
   const status = body.status || "unknown";
   el.state.className = `status-pill ${statusClass(status)}`;
   el.state.textContent = t(statusLabel(status));
-  el.title.textContent = `${t("RAG Readiness")} · ${body.kb_name || state.kbName}`;
+  el.kbChip.textContent = `${t("KB")} ${body.kb_name || state.kbName}`;
+  el.title.textContent = t(titleForStatus(status));
   el.summary.textContent = t(body.summary || "");
+  el.guidance.textContent = t(guidanceForStatus(status));
   renderActions(body.primary_action || null, body.actions || []);
+  renderSteps(body.cards || []);
   renderCards(body.cards || []);
   renderRecommendations(body.recommendations || []);
 }
@@ -94,12 +102,73 @@ function renderActions(primaryAction, actions) {
     items.push(...actions.filter((action) => action?.href && action.href !== primaryAction?.href));
   }
   if (!items.length) {
+    el.primaryAction.textContent = t("No action available yet.");
     el.actions.innerHTML = "";
     return;
   }
-  el.actions.innerHTML = items.map((action) => `
-    <a class="button-link ${action.primary || action.kind === "primary" ? "primary-link" : ""}" href="${escapeHtml(action.href || "#")}">${escapeHtml(t(action.label || "Open"))}</a>
+  const primary = items[0];
+  el.primaryAction.innerHTML = `
+    <a class="button-link primary-link readiness-primary-link" href="${escapeHtml(primary.href || "#")}">${escapeHtml(t(primary.label || "Open"))}</a>
+    <p>${escapeHtml(primaryActionHelp(primary.label || ""))}</p>
+  `;
+  el.actions.innerHTML = items.slice(1, 4).map((action) => `
+    <a class="button-link" href="${escapeHtml(action.href || "#")}">${escapeHtml(t(action.label || "Open"))}</a>
   `).join("");
+}
+
+function renderSteps(cards) {
+  const byId = Object.fromEntries((Array.isArray(cards) ? cards : []).map((card) => [card.id, card]));
+  const steps = [
+    {
+      id: "kb",
+      number: "1",
+      title: "Load the knowledge base",
+      description: "Make sure the selected KB is available to the server.",
+      card: byId.kb,
+    },
+    {
+      id: "manuals",
+      number: "2",
+      title: "Index manuals",
+      description: "Upload documents and rebuild so retrieval sees the latest content.",
+      card: byId.manuals,
+    },
+    {
+      id: "eval",
+      number: "3",
+      title: "Check retrieval quality",
+      description: "Run or review browser evals before trusting user answers.",
+      card: byId.eval,
+    },
+    {
+      id: "qa",
+      number: "4",
+      title: "Start Q&A",
+      description: "Open the user QA page and inspect cited sources.",
+      card: byId.qa,
+    },
+  ];
+  const completed = steps.filter((step) => step.card?.status === "ready").length;
+  el.progressLabel.textContent = t("{done} of {total} steps ready", { done: completed, total: steps.length });
+  el.steps.className = "readiness-steps";
+  el.steps.innerHTML = steps.map(renderStep).join("");
+}
+
+function renderStep(step) {
+  const status = step.card?.status || "unknown";
+  return `
+    <article class="readiness-step ${escapeHtml(status)}">
+      <span class="readiness-step-number">${escapeHtml(step.number)}</span>
+      <div>
+        <div class="readiness-step-head">
+          <h3>${escapeHtml(t(step.title))}</h3>
+          <span class="status-pill ${statusClass(status)}">${escapeHtml(t(statusLabel(status)))}</span>
+        </div>
+        <p>${escapeHtml(t(step.description))}</p>
+        ${step.card?.summary ? `<small>${escapeHtml(t(step.card.summary))}</small>` : ""}
+      </div>
+    </article>
+  `;
 }
 
 function renderCards(cards) {
@@ -120,7 +189,10 @@ function renderCard(card) {
     .join("");
   return `
     <article class="readiness-card ${escapeHtml(card.status || "unknown")}">
-      <span class="status-pill ${statusClass(card.status)}">${escapeHtml(t(statusLabel(card.status)))}</span>
+      <div class="readiness-card-head">
+        <span class="status-pill ${statusClass(card.status)}">${escapeHtml(t(statusLabel(card.status)))}</span>
+        <span>${escapeHtml(cardIcon(card.id))}</span>
+      </div>
       <h3>${escapeHtml(t(card.title || "Readiness check"))}</h3>
       <p>${escapeHtml(t(card.summary || ""))}</p>
       ${detailRows ? `<dl>${detailRows}</dl>` : ""}
@@ -137,10 +209,11 @@ function renderRecommendations(recommendations) {
     return;
   }
   el.recommendations.className = "readiness-recommendations";
-  el.recommendations.innerHTML = items.map((item) => `
+  el.recommendations.innerHTML = items.map((item, index) => `
     <article class="readiness-recommendation ${escapeHtml(item.severity || "info")}">
-      <span class="status-pill ${item.severity === "error" ? "needs-review" : item.severity === "warning" ? "in-progress" : "neutral"}">${escapeHtml(t(item.severity || "info"))}</span>
+      <span class="readiness-recommendation-index">${index + 1}</span>
       <div>
+        <span class="status-pill ${item.severity === "error" ? "needs-review" : item.severity === "warning" ? "in-progress" : "neutral"}">${escapeHtml(t(item.severity || "info"))}</span>
         <p>${escapeHtml(t(item.label || ""))}</p>
         ${item.href ? `<a class="button-link compact" href="${escapeHtml(item.href)}">${escapeHtml(t(item.action_label || "Open"))}</a>` : ""}
       </div>
@@ -164,10 +237,24 @@ function statusLabel(status) {
 
 function humanizeKey(key) {
   const labels = {
+    loaded: "Loaded",
+    build_id: "Build",
+    node_count: "Indexed chunks",
+    pending_changes: "Pending rebuild",
+    dirty_manual_count: "Dirty manuals",
+    missing_blob_count: "Missing files",
+    failed_rebuild_jobs: "Failed jobs",
+    active_rebuild_jobs: "Active jobs",
+    current_build_id: "Current build",
     source_preview_status: "Source preview",
     source_preview_message: "Preview note",
     page_snapshots_ready: "Page previews ready",
     page_snapshots_failed: "Page previews failed",
+    has_latest_report: "Eval report",
+    suite_id: "Eval suite",
+    passed: "Passed",
+    cases: "Cases",
+    failed: "Failed",
   };
   return labels[key] || String(key || "").replaceAll("_", " ");
 }
@@ -177,6 +264,43 @@ function formatValue(value) {
   if (value === false) return t("No");
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
+}
+
+function titleForStatus(status) {
+  if (status === "ready") return "Ready to try Q&A";
+  if (status === "needs_review") return "Almost ready";
+  if (status === "not_ready") return "Finish setup before Q&A";
+  return "Checking setup";
+}
+
+function guidanceForStatus(status) {
+  if (status === "ready") return "The selected knowledge base is ready for a normal browser Q&A session.";
+  if (status === "needs_review") return "You can inspect the system now, but one setup signal still needs attention.";
+  if (status === "not_ready") return "Start with the recommended action, then return here to confirm the KB is ready.";
+  return "Follow the checklist below to get from documents to grounded Q&A.";
+}
+
+function primaryActionHelp(label) {
+  const help = {
+    "Start Q&A": "Open the user-facing chat page and ask against this KB.",
+    "Open Q&A": "Open the user-facing chat page and ask against this KB.",
+    "Manual Library": "Add manuals, rebuild the KB, or resolve document issues.",
+    "Review manuals": "Open Manual Library to resolve document or rebuild blockers.",
+    "Open Eval Report": "Run or review retrieval checks before depending on answers.",
+    "Open latest report": "Inspect the most recent eval failures and recommended fixes.",
+    "Refresh readiness": "Reload the current setup signals.",
+  };
+  return t(help[label] || "Continue with the next setup task for this KB.");
+}
+
+function cardIcon(id) {
+  const icons = {
+    kb: "01",
+    manuals: "02",
+    eval: "03",
+    qa: "04",
+  };
+  return icons[id] || "•";
 }
 
 function escapeHtml(value) {

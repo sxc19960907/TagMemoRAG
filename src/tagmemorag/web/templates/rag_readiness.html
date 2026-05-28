@@ -15,7 +15,7 @@
       <header class="topbar readiness-topbar">
         <div class="brand">
           <span class="eyebrow">TagMemoRAG</span>
-          <h1>RAG Readiness</h1>
+          <h1>RAG Setup Guide</h1>
         </div>
         <form class="kb-form" id="readiness-kb-form">
           <label>
@@ -41,12 +41,33 @@
         <section class="status-strip" id="readiness-status" role="status" aria-live="polite"></section>
 
         <section class="readiness-hero" aria-label="RAG readiness summary">
-          <div>
-            <span id="readiness-state" class="status-pill neutral">Loading</span>
+          <div class="readiness-hero-copy">
+            <div class="readiness-hero-kicker">
+              <span id="readiness-state" class="status-pill neutral">Loading</span>
+              <span id="readiness-kb-chip" class="readiness-kb-chip">default</span>
+            </div>
             <h2 id="readiness-title">Checking RAG readiness</h2>
             <p id="readiness-summary">Loading readiness signals for this KB.</p>
+            <p id="readiness-guidance" class="readiness-guidance">Follow the checklist below to get from documents to grounded Q&A.</p>
           </div>
-          <div id="readiness-actions" class="readiness-actions"></div>
+          <div class="readiness-hero-panel" aria-label="Primary next action">
+            <span class="eyebrow">Next best action</span>
+            <div id="readiness-primary-action" class="readiness-primary-action">Loading next action...</div>
+            <div id="readiness-actions" class="readiness-actions"></div>
+          </div>
+        </section>
+
+        <section class="readiness-guide" aria-label="RAG onboarding checklist">
+          <div class="pane-header readiness-guide-header">
+            <div>
+              <span class="eyebrow">Setup path</span>
+              <h2>From manuals to answers</h2>
+            </div>
+            <p id="readiness-progress-label">Checking setup progress...</p>
+          </div>
+          <div id="readiness-steps" class="readiness-steps">
+            <div class="empty-state">Loading setup steps...</div>
+          </div>
         </section>
 
         <section class="readiness-card-grid" id="readiness-cards" aria-label="Readiness checks">

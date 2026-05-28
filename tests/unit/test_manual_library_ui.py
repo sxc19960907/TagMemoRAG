@@ -322,9 +322,13 @@ def test_rag_readiness_admin_route_serves_shell(tmp_path, fake_embedder):
     assert "text/html" in response.headers["content-type"]
     body = response.text
     assert "RAG Readiness" in body
+    assert "RAG Setup Guide" in body
     assert 'id="readiness-kb-name"' in body
     assert 'value="ops"' in body
     assert 'id="readiness-status"' in body
+    assert 'id="readiness-primary-action"' in body
+    assert 'id="readiness-steps"' in body
+    assert 'id="readiness-progress-label"' in body
     assert 'id="readiness-cards"' in body
     assert 'id="readiness-recommendations"' in body
     assert 'id="readiness-workbench"' in body
@@ -345,9 +349,12 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "/admin/rag-readiness/summary?kb_name=" in js.text
     assert "readiness-cards" in js.text
     assert "renderRecommendations" in js.text
+    assert "renderSteps" in js.text
     assert "primary_action" in js.text
     assert "action_label" in js.text
     assert "button-link compact" in js.text
+    assert "Load the knowledge base" in js.text
+    assert "readiness-primary-link" in js.text
     assert "source_preview_status" in js.text
     assert "Source preview" in js.text
     assert "/admin/rag-workbench" in js.text
