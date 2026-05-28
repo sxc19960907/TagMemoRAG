@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -302,6 +303,57 @@ def test_browser_qa_page_upload_rebuild_then_answer(tmp_path):
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
                 _exercise_qa_page_upload_rebuild_answer(page, port, upload_path)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
+def test_browser_upload_scanned_pdf_rebuilds_with_real_ocr_then_qa(tmp_path):
+    if shutil.which("pdftoppm") is None or shutil.which("tesseract") is None:
+        pytest.skip("requires local pdftoppm and tesseract commands")
+    upload_path = Path.cwd() / ".tmp" / "ocr-samples" / "scanned-coffee-manual.pdf"
+    if not upload_path.exists():
+        pytest.skip("requires generated scanned PDF sample under .tmp/ocr-samples")
+
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True, ocr_enabled=True)
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_scanned_pdf_ocr_user_flow(page, port, upload_path)
                 assert console_errors == []
             finally:
                 browser.close()
@@ -747,6 +799,86 @@ def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) 
     assert "Cited manual passage" in sources_text
 
 
+def _exercise_scanned_pdf_ocr_user_flow(page, port: int, upload_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+
+    page.locator("#open-upload").click()
+    assert page.locator("#upload-dialog").is_visible()
+    page.locator("#upload-form input[name='file']").set_input_files(str(upload_path))
+    page.locator("#upload-form input[name='manual_id']").fill("scanned-coffee-manual")
+    page.locator("#upload-form input[name='title']").fill("Scanned Coffee Manual")
+    page.locator("#upload-form input[name='source_file']").fill("coffee/scanned-coffee-manual.pdf")
+    page.locator("#upload-form input[name='product_category']").fill("coffee")
+    page.locator("#upload-form input[name='language']").fill("en")
+    page.locator("#upload-form textarea[name='tags']").fill("ocr, scanned, steam")
+    page.locator("#upload-form input[name='trigger_rebuild']").check()
+    page.locator("#validate-upload").click()
+    page.locator("#upload-messages .message.success").wait_for()
+    page.locator("#upload-form button.primary").click()
+    page.locator("#library-next-step").get_by_text("Rebuilding search index").wait_for()
+
+    row = page.locator("#manual-rows tr").filter(has_text="scanned-coffee-manual")
+    row.wait_for()
+    page.wait_for_function(
+        """
+        () => {
+          const rows = [...document.querySelectorAll("#manual-rows tr")];
+          const row = rows.find((item) => item.textContent.includes("scanned-coffee-manual"));
+          if (!row) return false;
+          const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent.trim());
+          return cells.includes("yes") && cells.includes("clear") && Number(cells[9] || 0) > 0;
+        }
+        """,
+        timeout=60000,
+    )
+    row_text = row.inner_text()
+    assert "coffee/scanned-coffee-manual.pdf" in row_text
+    assert "yes" in row_text
+    assert "clear" in row_text
+    assert "ocr" in row_text
+    page.locator("#library-next-step").get_by_text("Manual is ready for Q&A").wait_for()
+
+    diagnostics = page.evaluate(
+        """
+        async () => {
+          const response = await fetch("/manual-library/diagnostics?kb_name=default&include_jobs=true");
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        }
+        """
+    )
+    last_rebuild = diagnostics["last_rebuild"]
+    ocr = last_rebuild["ocr"]
+    pdf_quality = last_rebuild["pdf_quality"]
+    assert ocr["enabled"] is True
+    assert ocr["provider"] == "tesseract_cli"
+    assert ocr["attempted"] >= 1
+    assert ocr["created"] >= 1
+    assert ocr["failed"] == 0
+    assert all(command["available"] for command in ocr["commands"])
+    assert pdf_quality["pages_missing_text"] >= 1
+    assert pdf_quality["ocr_pages_created"] >= 1
+    assert "install_ocr_commands" not in {item["code"] for item in diagnostics["recommendations"]}
+    assert "Weak Steam" not in json.dumps(diagnostics)
+    diagnostics_text = page.locator("#diagnostics-cards").inner_text()
+    assert "OCR" in diagnostics_text
+    assert "tesseract_cli" in diagnostics_text
+    assert "missing commands" not in diagnostics_text
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    page.get_by_role("textbox", name="Q&A question").fill("What should I do when weak steam appears with STEAM-042?")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    sources_text = page.locator("#qa-sources").inner_text()
+    evidence_text = f"{answer_text}\n{sources_text}"
+    assert "scanned-coffee-manual.pdf" in sources_text
+    assert "STEAM-042" in evidence_text or "steam nozzle" in evidence_text or "Weak Steam" in evidence_text
+
+
 def _assert_qa_layout(page) -> None:
     metrics = page.evaluate(
         """
@@ -1000,9 +1132,19 @@ def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
     assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
 
 
-def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False) -> Path:
+def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False, ocr_enabled: bool = False) -> Path:
     config_path = tmp_path / "browser-ui-config.yaml"
     answer_block = "\nanswer:\n  enabled: true\n  provider: noop\n" if answer_enabled else ""
+    ocr_block = (
+        "\nocr:\n"
+        "  enabled: true\n"
+        "  provider: tesseract_cli\n"
+        "  version: tesseract.local.v1\n"
+        "  language: eng\n"
+        "  dpi: 240\n"
+        if ocr_enabled
+        else ""
+    )
     config_path.write_text(
         f"""
 model:
@@ -1019,6 +1161,7 @@ server:
 auth:
   enabled: false
 {answer_block}
+{ocr_block}
 """,
         encoding="utf-8",
     )
