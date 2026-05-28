@@ -23,6 +23,7 @@ const el = {
   progressLabel: document.getElementById("readiness-progress-label"),
   steps: document.getElementById("readiness-steps"),
   capabilities: document.getElementById("readiness-capabilities"),
+  delivery: document.getElementById("readiness-delivery"),
   cards: document.getElementById("readiness-cards"),
   recommendationCount: document.getElementById("readiness-recommendation-count"),
   recommendations: document.getElementById("readiness-recommendations"),
@@ -91,6 +92,7 @@ function renderSummary(body) {
   renderActions(body.primary_action || null, body.actions || []);
   renderSteps(body.cards || []);
   renderCapabilities(body.capabilities || []);
+  renderDelivery(body.delivery || []);
   renderCards(body.cards || []);
   renderRecommendations(body.recommendations || []);
 }
@@ -206,6 +208,32 @@ function renderCapability(capability) {
       <p>${escapeHtml(t(capability.summary || ""))}</p>
       ${rows.length ? `<dl>${rows.join("")}</dl>` : ""}
       ${action.href ? `<a class="button-link compact" href="${escapeHtml(action.href)}">${escapeHtml(t(action.label || "Open"))}</a>` : ""}
+    </article>
+  `;
+}
+
+function renderDelivery(delivery) {
+  if (!Array.isArray(delivery) || !delivery.length) {
+    el.delivery.className = "readiness-delivery empty-state";
+    el.delivery.textContent = t("No delivery checks returned.");
+    return;
+  }
+  el.delivery.className = "readiness-delivery";
+  el.delivery.innerHTML = delivery.map(renderDeliveryCheck).join("");
+}
+
+function renderDeliveryCheck(item) {
+  const href = item.href || "";
+  return `
+    <article class="readiness-delivery-check ${escapeHtml(item.status || "unknown")}">
+      <div class="readiness-delivery-head">
+        <span class="status-pill ${statusClass(item.status)}">${escapeHtml(t(statusLabel(item.status)))}</span>
+        <span>${escapeHtml(t(item.kind || "Delivery gate"))}</span>
+      </div>
+      <h3>${escapeHtml(t(item.title || "Delivery check"))}</h3>
+      <p>${escapeHtml(t(item.summary || ""))}</p>
+      ${item.command ? `<code>${escapeHtml(item.command)}</code>` : ""}
+      ${href ? `<a class="button-link compact" href="${escapeHtml(href)}">${escapeHtml(t("Open related page"))}</a>` : ""}
     </article>
   `;
 }

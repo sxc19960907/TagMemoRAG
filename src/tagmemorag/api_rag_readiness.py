@@ -41,6 +41,7 @@ def rag_readiness_summary(
     qa_card = _qa_card(kb, kb_card)
     cards.append(qa_card)
     capabilities = _capability_cards(kb, settings=settings, manual_card=manual_card)
+    delivery = _delivery_checks(kb, qa_card=qa_card, capabilities=capabilities)
 
     status = _overall_status(cards)
     recommendations = _recommendations(cards, capabilities, kb)
@@ -51,6 +52,7 @@ def rag_readiness_summary(
         "status": status,
         "summary": _status_summary(status),
         "capabilities": capabilities,
+        "delivery": delivery,
         "cards": cards,
         "actions": actions,
         "primary_action": primary_action,
@@ -321,6 +323,77 @@ def _source_preview_capability(kb_name: str, *, settings: Settings, manual_card:
         "Review manuals",
         _kb_href("manual-library", kb_name),
     )
+
+
+def _delivery_checks(kb_name: str, *, qa_card: dict[str, Any], capabilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    capability_status = {str(item.get("id")): str(item.get("status") or "") for item in capabilities}
+    live_provider_blocked = any(
+        capability_status.get(capability_id) == STATUS_NOT_READY for capability_id in ("answer", "embedding")
+    )
+    qa_ready = qa_card.get("status") == STATUS_READY
+    return [
+        _delivery_check(
+            "config_validate",
+            "Validate configuration",
+            STATUS_NEEDS_REVIEW,
+            "Checks config shape, writable paths, optional extras, and required env var names without contacting providers.",
+            "Local config",
+            "python -m tagmemorag config validate --config <config.yaml>",
+        ),
+        _delivery_check(
+            "readiness_smoke",
+            "Run local RAG smoke",
+            STATUS_NEEDS_REVIEW,
+            "Proves deterministic build, retrieve, answer, query-plan, and bundle paths compose locally.",
+            "Local gate",
+            "python -m tagmemorag readiness smoke",
+        ),
+        _delivery_check(
+            "browser_qa",
+            "Verify browser Q&A",
+            STATUS_NEEDS_REVIEW if qa_ready else STATUS_NOT_READY,
+            "Exercises the user-facing browser path from documents to grounded Q&A with citations.",
+            "Browser gate",
+            "python -m tagmemorag readiness browser-qa",
+            _kb_href("rag-readiness", kb_name) if not qa_ready else "/qa?" + urlencode({"kb_name": kb_name}),
+        ),
+        _delivery_check(
+            "pilot_report",
+            "Retain a pilot report",
+            STATUS_NEEDS_REVIEW,
+            "Creates a sanitized pre-pilot report that combines config, provider, smoke, answer-quality, and eval checks.",
+            "Release record",
+            "python -m tagmemorag pilot run --include-browser-qa --output .tmp/pilot/report.json",
+        ),
+        _delivery_check(
+            "provider_verify",
+            "Verify live providers",
+            STATUS_NOT_READY if live_provider_blocked else STATUS_NEEDS_REVIEW,
+            "Run this only for production profiles that use remote embeddings, answer models, rerankers, Qdrant, or object storage.",
+            "Production gate",
+            "python -m tagmemorag production-provider verify --level smoke",
+        ),
+    ]
+
+
+def _delivery_check(
+    check_id: str,
+    title: str,
+    status: str,
+    summary: str,
+    kind: str,
+    command: str,
+    href: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "title": title,
+        "status": status,
+        "summary": summary,
+        "kind": kind,
+        "command": command,
+        "href": href,
+    }
 
 
 def _suite_matches_kb(suite: dict[str, Any], kb_name: str) -> bool:

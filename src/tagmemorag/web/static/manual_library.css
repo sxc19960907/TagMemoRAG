@@ -314,6 +314,7 @@ textarea {
 
 .readiness-guide,
 .readiness-capability-pane,
+.readiness-delivery-pane,
 .readiness-recommendations-pane {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -322,12 +323,14 @@ textarea {
 }
 
 .readiness-guide-header,
-.readiness-capability-header {
+.readiness-capability-header,
+.readiness-delivery-header {
   align-items: center;
 }
 
 .readiness-guide-header p,
-.readiness-capability-header p {
+.readiness-capability-header p,
+.readiness-delivery-header p {
   margin: 0;
   color: var(--muted);
   font-weight: 800;
@@ -475,6 +478,80 @@ textarea {
 .readiness-capability dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.readiness-delivery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+}
+
+.readiness-delivery-check {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.readiness-delivery-check.not_ready {
+  border-color: #d88989;
+  background: #fff9f9;
+}
+
+.readiness-delivery-check.needs_review {
+  border-color: #d9b66f;
+  background: #fffdf7;
+}
+
+.readiness-delivery-check.ready {
+  border-color: #b9dac8;
+  background: #f7fcfa;
+}
+
+.readiness-delivery-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.readiness-delivery-head > span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.readiness-delivery-check h3,
+.readiness-delivery-check p {
+  margin: 0;
+}
+
+.readiness-delivery-check h3 {
+  font-size: 15px;
+}
+
+.readiness-delivery-check p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.readiness-delivery-check code {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #d7e2ee;
+  border-radius: 6px;
+  background: #f4f7fa;
+  color: #17324d;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px;
 }
 
 .readiness-card {

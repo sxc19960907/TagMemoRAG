@@ -330,6 +330,8 @@ def test_rag_readiness_admin_route_serves_shell(tmp_path, fake_embedder):
     assert 'id="readiness-steps"' in body
     assert 'id="readiness-progress-label"' in body
     assert 'id="readiness-capabilities"' in body
+    assert 'id="readiness-delivery"' in body
+    assert "Handoff checklist" in body
     assert 'id="readiness-cards"' in body
     assert 'id="readiness-recommendations"' in body
     assert 'id="readiness-workbench"' in body
@@ -352,6 +354,9 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "renderRecommendations" in js.text
     assert "renderSteps" in js.text
     assert "renderCapabilities" in js.text
+    assert "renderDelivery" in js.text
+    assert "readiness-delivery" in js.text
+    assert "item.command" in js.text
     assert "primary_action" in js.text
     assert "action_label" in js.text
     assert "button-link compact" in js.text
@@ -370,6 +375,8 @@ def test_rag_readiness_static_asset_is_served(tmp_path, fake_embedder):
     assert "Open latest report" in i18n.text
     assert "Answer LLM" in i18n.text
     assert "Capability setup" in i18n.text
+    assert "Handoff checklist" in i18n.text
+    assert "运行本地 RAG 冒烟测试" in i18n.text
 
 
 def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fake_embedder):
@@ -391,6 +398,13 @@ def test_rag_readiness_summary_reports_not_ready_without_loaded_kb(tmp_path, fak
     cards = {item["id"]: item for item in body["cards"]}
     assert cards["kb"]["status"] == "not_ready"
     assert cards["qa"]["status"] == "not_ready"
+    delivery = {item["id"]: item for item in body["delivery"]}
+    assert delivery["browser_qa"]["status"] == "not_ready"
+    assert delivery["readiness_smoke"]["status"] == "needs_review"
+    assert delivery["provider_verify"]["status"] == "needs_review"
+    assert delivery["config_validate"]["command"] == "python -m tagmemorag config validate --config <config.yaml>"
+    assert "storage_key" not in json.dumps(body)
+    assert "blob_key" not in json.dumps(body)
     recommendations = {item["code"]: item for item in body["recommendations"]}
     assert recommendations["load_kb"]["href"] == "/admin/manual-library?kb_name=missing"
     assert recommendations["load_kb"]["action_label"] == "Manual Library"
@@ -406,12 +420,15 @@ def test_rag_readiness_summary_reports_configuration_capabilities(tmp_path, fake
     assert response.status_code == 200
     body = response.json()
     capabilities = {item["id"]: item for item in body["capabilities"]}
+    delivery = {item["id"]: item for item in body["delivery"]}
     assert capabilities["answer"]["status"] == "needs_review"
     assert capabilities["answer"]["detail"]["provider"] == "noop"
     assert capabilities["embedding"]["status"] == "ready"
     assert capabilities["embedding"]["detail"]["provider"] == "hashing"
     assert capabilities["ocr"]["status"] == "needs_review"
     assert capabilities["source_preview"]["status"] == "needs_review"
+    assert delivery["browser_qa"]["command"] == "python -m tagmemorag readiness browser-qa"
+    assert delivery["pilot_report"]["command"] == "python -m tagmemorag pilot run --include-browser-qa --output .tmp/pilot/report.json"
     assert "storage_key" not in json.dumps(body)
     assert "blob_key" not in json.dumps(body)
 
@@ -432,7 +449,9 @@ def test_rag_readiness_summary_reports_missing_live_answer_env(tmp_path, fake_em
     assert response.status_code == 200
     body = response.json()
     answer = {item["id"]: item for item in body["capabilities"]}["answer"]
+    delivery = {item["id"]: item for item in body["delivery"]}
     assert answer["status"] == "not_ready"
+    assert delivery["provider_verify"]["status"] == "not_ready"
     assert answer["detail"]["api_key_env"] == "MISSING_ANSWER_KEY"
     assert answer["detail"]["api_key_present"] is False
     recommendations = {item["code"]: item for item in body["recommendations"]}
