@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 157
+- **Total Sessions**: 158
 - **Last Active**: 2026-05-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~531 | Active |
+| `journal-4.md` | ~564 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 158 | 2026-05-28 | RAG onboarding readiness guide | `8fe34da` | `master` |
 | 157 | 2026-05-28 | Real LLM QA provider acceptance | `ebeda6e` | `master` |
 | 156 | 2026-05-28 | QA answer trust hardening | `c14cf24` | `master` |
 | 155 | 2026-05-28 | Real PDF QA browser acceptance | `351f35b` | `master` |

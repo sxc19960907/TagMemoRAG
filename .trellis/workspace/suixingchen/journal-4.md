@@ -529,3 +529,36 @@ Added a citation gate for real answer providers, opt-in real LLM browser QA acce
 ### Next Steps
 
 - None - task complete
+
+
+## Session 158: RAG onboarding readiness guide
+
+**Date**: 2026-05-28
+**Task**: RAG onboarding readiness guide
+**Branch**: `master`
+
+### Summary
+
+Redesigned the RAG readiness page into a browser-first setup guide with hero status, primary next action, four-step onboarding progress, polished cards, recommendations, i18n, and browser validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fe34da` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
