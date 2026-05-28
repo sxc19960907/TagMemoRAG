@@ -628,3 +628,36 @@ Added a visible context mode indicator to the user-facing QA composer, clarified
 ### Next Steps
 
 - None - task complete
+
+
+## Session 161: RAG delivery readiness checklist
+
+**Date**: 2026-05-28
+**Task**: RAG delivery readiness checklist
+**Branch**: `master`
+
+### Summary
+
+Added a browser-visible delivery handoff checklist to RAG Readiness, exposing safe advisory gates for config validation, local smoke, browser QA, pilot reports, and live provider verification with unit and browser coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9050802` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
