@@ -265,3 +265,36 @@ Verified the generated image-only scanned PDF through OCR ingestion/indexing, re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 150: OCR user-facing diagnostics
+
+**Date**: 2026-05-28
+**Task**: OCR user-facing diagnostics
+**Branch**: `master`
+
+### Summary
+
+Surfaced bounded OCR status in Manual Library diagnostics, added OCR recovery recommendations and UI card, documented minimal Tesseract setup, and added a local real Tesseract smoke test.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82d3767` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
