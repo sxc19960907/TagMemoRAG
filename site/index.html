@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TagMemoRAG | Browser-first RAG for real documents</title>
+    <meta name="description" content="TagMemoRAG is a self-hosted, browser-first RAG system for product manuals, PDFs, DOCX files, scanned documents, and grounded Q&A.">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="TagMemoRAG home">
+        <span class="brand-mark">T</span>
+        <span>TagMemoRAG</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#capabilities">Capabilities</a>
+        <a href="#quick-start">Quick start</a>
+        <a href="#guide">Guide</a>
+        <a href="#faq">FAQ</a>
+        <a class="nav-cta" href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">v0.1.0</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Public release v0.1.0</p>
+          <h1>Browser-first RAG for real product manuals and knowledge documents.</h1>
+          <p class="lead">
+            TagMemoRAG turns PDFs, DOCX files, Markdown, text, and optional OCR output into a grounded Q&A experience with citations, readiness checks, retrieval review, and admin workflows.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#quick-start">Start the guide</a>
+            <a class="button" href="https://github.com/sxc19960907/TagMemoRAG">View on GitHub</a>
+          </div>
+        </div>
+        <div class="product-shot" aria-label="Product interface preview">
+          <div class="shot-toolbar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="shot-shell">
+            <aside>
+              <strong>TagMemoRAG</strong>
+              <span>Manual Library</span>
+              <span>RAG Readiness</span>
+              <span>User Q&A</span>
+            </aside>
+            <section>
+              <div class="shot-status">Ready for grounded Q&A</div>
+              <div class="shot-question">How do I clean the nozzle?</div>
+              <div class="shot-answer">
+                <strong>Answer</strong>
+                <p>Follow the maintenance steps in the cited manual passage before using the machine again.</p>
+                <div class="citation-row">
+                  <span>cit_001</span>
+                  <span>Page 12</span>
+                  <span>Strong evidence</span>
+                </div>
+              </div>
+              <div class="shot-grid">
+                <span>PDF</span>
+                <span>DOCX</span>
+                <span>OCR</span>
+                <span>Eval</span>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="section proof-strip" aria-label="Release summary">
+        <div>
+          <strong>Audience</strong>
+          <span>Operators, support teams, and builders who need trustworthy document Q&A.</span>
+        </div>
+        <div>
+          <strong>Documents</strong>
+          <span>PDF, scanned PDF with OCR, DOCX, Markdown, plain text, and public web imports.</span>
+        </div>
+        <div>
+          <strong>Validation</strong>
+          <span>GitHub CI passed unit/e2e tests and baseline eval suites for v0.1.0.</span>
+        </div>
+      </section>
+
+      <section class="section intro-grid" aria-label="Project overview">
+        <article>
+          <h2>What It Does</h2>
+          <p>
+            TagMemoRAG gives teams a practical path from messy documents to usable answers: upload manuals, rebuild the index, ask a question, inspect cited sources, and review quality signals when an answer needs attention.
+          </p>
+        </article>
+        <article>
+          <h2>Why It Exists</h2>
+          <p>
+            RAG systems often demo well but become hard to operate. This project focuses on browser-first workflows, delivery readiness, safe source display, and repeatable quality checks so a real user can try the system without reading internals.
+          </p>
+        </article>
+      </section>
+
+      <section id="capabilities" class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Capabilities</p>
+          <h2>Everything needed for a first usable RAG experience.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Manual Library</h3>
+            <p>Upload files, validate metadata, manage tags, check dirty state, and rebuild the searchable index from the browser.</p>
+          </article>
+          <article>
+            <h3>User Q&A</h3>
+            <p>Ask natural-language questions and receive grounded answers with citations and source cards.</p>
+          </article>
+          <article>
+            <h3>Readiness Guide</h3>
+            <p>See whether documents, indexing, retrieval quality, OCR, source previews, and delivery checks are ready.</p>
+          </article>
+          <article>
+            <h3>Retrieval Quality</h3>
+            <p>Review feedback, inspect expected evidence, and keep retrieval behavior visible during iteration.</p>
+          </article>
+          <article>
+            <h3>Access Management</h3>
+            <p>Manage API-key identities, scopes, KB access, and lifecycle guidance from an admin page.</p>
+          </article>
+          <article>
+            <h3>Optional OCR</h3>
+            <p>Use local Tesseract tooling to extract text from scanned PDF pages when native PDF text is missing.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="quick-start" class="section guide-band">
+        <div class="section-heading">
+          <p class="eyebrow">Quick Start</p>
+          <h2>The normal browser flow.</h2>
+        </div>
+        <ol class="timeline">
+          <li>
+            <strong>Open Manual Library</strong>
+            <span>Create or load a knowledge base, then upload the first manual with product metadata.</span>
+          </li>
+          <li>
+            <strong>Rebuild the index</strong>
+            <span>Run a full or incremental rebuild so the document becomes searchable.</span>
+          </li>
+          <li>
+            <strong>Check Readiness</strong>
+            <span>Confirm documents, retrieval, source previews, and delivery gates before inviting users.</span>
+          </li>
+          <li>
+            <strong>Ask in Q&A</strong>
+            <span>Use the user-facing Q&A page to ask a real question and inspect citations.</span>
+          </li>
+          <li>
+            <strong>Review quality</strong>
+            <span>Use Retrieval Quality and eval reports to track weak cases and improve evidence.</span>
+          </li>
+        </ol>
+      </section>
+
+      <section id="guide" class="section manual-layout">
+        <div class="section-heading">
+          <p class="eyebrow">Operator Guide</p>
+          <h2>How to think about running TagMemoRAG.</h2>
+        </div>
+        <div class="manual-grid">
+          <article>
+            <h3>1. Prepare Documents</h3>
+            <p>Start with a small, representative set of manuals. Prefer files with clear product names, model numbers, category labels, and language metadata.</p>
+          </article>
+          <article>
+            <h3>2. Build and Verify</h3>
+            <p>After upload, rebuild the KB and ask questions that reflect real support tasks. Check that answers cite the right passages.</p>
+          </article>
+          <article>
+            <h3>3. Add OCR When Needed</h3>
+            <p>OCR is useful when a PDF page is scanned and has no native text. It feeds the same retrieval pipeline rather than becoming a separate answer path.</p>
+          </article>
+          <article>
+            <h3>4. Keep Access Bounded</h3>
+            <p>Give Q&A users search access, rebuild operators rebuild access, and administrators the smallest scope needed for management tasks.</p>
+          </article>
+          <article>
+            <h3>5. Treat Sources as Ground Truth</h3>
+            <p>Answers should be inspected through citation chips and source cards. Source previews should never expose storage keys, checksums, or local paths.</p>
+          </article>
+          <article>
+            <h3>6. Ship With Readiness Checks</h3>
+            <p>Before handoff, run local tests, browser flow checks, and the baseline eval suite. Use the Readiness page as a shared closure checklist.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section release-panel" aria-label="Release status">
+        <div>
+          <p class="eyebrow">Release</p>
+          <h2>v0.1.0 is the first public release.</h2>
+          <p>
+            The release was tagged from the validated master branch after local checks and GitHub Actions Quality CI passed. It is suitable for evaluation, browser demos, and early operator trials.
+          </p>
+        </div>
+        <a class="button primary" href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">Open release notes</a>
+      </section>
+
+      <section id="faq" class="section faq">
+        <div class="section-heading">
+          <p class="eyebrow">FAQ</p>
+          <h2>Common questions.</h2>
+        </div>
+        <details open>
+          <summary>Can I read this website without installing the project?</summary>
+          <p>Yes. This site is static and meant to be served publicly through GitHub Pages without running TagMemoRAG.</p>
+        </details>
+        <details>
+          <summary>Does OCR require a cloud service?</summary>
+          <p>No. The current OCR path is optional and uses local Tesseract command-line tooling when enabled by the operator.</p>
+        </details>
+        <details>
+          <summary>Is the Q&A page the same as the admin workbench?</summary>
+          <p>No. The Q&A page is user-facing and hides debug controls. Admin pages handle upload, rebuild, readiness, quality review, and access management.</p>
+        </details>
+        <details>
+          <summary>What should I verify before a pilot?</summary>
+          <p>Upload real documents, rebuild the KB, ask real user questions, inspect citations, confirm Readiness, and run the non-performance unit/e2e gate plus baseline eval suite.</p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>TagMemoRAG v0.1.0</span>
+      <a href="https://github.com/sxc19960907/TagMemoRAG">GitHub</a>
+      <a href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">Release notes</a>
+    </footer>
+  </body>
+</html>
