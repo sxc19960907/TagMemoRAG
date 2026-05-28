@@ -354,6 +354,56 @@ ocr:
     assert checks[1]["detail"]["available"] is True
 
 
+def test_config_validate_pdf_page_snapshots_check_pymupdf(tmp_path, monkeypatch):
+    import importlib.util
+
+    original_find_spec = importlib.util.find_spec
+
+    def fake_find_spec(name):
+        if name == "fitz":
+            return None
+        return original_find_spec(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    config = tmp_path / "assets.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {tmp_path / "data"}
+manual_library:
+  root_dir: {tmp_path / "manuals"}
+  blob_root_dir: {tmp_path / "blobs"}
+assets:
+  enabled: true
+  pdf_page_snapshots_enabled: true
+  root_dir: {tmp_path / "assets"}
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_config(config)
+    body = report.to_dict()
+    dependency = [
+        check
+        for check in body["checks"]
+        if check["name"] == "dependency" and check["detail"].get("dependency") == "PyMuPDF"
+    ][0]
+
+    assert report.status == "warning"
+    assert body["profile"]["assets_enabled"] is True
+    assert body["profile"]["pdf_page_snapshots_enabled"] is True
+    assert dependency["status"] == "warning"
+    assert dependency["detail"] == {
+        "dependency": "PyMuPDF",
+        "available": False,
+        "reason": "assets.pdf_page_snapshots_enabled=true",
+    }
+
+
 def test_config_validate_s3_missing_bucket_fails(tmp_path):
     config = tmp_path / "s3.yaml"
     config.write_text(

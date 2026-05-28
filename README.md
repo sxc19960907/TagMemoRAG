@@ -781,6 +781,13 @@ storage:
   data_dir: ./data
   schema_version: "1"
 
+assets:
+  enabled: false
+  store_backend: local
+  root_dir: ./data/document_assets
+  pdf_page_snapshots_enabled: false
+  strict_extraction: false
+
 vector_store:
   provider: npz              # npz | qdrant
   qdrant_url: http://localhost:6333
@@ -835,6 +842,17 @@ observability:
     sample_ratio: 1.0
     export_timeout_seconds: 5
 ```
+
+To let Q&A source cards open cited PDF page previews, enable both asset flags and install the optional PyMuPDF package in the runtime environment:
+
+```yaml
+assets:
+  enabled: true
+  pdf_page_snapshots_enabled: true
+  root_dir: ./data/document_assets
+```
+
+Run `tagmemorag config validate --config config.yaml` after changing this. The validator reports a warning when `assets.pdf_page_snapshots_enabled=true` but PyMuPDF (`fitz`) is not importable; search and Q&A still work, but source cards will show a non-clickable preview fallback until snapshots can be generated.
 
 Environment variables override YAML and defaults. Use the `TAGMEMORAG__` prefix and double underscores for nested fields:
 

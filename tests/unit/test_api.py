@@ -124,6 +124,56 @@ def test_api_retrieve_attaches_visual_assets_from_manifest(tmp_path, fake_embedd
     assert "hidden-checksum" not in serialized
 
 
+def test_api_retrieve_asset_preview_link_opens_authorized_png(tmp_path, fake_embedder):
+    cfg = Settings(
+        storage=StorageConfig(data_dir=str(tmp_path / "data")),
+        assets=AssetConfig(enabled=True, root_dir=str(tmp_path / "assets")),
+        model={"dim": 64},
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "manual.md").write_text("# Preview\nPREVIEW-88 appears on the cited source page.\n", encoding="utf-8")
+    state = build_kb(docs, "default", cfg, embedder=fake_embedder)
+    chunk_metadata = dict(state.graph.nodes[0]["metadata"])
+    store = LocalDocumentAssetStore(cfg.assets.root_dir)
+    png = b"\x89PNG\r\n\x1a\n" + (b"preview" * 24)
+    ref = store.put("default", str(chunk_metadata["doc_id"]), "page_snapshot", "asset:sha256:preview", png, "image/png")
+    asset = DocumentAsset(
+        asset_id="asset:sha256:preview",
+        kb_name="default",
+        doc_id=str(chunk_metadata["doc_id"]),
+        source_file="manual.md",
+        type="page_snapshot",
+        mime_type="image/png",
+        storage_backend="local",
+        storage_key=ref.storage_key,
+        checksum=ref.checksum,
+        page_number=None,
+        status="ready",
+    )
+    chunk_metadata["asset_refs"] = [asset.asset_id]
+    state.graph.nodes[0]["metadata"] = chunk_metadata
+    save_asset_manifest(AssetManifest(kb_name="default", assets={asset.asset_id: asset}), cfg)
+    api.settings = cfg
+    api.embedder = fake_embedder
+    api.app_state = AppState(state)
+    client = TestClient(api.app)
+
+    retrieve = client.post("/retrieve", json={"question": "show PREVIEW-88 source", "top_k": 1})
+
+    assert retrieve.status_code == 200
+    preview_url = retrieve.json()["evidence"][0]["assets"][0]["url"]
+    assert preview_url == "/assets/asset%3Asha256%3Apreview?kb_name=default"
+    preview = client.get(preview_url)
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert preview.headers["x-document-asset-id"] == "asset:sha256:preview"
+    assert preview.content == png
+    serialized = str(retrieve.json())
+    assert ref.storage_key not in serialized
+    assert ref.checksum not in serialized
+
+
 def test_api_retrieve_visual_retrieval_can_return_visual_only_asset(tmp_path, fake_embedder):
     cfg = Settings(
         storage=StorageConfig(data_dir=str(tmp_path / "data")),

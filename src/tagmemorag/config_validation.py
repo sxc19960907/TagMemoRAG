@@ -93,6 +93,7 @@ def _profile(cfg: Settings) -> dict[str, Any]:
         "answer_provider": cfg.answer.provider,
         "reranker_enabled": cfg.reranker.enabled,
         "assets_enabled": cfg.assets.enabled,
+        "pdf_page_snapshots_enabled": cfg.assets.pdf_page_snapshots_enabled,
     }
 
 
@@ -196,6 +197,8 @@ def _dependency_checks(cfg: Settings) -> list[ConfigValidationCheck]:
         checks.append(_dependency_check("qdrant-client", "qdrant_client", "vector_store.provider=qdrant"))
     if cfg.manual_library.blob_backend == "s3":
         checks.append(_dependency_check("boto3", "boto3", "manual_library.blob_backend=s3"))
+    if cfg.assets.enabled and cfg.assets.pdf_page_snapshots_enabled:
+        checks.append(_dependency_check("PyMuPDF", "fitz", "assets.pdf_page_snapshots_enabled=true"))
     return checks
 
 

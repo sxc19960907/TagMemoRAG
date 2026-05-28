@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import importlib.util
 import shutil
 import socket
 import subprocess
@@ -421,6 +422,58 @@ def test_browser_upload_multiformat_manuals_then_qa_user_flow(tmp_path):
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
             try:
                 _exercise_multiformat_upload_qa_user_flow(page, port, txt_path, pdf_path, docx_path)
+                assert console_errors == []
+            finally:
+                browser.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=10)
+
+
+def test_browser_pdf_source_preview_success_path_when_renderer_available(tmp_path):
+    if importlib.util.find_spec("fitz") is None:
+        pytest.skip("requires optional PyMuPDF/fitz for PDF page snapshot rendering")
+    playwright = pytest.importorskip("playwright.sync_api")
+    port = _free_port()
+    config_path = _write_browser_config(tmp_path, answer_enabled=True, assets_enabled=True)
+    pdf_path = tmp_path / "pdf-preview-success.pdf"
+    _write_text_pdf(
+        pdf_path,
+        "PREVIEW-88 confirms the cited PDF page preview path opens the original rendered page image.",
+    )
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "tagmemorag",
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--config",
+            str(config_path),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_server(port, server)
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1440, "height": 980})
+            console_errors: list[str] = []
+            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            try:
+                _exercise_pdf_preview_success_flow(page, port, pdf_path)
                 assert console_errors == []
             finally:
                 browser.close()
@@ -1125,6 +1178,58 @@ def _upload_manual_from_library_dialog(page, upload: dict[str, object]) -> None:
     page.locator("#library-next-step").get_by_text("Manual is ready for Q&A").wait_for()
 
 
+def _exercise_pdf_preview_success_flow(page, port: int, pdf_path: Path) -> None:
+    page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+    page.get_by_role("heading", name="Manual Library").wait_for()
+    page.locator("#status-strip").get_by_text("Loaded 0 manuals from default.").wait_for()
+    _upload_manual_from_library_dialog(
+        page,
+        {
+            "path": pdf_path,
+            "manual_id": "pdf-preview-success",
+            "title": "PDF Preview Success",
+            "source_file": "preview/pdf-preview-success.pdf",
+            "tag": "pdf-preview",
+            "ready_source": "preview/pdf-preview-success.pdf",
+        },
+    )
+
+    diagnostics = page.evaluate(
+        """
+        async () => {
+          const response = await fetch("/manual-library/diagnostics?kb_name=default&include_jobs=true");
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        }
+        """
+    )
+    source_preview = diagnostics["last_rebuild"]["source_preview"]
+    assert source_preview["status"] == "ready"
+    assert source_preview["page_snapshots_ready"] >= 1
+    assert source_preview["renderer_available"] is True
+    assert "storage_key" not in json.dumps(source_preview)
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    page.get_by_role("textbox", name="Q&A question").fill("What does PREVIEW-88 confirm?")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    page.locator(".qa-citation-chip").first.click()
+    active_source = page.locator(".qa-source-item.active")
+    active_source.wait_for()
+    preview = active_source.locator("[data-source-preview]").first
+    preview.wait_for()
+    preview_href = preview.get_attribute("href") or ""
+    assert preview_href.startswith("/assets/")
+    assert "kb_name=default" in preview_href
+    assert "storage_key" not in preview_href
+    asset_response = page.request.get(f"http://127.0.0.1:{port}{preview_href}")
+    assert asset_response.status == 200
+    assert asset_response.headers.get("content-type", "").startswith("image/png")
+    assert asset_response.headers.get("x-document-asset-id")
+    assert len(asset_response.body()) > 100
+
+
 def _assert_qa_layout(page) -> None:
     metrics = page.evaluate(
         """
@@ -1378,7 +1483,7 @@ def _exercise_qa_followup_context(page, port: int, upload_path: Path) -> None:
     assert "followup-service-manual.md" in page.locator("#qa-sources").inner_text()
 
 
-def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False, ocr_enabled: bool = False) -> Path:
+def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False, ocr_enabled: bool = False, assets_enabled: bool = False) -> Path:
     config_path = tmp_path / "browser-ui-config.yaml"
     answer_block = "\nanswer:\n  enabled: true\n  provider: noop\n" if answer_enabled else ""
     ocr_block = (
@@ -1389,6 +1494,14 @@ def _write_browser_config(tmp_path: Path, *, answer_enabled: bool = False, ocr_e
         "  language: eng\n"
         "  dpi: 240\n"
         if ocr_enabled
+        else ""
+    )
+    assets_block = (
+        "\nassets:\n"
+        "  enabled: true\n"
+        "  pdf_page_snapshots_enabled: true\n"
+        f"  root_dir: {tmp_path / 'assets'}\n"
+        if assets_enabled
         else ""
     )
     config_path.write_text(
@@ -1408,6 +1521,7 @@ auth:
   enabled: false
 {answer_block}
 {ocr_block}
+{assets_block}
 """,
         encoding="utf-8",
     )
