@@ -727,3 +727,38 @@ Added a guided empty-state panel to Manual Library, softened RAG Readiness visua
 ### Next Steps
 
 - None - task complete
+
+
+## Session 164: Public project website
+
+**Date**: 2026-05-28
+**Task**: Public project website
+**Branch**: `master`
+
+### Summary
+
+Built and published a public static TagMemoRAG website, switched the repository public, configured GitHub Pages from gh-pages, verified Pages and CI success, and recorded the public URL.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39ae4ce` | (see git log) |
+| `0d8bb17` | (see git log) |
+| `87e2b94` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
