@@ -762,3 +762,37 @@ Built and published a public static TagMemoRAG website, switched the repository 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 165: Public docs and README launch
+
+**Date**: 2026-05-29
+**Task**: Public docs and README launch
+**Branch**: `master`
+
+### Summary
+
+Redesigned the public GitHub Pages site as an official docs-style page, simplified the root README into a concise project entrance, pushed master, verified Pages deployment and Quality CI.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4255cda` | (see git log) |
+| `1eaef12` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
