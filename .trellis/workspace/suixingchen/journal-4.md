@@ -863,3 +863,36 @@ Ran the documented browser demo path as a user, verified clean Q&A over the demo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 168: Clean demo workspace option
+
+**Date**: 2026-05-29
+**Task**: Clean demo workspace option
+**Branch**: `master`
+
+### Summary
+
+Added a --clean option to the demo library QA command, constrained cleanup to the configured .tmp/tagmemorag-qa-demo workspace, documented it in the README and browser quick start, verified focused tests, real demo output, and remote Quality CI.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f637d57` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
