@@ -1145,7 +1145,13 @@ def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) 
     page.locator("#qa-answer").get_by_text("Start by adding a manual").wait_for(timeout=10000)
     assert "Add a manual to begin" in page.locator("#qa-answer-meta").inner_text()
     assert "Choose a manual" in page.locator("#qa-answer").inner_text()
+    assert "Choose a manual file" in page.locator("#qa-answer").inner_text()
+    assert "Upload and index it" in page.locator("#qa-answer").inner_text()
+    assert "Ask your first question" in page.locator("#qa-answer").inner_text()
     assert "Add manual" in page.locator(".qa-upload-card").inner_text()
+    assert "qa-upload-card-highlight" in page.locator(".qa-upload-card").get_attribute("class")
+    assert "Sources will appear after your first answer." in page.locator("#qa-sources").inner_text()
+    assert "cited passages from that manual will show here" in page.locator("#qa-sources").inner_text()
     assert page.locator("#qa-manual-library-link").get_attribute("href") == "/admin/manual-library?kb_name=default"
 
     page.locator("#qa-upload-file").set_input_files(str(upload_path))
@@ -1159,6 +1165,7 @@ def _exercise_qa_page_upload_rebuild_answer(page, port: int, upload_path: Path) 
     page.locator("#qa-upload-submit").click()
     page.locator("#qa-upload-messages").get_by_text("Manual is indexed. Ask a question about it below.").wait_for(timeout=15000)
     page.locator("#qa-status").get_by_text("Manual is ready for Q&A.").wait_for(timeout=10000)
+    assert "qa-upload-card-highlight" not in page.locator(".qa-upload-card").get_attribute("class")
     suggestions_text = page.locator("#qa-suggestions").inner_text()
     assert "这份手册里，蒸汽很小怎么办？" in suggestions_text
     assert "QA Upload Steam Manual 有哪些常见故障处理步骤？" in suggestions_text
@@ -1724,6 +1731,9 @@ def _assert_qa_first_screen_guidance(page) -> None:
     first_run_guidance_visible = (
         "Start by adding a manual" in empty_text
         and "This knowledge base does not have searchable manual content yet." in empty_text
+        and "Choose a manual file" in empty_text
+        and "Upload and index it" in empty_text
+        and "Ask your first question" in empty_text
         and "Choose a manual" in empty_text
         and "Check readiness" in empty_text
     )

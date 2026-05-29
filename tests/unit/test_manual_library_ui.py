@@ -1364,6 +1364,9 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "updateConversationTurn" in js.text
     assert "renderFirstRunGuidance" in js.text
     assert "Start by adding a manual" in js.text
+    assert "qa-upload-card-highlight" in js.text
+    assert "Choose a manual file" in js.text
+    assert "Sources will appear after your first answer." in js.text
     assert "suggestedQuestionsForManual" in js.text
     assert "setUploadRecoveryMessage" in js.text
     assert "Open Manual Library" in js.text

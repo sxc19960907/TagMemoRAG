@@ -51,6 +51,7 @@ const el = {
   kbSelect: document.getElementById("qa-kb-select"),
   kbNote: document.getElementById("qa-kb-note"),
   manualLibraryLink: document.getElementById("qa-manual-library-link"),
+  uploadCard: document.querySelector(".qa-upload-card"),
   uploadForm: document.getElementById("qa-upload-form"),
   uploadFile: document.getElementById("qa-upload-file"),
   uploadTitle: document.getElementById("qa-upload-title"),
@@ -429,6 +430,7 @@ function stopLoadingStages() {
 }
 
 function resetPostAnswerUi() {
+  setFirstRunUploadHighlight(false);
   renderContextNotice(null);
   setHidden(el.followups, true);
   if (el.followups) el.followups.innerHTML = "";
@@ -440,6 +442,24 @@ function resetPostAnswerUi() {
       button.setAttribute("aria-pressed", "false");
     });
   }
+}
+
+function setFirstRunUploadHighlight(active) {
+  if (!el.uploadCard) return;
+  el.uploadCard.classList.toggle("qa-upload-card-highlight", Boolean(active));
+  el.uploadCard.setAttribute("aria-current", active ? "step" : "false");
+}
+
+function renderFirstRunSourcePlaceholder() {
+  if (!el.sources) return;
+  el.sources.className = "qa-source-list empty-state qa-first-run-sources";
+  el.sources.innerHTML = `
+    <div class="qa-source-placeholder">
+      <strong>${t("Sources will appear after your first answer.")}</strong>
+      <p>${t("Upload and index a manual first. After you ask, cited passages from that manual will show here for verification.")}</p>
+    </div>
+  `;
+  if (el.sourceMeta) el.sourceMeta.textContent = t("Sources appear after indexing and Q&A.");
 }
 
 function addConversationTurn(question) {
@@ -864,11 +884,18 @@ function renderSuggestions() {
 }
 
 function renderFirstRunGuidance() {
-  if (!el.answer || state.turns.length > 0 || state.kbReady) return;
+  const active = Boolean(el.answer && state.turns.length === 0 && !state.kbReady);
+  setFirstRunUploadHighlight(active);
+  if (!active) return;
   el.answer.className = "qa-answer-message empty-state qa-first-run";
   el.answer.innerHTML = `
     <strong>${t("Start by adding a manual")}</strong>
     <p>${t("This knowledge base does not have searchable manual content yet. Add a manual on the left, wait for indexing, then ask your first question here.")}</p>
+    <ol class="qa-first-run-steps">
+      <li><span>${t("Choose a manual file")}</span><small>${t("PDF, DOCX, Markdown, and text files are supported.")}</small></li>
+      <li><span>${t("Upload and index it")}</span><small>${t("The page will tell you when Q&A is ready.")}</small></li>
+      <li><span>${t("Ask your first question")}</span><small>${t("Answers and cited source passages will appear together.")}</small></li>
+    </ol>
     <div class="qa-first-run-actions">
       <button type="button" class="ghost small" data-qa-focus-upload>${t("Choose a manual")}</button>
       <a class="button-link compact" href="/admin/rag-readiness?kb_name=${encodeURIComponent(state.kbName || "default")}">${t("Check readiness")}</a>
@@ -882,7 +909,7 @@ function renderFirstRunGuidance() {
     });
   }
   if (el.answerMeta) el.answerMeta.textContent = t("Add a manual to begin");
-  if (el.sourceMeta) el.sourceMeta.textContent = t("Sources appear after indexing and Q&A.");
+  renderFirstRunSourcePlaceholder();
 }
 
 function uploadHeaders(json = true) {
@@ -1119,11 +1146,15 @@ async function pollUploadRebuildJob(jobId, metadata) {
 
 async function uploadReady(metadata) {
   state.kbReady = true;
+  setFirstRunUploadHighlight(false);
   state.uploadedManual = metadata || null;
   state.dynamicSuggestions = suggestedQuestionsForManual(metadata);
   await loadKnowledgeBases();
   state.dynamicSuggestions = suggestedQuestionsForManual(metadata);
   renderSuggestions();
+  if (state.turns.length === 0) {
+    renderEmptyConversationState();
+  }
   setUploadMessage("Manual is indexed. Ask a question about it below.", "success");
   setStatus(t("Manual is ready for Q&A."), "success");
   if (el.uploadForm) el.uploadForm.reset();
