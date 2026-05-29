@@ -11,7 +11,8 @@ from tagmemorag import cli_basic
 from tagmemorag import cli_eval
 from tagmemorag import cli_provider
 from tagmemorag import cli_source_import
-from tagmemorag.demo import summarize_demo_qa_response
+from tagmemorag.demo import _clean_demo_library_workspace, summarize_demo_qa_response
+from tagmemorag.config import load_config
 from tagmemorag import readiness
 from tagmemorag.browser_qa_readiness import (
     BrowserQaReadinessReport,
@@ -194,6 +195,7 @@ def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monke
             "--output",
             str(tmp_path / "library-qa.json"),
             "--no-overwrite",
+            "--clean",
         ]
     )
 
@@ -205,9 +207,59 @@ def test_cli_demo_library_qa_wires_arguments_and_outputs_summary(tmp_path, monke
     assert options.question == "蒸汽很小怎么办？"
     assert options.output_path == str(tmp_path / "library-qa.json")
     assert options.overwrite is False
+    assert options.clean is True
     body = json.loads(capsys.readouterr().out)
     assert body["schema_version"] == "demo_library_qa.v1"
     assert body["status"] == "passed"
+
+
+def test_demo_library_qa_clean_removes_only_configured_tmp_workspace(tmp_path):
+    tmp_root = tmp_path / ".tmp" / "tagmemorag-qa-demo"
+    data_dir = tmp_root / "data"
+    manual_root = tmp_root / "manuals"
+    blob_root = tmp_root / "blobs"
+    unsafe_root = tmp_path / "manuals"
+    unsafe_tmp_root = tmp_path / ".tmp" / "not-the-demo"
+    for path in (data_dir, manual_root, blob_root, unsafe_root, unsafe_tmp_root):
+        path.mkdir(parents=True)
+        (path / "stale.txt").write_text("stale", encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        f"""
+model:
+  provider: hashing
+  name: hashing
+  dim: 64
+storage:
+  data_dir: {data_dir.relative_to(tmp_path)}
+manual_library:
+  root_dir: {manual_root.relative_to(tmp_path)}
+  blob_root_dir: {blob_root.relative_to(tmp_path)}
+""",
+        encoding="utf-8",
+    )
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        cfg = load_config(str(config))
+        report = _clean_demo_library_workspace(cfg, "default")
+    finally:
+        os.chdir(cwd)
+
+    assert report["enabled"] is True
+    assert sorted(report["removed"]) == sorted(
+        [
+            str(data_dir.relative_to(tmp_path)),
+            str(manual_root.relative_to(tmp_path)),
+            str(blob_root.relative_to(tmp_path)),
+        ]
+    )
+    assert not data_dir.exists()
+    assert not manual_root.exists()
+    assert not blob_root.exists()
+    assert unsafe_root.exists()
+    assert unsafe_tmp_root.exists()
 
 
 def test_demo_qa_summary_is_bounded_and_user_visible():

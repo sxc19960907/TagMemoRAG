@@ -158,6 +158,7 @@ def _run_demo_library_qa(args) -> int:
             manual_id=args.manual_id,
             output_path=args.output,
             overwrite=not args.no_overwrite,
+            clean=args.clean,
         )
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))

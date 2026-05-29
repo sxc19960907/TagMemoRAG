@@ -52,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     demo_library_qa.add_argument("--question", default="蒸汽很小怎么办？")
     demo_library_qa.add_argument("--output", default=None)
     demo_library_qa.add_argument("--no-overwrite", action="store_true")
+    demo_library_qa.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove the configured local demo data/manual/blob directories before seeding the demo manual.",
+    )
 
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default=None)

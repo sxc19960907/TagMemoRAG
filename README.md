@@ -56,6 +56,7 @@ Seed a local demo KB and verify one cited answer:
 ```bash
 uv run python -m tagmemorag demo library-qa \
   --config examples/config/qa-demo.yaml \
+  --clean \
   --output .tmp/tagmemorag-qa-demo/library-qa-response.json
 ```
 

@@ -27,10 +27,12 @@ Create the local demo manual, rebuild the managed library, and verify that a cit
 ```bash
 uv run python -m tagmemorag demo library-qa \
   --config examples/config/qa-demo.yaml \
+  --clean \
   --output .tmp/tagmemorag-qa-demo/library-qa-response.json
 ```
 
 A successful run prints `"status": "passed"`. The demo writes local data under `.tmp/tagmemorag-qa-demo/`.
+The `--clean` flag resets that demo workspace first, which is recommended for first-run checks and black-box verification.
 
 ## 3. Start The Server
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import io
 import json
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 from typing import Any, Iterator
 import sys
@@ -42,6 +43,7 @@ class DemoLibraryQaOptions:
     question: str = "蒸汽很小怎么办？"
     output_path: str | None = None
     overwrite: bool = True
+    clean: bool = False
 
 
 def run_demo_qa(options: DemoQaOptions) -> dict[str, Any]:
@@ -84,6 +86,7 @@ def run_demo_qa(options: DemoQaOptions) -> dict[str, Any]:
 def run_demo_library_qa(options: DemoLibraryQaOptions) -> dict[str, Any]:
     cfg = load_config(options.config_path)
     configure_logging(cfg.logging.level, cfg.logging.format)
+    cleanup = _clean_demo_library_workspace(cfg, options.kb_name) if options.clean else {"enabled": False, "removed": []}
     emb = create_embedder_from_config(cfg)
     app_state = _load_app_state(options.kb_name, cfg)
 
@@ -111,6 +114,7 @@ def run_demo_library_qa(options: DemoLibraryQaOptions) -> dict[str, Any]:
         "status": "passed" if _library_qa_passed(task, record, answer, options.manual_id) else "failed",
         "kb_name": options.kb_name,
         "manual_id": options.manual_id,
+        "cleanup": cleanup,
         "upload": {
             "rebuild_required_before": bool(before.get("pending_changes")),
             "dirty_manual_count_before": int(before.get("dirty_manual_count") or 0),
@@ -143,6 +147,39 @@ def run_demo_library_qa(options: DemoLibraryQaOptions) -> dict[str, Any]:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return payload
+
+
+def _clean_demo_library_workspace(cfg: Any, kb_name: str) -> dict[str, Any]:
+    paths = _demo_cleanup_paths(cfg, kb_name)
+    removed: list[str] = []
+    for path in paths:
+        if path.exists():
+            shutil.rmtree(path)
+            removed.append(str(path))
+    return {"enabled": True, "removed": removed}
+
+
+def _demo_cleanup_paths(cfg: Any, kb_name: str) -> list[Path]:
+    raw_paths = [
+        Path(cfg.storage.data_dir),
+        Path(cfg.manual_library.root_dir),
+        Path(cfg.manual_library.blob_root_dir),
+    ]
+    safe_paths: list[Path] = []
+    for path in raw_paths:
+        expanded = path.expanduser()
+        if not _is_safe_demo_cleanup_path(expanded):
+            continue
+        if expanded not in safe_paths:
+            safe_paths.append(expanded)
+    return safe_paths
+
+
+def _is_safe_demo_cleanup_path(path: Path) -> bool:
+    if path.is_absolute():
+        return False
+    parts = path.parts
+    return len(parts) >= 2 and parts[0] == ".tmp" and parts[1] == "tagmemorag-qa-demo"
 
 
 def summarize_demo_qa_response(question: str, response: dict[str, Any]) -> dict[str, Any]:
