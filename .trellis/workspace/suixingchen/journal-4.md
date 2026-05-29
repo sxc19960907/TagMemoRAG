@@ -1028,3 +1028,36 @@ Ran the first-user RAG acceptance pass across public docs, Q&A first-run upload,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 173: Delivery hardening pack
+
+**Date**: 2026-05-29
+**Task**: Delivery hardening pack
+**Branch**: `master`
+
+### Summary
+
+Expanded real-product PDF browser coverage to three categories, added a production release checklist, upgraded the public docs site into a fuller docs hub, and verified focused browser/docs checks plus the full local quality gate.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3724b7b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

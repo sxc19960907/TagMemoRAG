@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 172
+- **Total Sessions**: 173
 - **Last Active**: 2026-05-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~1030 | Active |
+| `journal-4.md` | ~1063 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 173 | 2026-05-29 | Delivery hardening pack | `3724b7b` | `master` |
 | 172 | 2026-05-29 | First user RAG acceptance | `ec5a1a3` | `master` |
 | 171 | 2026-05-29 | Q&A empty KB onboarding | `08c838e` | `master` |
 | 170 | 2026-05-29 | Q&A text source verification copy | `42aa28d` | `master` |
