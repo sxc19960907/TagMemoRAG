@@ -14,19 +14,30 @@ def test_public_site_contains_install_free_project_guide():
     assert "不需要运行 TagMemoRAG" in html
     assert "docs-sidebar" in html
     assert "本页目录" in html
-    assert "搜索文档、功能、流程" in html
+    assert "搜索快速开始、OCR、部署、质量门禁" in html
     assert "Manual Library" in html
-    assert "用户问答" in html
+    assert "Ask Q&A" in html
     assert "RAG Readiness" in html
-    assert "OCR 的作用" in html
-    assert "人员与权限" in html
+    assert "真实文档支持矩阵" in html
+    assert "Production Release Checklist" in html
+    assert "发布检查清单" in html
+    assert "质量门禁" in html
+    assert "后续规划" in html
+    assert "Markdown / TXT" in html
+    assert "扫描 PDF" in html
+    assert "Legacy DOC" in html
+    assert "备份恢复" in html
+    assert "权限" in html
     assert "https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0" in html
     assert "节点 ID" in html
     assert "sk-" not in html
     assert "storage_key" not in html
     assert "blob_key" not in html
     assert "@media (max-width: 1120px)" in css
+    assert "@media (max-width: 820px)" in css
     assert ".docs-layout" in css
+    assert ".docs-table" in css
+    assert ".status-grid" in css
     assert ".toc" in css
 
 

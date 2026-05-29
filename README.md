@@ -163,6 +163,7 @@ uv run pytest tests/unit/test_public_site.py -q
 - MVP handoff: [docs/mvp-delivery-guide.md](docs/mvp-delivery-guide.md)
 - Production operations: [docs/production-deployment-operations.md](docs/production-deployment-operations.md)
 - Production environment verification: [docs/production-environment-verification.md](docs/production-environment-verification.md)
+- Production release checklist: [docs/production-release-checklist.md](docs/production-release-checklist.md)
 - Quality gates: [docs/rag-quality-gates.md](docs/rag-quality-gates.md)
 - Trial operator handoff: [docs/trial-operator-handoff-2026-05-27.md](docs/trial-operator-handoff-2026-05-27.md)
 - CI handoff: [docs/trial-report-ci-handoff.md](docs/trial-report-ci-handoff.md)

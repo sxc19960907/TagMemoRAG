@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TagMemoRAG 文档 | 面向真实文档的浏览器优先 RAG</title>
-    <meta name="description" content="TagMemoRAG 官方文档：了解项目能力、快速开始、手册库、用户问答、OCR、权限管理和部署发布。">
+    <meta name="description" content="TagMemoRAG 官方文档：快速开始、真实文档支持、用户问答、OCR、质量门禁、生产部署和发布检查清单。">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -15,7 +15,7 @@
       </a>
       <label class="search-box">
         <span>搜索</span>
-        <input type="search" placeholder="搜索文档、功能、流程">
+        <input type="search" placeholder="搜索快速开始、OCR、部署、质量门禁">
       </label>
       <nav aria-label="外部链接">
         <a href="https://github.com/sxc19960907/TagMemoRAG">GitHub</a>
@@ -28,109 +28,155 @@
         <div class="sidebar-section">
           <p>开始</p>
           <a class="active" href="#overview">项目概览</a>
-          <a href="#quick-start">快速开始</a>
-          <a href="#concepts">核心概念</a>
+          <a href="#quick-start">5 分钟体验</a>
+          <a href="#user-guide">浏览器使用</a>
         </div>
         <div class="sidebar-section">
-          <p>使用手册</p>
-          <a href="#manual-library">手册库</a>
-          <a href="#qa">用户问答</a>
-          <a href="#readiness">RAG Readiness</a>
-          <a href="#quality">质量治理</a>
+          <p>能力</p>
+          <a href="#document-support">真实文档支持</a>
+          <a href="#source-verification">来源核验</a>
+          <a href="#quality">质量门禁</a>
         </div>
         <div class="sidebar-section">
-          <p>运维</p>
-          <a href="#ocr">OCR</a>
-          <a href="#access">人员与权限</a>
-          <a href="#deployment">部署与发布</a>
-          <a href="#faq">FAQ</a>
+          <p>交付</p>
+          <a href="#operations">生产部署</a>
+          <a href="#release">发布检查清单</a>
+          <a href="#roadmap">后续规划</a>
         </div>
       </aside>
 
       <main class="docs-content">
         <section id="overview" class="doc-section intro">
           <div class="version-pill">Public release v0.1.0</div>
-          <h1>TagMemoRAG 官方文档</h1>
+          <h1>面向真实文档的浏览器优先 RAG</h1>
           <p class="lead">
-            TagMemoRAG 是一个面向真实文档的浏览器优先 RAG 系统。它帮助团队把 PDF、DOCX、Markdown、文本和可选 OCR 内容变成可验证、有引用来源的问答体验。
+            TagMemoRAG 把产品手册、团队文档、PDF、DOCX、文本和可选 OCR 内容转成可验证、有引用来源的问答体验。默认本地 demo 不需要外部 API key，适合快速试用；生产配置可接入 Qdrant、S3 兼容对象存储、HTTP embedding、reranker 和 answer provider。
           </p>
           <div class="intro-actions">
-            <a class="button primary" href="#quick-start">开始阅读</a>
+            <a class="button primary" href="#quick-start">开始体验</a>
             <a class="button" href="https://github.com/sxc19960907/TagMemoRAG">查看仓库</a>
+            <a class="button" href="https://sxc19960907.github.io/TagMemoRAG/">公网文档</a>
+          </div>
+          <div class="status-grid" aria-label="当前能力状态">
+            <article><strong>浏览器优先</strong><span>Manual Library、RAG Workbench、Q&A、Readiness 和 People & Access。</span></article>
+            <article><strong>真实文档</strong><span>已覆盖 Markdown、TXT、文本 PDF、DOCX，以及配置 OCR 后的扫描 PDF。</span></article>
+            <article><strong>可核验回答</strong><span>答案引用来源卡片，用户可以检查手册片段、页码和预览链接。</span></article>
           </div>
         </section>
 
         <section id="quick-start" class="doc-section">
-          <h2>快速开始</h2>
-          <p>正常用户不需要理解内部索引细节。推荐先按照浏览器流程完成一次真实体验。</p>
+          <div class="section-kicker">Start</div>
+          <h2>5 分钟浏览器体验</h2>
+          <p>从仓库根目录运行本地 demo，然后打开浏览器页面体验完整 RAG 流程。</p>
           <ol class="step-list">
-            <li><strong>打开 Manual Library</strong><span>创建或加载知识库，上传第一份手册并填写产品元数据。</span></li>
-            <li><strong>重建索引</strong><span>执行 full 或 incremental rebuild，让文档进入可检索状态。</span></li>
-            <li><strong>检查 Readiness</strong><span>确认文档、检索、来源预览、OCR 和交付检查是否就绪。</span></li>
-            <li><strong>进入 Q&A</strong><span>用真实用户问题测试回答，并检查引用来源是否可靠。</span></li>
+            <li><strong>安装依赖</strong><span><code>uv sync --extra dev</code></span></li>
+            <li><strong>生成本地 demo KB</strong><span><code>uv run python -m tagmemorag demo library-qa --config examples/config/qa-demo.yaml --clean</code></span></li>
+            <li><strong>启动服务</strong><span><code>uv run python -m tagmemorag serve --host 127.0.0.1 --port 8000 --config examples/config/qa-demo.yaml</code></span></li>
+            <li><strong>打开浏览器</strong><span><code>http://127.0.0.1:8000/qa?kb_name=default</code></span></li>
           </ol>
-        </section>
-
-        <section id="concepts" class="doc-section">
-          <h2>核心概念</h2>
-          <div class="term-grid">
-            <article><h3>知识库</h3><p>一组可检索文档、索引、元数据和运行状态的边界。</p></article>
-            <article><h3>手册</h3><p>具有产品、型号、语言、标签和来源文件信息的文档单元。</p></article>
-            <article><h3>引用</h3><p>回答中的证据指针，用户可以通过来源卡片核对。</p></article>
-            <article><h3>Readiness</h3><p>面向交付的检查清单，帮助判断是否能给用户试用。</p></article>
+          <div class="link-row">
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/browser-rag-quick-start.md">Browser RAG Quick Start</a>
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/README.md">README</a>
           </div>
         </section>
 
-        <section id="manual-library" class="doc-section">
-          <h2>手册库</h2>
-          <p>Manual Library 是管理员处理文档的主入口。它负责上传、校验、标签治理、脏状态检查、诊断和重建。</p>
+        <section id="user-guide" class="doc-section">
+          <div class="section-kicker">Use</div>
+          <h2>浏览器使用路径</h2>
+          <div class="card-grid">
+            <article><h3>Manual Library</h3><p>上传文档、填写元数据、检查 searchable 状态、触发 rebuild，并跳转到 Q&A。</p></article>
+            <article><h3>Ask Q&A</h3><p>面向最终用户的问答页。空知识库会引导上传，答案会展示引用和来源卡。</p></article>
+            <article><h3>RAG Readiness</h3><p>检查知识库、文档、检索、Q&A、OCR、来源预览和交付状态。</p></article>
+            <article><h3>Retrieval Quality</h3><p>审核反馈、记录期望证据、生成 eval 样本，降低回归风险。</p></article>
+          </div>
+        </section>
+
+        <section id="document-support" class="doc-section">
+          <div class="section-kicker">Documents</div>
+          <h2>真实文档支持矩阵</h2>
+          <table class="docs-table">
+            <thead>
+              <tr><th>格式</th><th>当前支持</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Markdown / TXT</td><td>直接支持</td><td>适合结构化说明、FAQ、操作 SOP。</td></tr>
+              <tr><td>文本 PDF</td><td>直接支持</td><td>保留页码元数据，可生成来源预览。</td></tr>
+              <tr><td>DOCX</td><td>支持 readable DOCX</td><td>通过 OpenXML 文本抽取并物化 Markdown，同时保留原始 DOCX 来源信息。</td></tr>
+              <tr><td>扫描 PDF</td><td>需要 OCR 配置</td><td>安装 Tesseract 和 PDF renderer 后可把识别文本送入同一套 RAG 流程。</td></tr>
+              <tr><td>Legacy DOC</td><td>暂不支持</td><td>二进制 Word 需要单独依赖和安全边界决策。</td></tr>
+            </tbody>
+          </table>
           <div class="callout">
-            <strong>第一次使用</strong>
-            <span>先上传一份小而真实的文档，完成一次重建，再去 Q&A 问一个真实问题。</span>
+            <strong>真实样本验证</strong>
+            <span>仓库内保留 washer、oven、refrigerator、dryer 等真实产品手册样本；浏览器黑盒测试覆盖多类真实 PDF 的上传、索引、问答和来源预览。</span>
           </div>
         </section>
 
-        <section id="qa" class="doc-section">
-          <h2>用户问答</h2>
-          <p>Q&A 页面面向最终用户，不暴露调参、节点 ID、plan ID 或底层诊断字段。用户看到的是问题、回答、引用和安全的来源说明。</p>
-          <pre><code>用户问题 → 路由知识库 → 检索证据 → 生成回答 → 展示引用来源</code></pre>
-        </section>
-
-        <section id="readiness" class="doc-section">
-          <h2>RAG Readiness</h2>
-          <p>Readiness 页面把“能不能交付给用户体验”拆成可扫描的检查项：知识库是否加载、手册是否可检索、评测是否通过、Q&A 是否可用、OCR 和来源预览是否清楚。</p>
+        <section id="source-verification" class="doc-section">
+          <div class="section-kicker">Trust</div>
+          <h2>来源核验</h2>
+          <p>Q&A 页面不把底层调参、节点 ID、存储 key 或 blob key 暴露给普通用户。用户看到的是回答、引用 chip、来源卡、页码、DOCX/OCR 标记和安全的预览链接。</p>
+          <pre><code>用户问题 → 检索证据 → 生成回答 → 引用 chip → 来源卡 → 安全预览</code></pre>
         </section>
 
         <section id="quality" class="doc-section">
-          <h2>质量治理</h2>
-          <p>Retrieval Quality 和 eval report 用来持续观察弱问题、期望证据、反馈闭环和回归风险。发布前建议至少跑一次非性能单元/e2e 测试和 baseline eval。</p>
-        </section>
-
-        <section id="ocr" class="doc-section">
-          <h2>OCR 的作用</h2>
-          <p>OCR 处理扫描版 PDF 中没有原生文本的页面。它不是单独的问答通道，而是把识别出的文本送入同一套解析、分块、检索和回答流程。</p>
-          <div class="warning">
-            <strong>注意</strong>
-            <span>OCR 需要操作者安装本地 Tesseract 工具，并在配置中显式启用。</span>
+          <div class="section-kicker">Quality</div>
+          <h2>质量门禁</h2>
+          <ul class="check-list">
+            <li>本地单元和 e2e：<code>uv run pytest tests/unit tests/e2e --ignore=tests/e2e/test_perf.py</code></li>
+            <li>公共站点和交付文档：<code>uv run pytest tests/unit/test_public_site.py tests/unit/test_documentation_handoffs.py -q</code></li>
+            <li>真实浏览器流：通过 <code>TAGMEMORAG_RUN_BROWSER_UI=1</code> 显式开启。</li>
+            <li>发布后以 GitHub Actions Quality CI 作为远端权威检查。</li>
+          </ul>
+          <div class="link-row">
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/rag-quality-gates.md">RAG Quality Gates</a>
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/trial-report-ci-handoff.md">Trial Report CI Handoff</a>
           </div>
         </section>
 
-        <section id="access" class="doc-section">
-          <h2>人员与权限</h2>
-          <p>建议按最小权限分配：普通问答用户只需要 search，负责文档维护的人员需要 rebuild，管理员才需要管理密钥和访问边界。</p>
+        <section id="operations" class="doc-section">
+          <div class="section-kicker">Operate</div>
+          <h2>生产部署体验</h2>
+          <p>TagMemoRAG 当前适合单机或单 writer 的生产化试点。部署时要把配置验证、provider probe、备份恢复、权限、监控和回滚放进同一条 checklist。</p>
+          <div class="ops-grid">
+            <article><strong>备份恢复</strong><span>覆盖 graph artifacts、QueryPlan SQLite、manual registry、blob store、Qdrant collection、config 和 secrets。</span></article>
+            <article><strong>权限</strong><span>普通用户只给 search；文档维护者给 rebuild；admin 留给密钥、删除和审核操作。</span></article>
+            <article><strong>监控</strong><span>至少检查 /health、/ready、/metrics、dirty state、registry/blob verify 和 retained pilot report。</span></article>
+            <article><strong>回滚</strong><span>坏配置、失败 rebuild、Qdrant/S3 outage、坏 bundle import 都有独立 playbook。</span></article>
+          </div>
+          <div class="link-row">
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/production-release-checklist.md">Production Release Checklist</a>
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/production-deployment-operations.md">Deployment Operations</a>
+            <a href="https://github.com/sxc19960907/TagMemoRAG/blob/master/docs/production-environment-verification.md">Environment Verification</a>
+          </div>
         </section>
 
-        <section id="deployment" class="doc-section">
-          <h2>部署与发布</h2>
-          <p>当前公开文档通过 GitHub Pages 发布。项目本体可以自托管运行，发布前应确认本地质量门、GitHub Actions、Readiness 页面和真实浏览器流程。</p>
-          <ul>
-            <li>Release: <a href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">TagMemoRAG v0.1.0</a></li>
-            <li>Repository: <a href="https://github.com/sxc19960907/TagMemoRAG">sxc19960907/TagMemoRAG</a></li>
-          </ul>
+        <section id="release" class="doc-section">
+          <div class="section-kicker">Release</div>
+          <h2>发布检查清单</h2>
+          <ol class="step-list compact">
+            <li><strong>Preflight</strong><span>配置验证、本地 smoke、质量门、版本和 commit 记录。</span></li>
+            <li><strong>Backup</strong><span>导出 bundle，确认 SQLite、S3、Qdrant 和 config/secrets 的恢复路径。</span></li>
+            <li><strong>Access</strong><span>启用 auth，按最小权限分配 search、rebuild、admin。</span></li>
+            <li><strong>Browser acceptance</strong><span>上传真实文档，问答，检查引用和来源预览。</span></li>
+            <li><strong>Rollback</strong><span>确认配置、rebuild、Qdrant、S3/blob 和 bundle import 的回滚动作。</span></li>
+          </ol>
+        </section>
+
+        <section id="roadmap" class="doc-section">
+          <div class="section-kicker">Roadmap</div>
+          <h2>后续规划</h2>
+          <div class="card-grid">
+            <article><h3>生产 OCR</h3><p>明确 OCR provider 选择、部署成本和扫描件质量提示。</p></article>
+            <article><h3>部署自动化</h3><p>把备份、验证、发布和回滚串成更少人工步骤。</p></article>
+            <article><h3>更多真实文档</h3><p>扩展业务文档样本、黑盒测试和评测集合。</p></article>
+            <article><h3>多用户治理</h3><p>细化多 KB、权限、审计和运营看板。</p></article>
+          </div>
         </section>
 
         <section id="faq" class="doc-section">
-          <h2>FAQ</h2>
+          <div class="section-kicker">FAQ</div>
+          <h2>常见问题</h2>
           <details open>
             <summary>不安装项目可以看这个文档站吗？</summary>
             <p>可以。这个站点是静态页面，通过 GitHub Pages 公开访问，不需要运行 TagMemoRAG。</p>
@@ -149,11 +195,11 @@
       <aside class="toc" aria-label="本页目录">
         <p>本页目录</p>
         <a href="#overview">项目概览</a>
-        <a href="#quick-start">快速开始</a>
-        <a href="#manual-library">手册库</a>
-        <a href="#qa">用户问答</a>
-        <a href="#ocr">OCR</a>
-        <a href="#deployment">部署</a>
+        <a href="#quick-start">5 分钟体验</a>
+        <a href="#document-support">文档支持</a>
+        <a href="#quality">质量门禁</a>
+        <a href="#operations">生产部署</a>
+        <a href="#release">发布检查</a>
       </aside>
     </div>
   </body>

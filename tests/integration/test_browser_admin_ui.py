@@ -537,6 +537,7 @@ def test_browser_real_product_pdf_source_preview_user_flow(tmp_path):
     real_pdfs = {
         "washer": Path("product_manuals/washer/ASKO W6564.pdf"),
         "oven": Path("product_manuals/oven/HISENSE BSA5221.pdf"),
+        "refrigerator": Path("product_manuals/refrigerator/HISENSE HR6FDFF701SW.pdf"),
     }
     if any(not path.exists() for path in real_pdfs.values()):
         pytest.skip("requires local real product PDF samples")
@@ -1505,6 +1506,7 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
             "title": "ASKO W6564 Real Washer Manual",
             "source_file": "real/ASKO W6564.pdf",
             "tag": "real-pdf-preview",
+            "category": "washer",
             "ready_source": "real/ASKO W6564.pdf",
             "question": "ASKO W6564 如何清潔過濾器和排水馬達？",
             "source_name": "ASKO W6564.pdf",
@@ -1518,11 +1520,27 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
             "title": "HISENSE BSA5221 Real Oven Manual",
             "source_file": "real/HISENSE BSA5221.pdf",
             "tag": "real-pdf-preview",
+            "category": "oven",
             "ready_source": "real/HISENSE BSA5221.pdf",
             "question": "How do I use Steam Clean on the HISENSE BSA5221 oven?",
             "source_name": "HISENSE BSA5221.pdf",
             "expected_terms": ["Steam Clean", "70", "water", "damp cloth"],
             "forbidden_terms": ["ASKO W6564", "排水馬達", "過濾器"],
+            "unsupported": False,
+        },
+        {
+            "path": pdf_paths["refrigerator"],
+            "manual_id": "hisense-hr6fdff701sw-real",
+            "title": "HISENSE HR6FDFF701SW Real Refrigerator Manual",
+            "source_file": "real/HISENSE HR6FDFF701SW.pdf",
+            "tag": "real-pdf-preview",
+            "category": "refrigerator",
+            "ready_source": "real/HISENSE HR6FDFF701SW.pdf",
+            "question": "What section explains display controls on the HISENSE HR6FDFF701SW refrigerator?",
+            "source_name": "HISENSE HR6FDFF701SW.pdf",
+            "expected_terms": ["Display controls", "Using your appliance"],
+            "forbidden_terms": ["ASKO W6564", "BSA5221", "Steam Clean", "排水馬達", "過濾器"],
+            "preview_only": True,
             "unsupported": False,
         },
         {
@@ -1533,7 +1551,7 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
             "unsupported": True,
         },
     ]
-    for upload in uploads[:2]:
+    for upload in uploads[:3]:
         _upload_manual_from_library_dialog(page, upload)
 
     diagnostics = page.evaluate(
@@ -1547,13 +1565,25 @@ def _exercise_real_product_pdf_preview_flow(page, port: int, pdf_paths: dict[str
     )
     source_preview = diagnostics["last_rebuild"]["source_preview"]
     assert source_preview["status"] == "ready"
-    assert source_preview["page_snapshots_ready"] >= 2
+    assert source_preview["page_snapshots_ready"] >= 3
     assert source_preview["renderer_available"] is True
     assert "storage_key" not in json.dumps(source_preview)
 
     page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
     page.get_by_role("heading", name="Manual Q&A").wait_for()
-    for upload in uploads:
+    preview_only_uploads = [upload for upload in uploads[:3] if upload.get("preview_only")]
+    for upload in preview_only_uploads:
+        page.goto(f"http://127.0.0.1:{port}/admin/manual-library?kb_name=default")
+        row = page.locator("#manual-rows tr").filter(has_text=str(upload["manual_id"]))
+        row.wait_for()
+        row_text = row.inner_text()
+        assert str(upload["ready_source"]) in row_text
+        assert "yes" in row_text
+        assert "clear" in row_text
+
+    page.goto(f"http://127.0.0.1:{port}/qa?kb_name=default")
+    page.get_by_role("heading", name="Manual Q&A").wait_for()
+    for upload in [item for item in uploads if not item.get("preview_only")]:
         page.get_by_role("textbox", name="Q&A question").fill(str(upload["question"]))
         page.get_by_role("button", name="Ask question").click()
         page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=15000)
@@ -1805,7 +1835,7 @@ def _exercise_rag_failure_states(page, port: int, upload_path: Path) -> None:
     page.locator("#upload-form input[name='manual_id']").fill("pending-service-manual")
     page.locator("#upload-form input[name='title']").fill("Pending Service Manual")
     page.locator("#upload-form input[name='source_file']").fill("pending/pending-service-manual.md")
-    page.locator("#upload-form input[name='product_category']").fill("coffee")
+    page.locator("#upload-form input[name='product_category']").fill(str(upload.get("category") or "coffee"))
     page.locator("#upload-form input[name='language']").fill("zh-CN")
     page.locator("#upload-form textarea[name='tags']").fill("service-mode, pending-rebuild")
     page.locator("#validate-upload").click()

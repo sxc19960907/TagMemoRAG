@@ -10,6 +10,7 @@ def test_trial_report_ci_handoff_documents_retention_and_ci_boundary():
     quality = (ROOT / "docs" / "rag-quality-gates.md").read_text(encoding="utf-8")
     trial = (ROOT / "docs" / "trial-operator-handoff-2026-05-27.md").read_text(encoding="utf-8")
     quick_start = (ROOT / "docs" / "browser-rag-quick-start.md").read_text(encoding="utf-8")
+    release_checklist = (ROOT / "docs" / "production-release-checklist.md").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "--include-browser-qa" in handoff
@@ -31,6 +32,14 @@ def test_trial_report_ci_handoff_documents_retention_and_ci_boundary():
     assert "Manual is indexed. Ask a question about it below." in quick_start
     assert "Check readiness" in quick_start
     assert "docs/trial-report-ci-handoff.md" in readme
+    assert "docs/production-release-checklist.md" in readme
+    assert "Backup And Restore" in release_checklist
+    assert "Access And Permissions" in release_checklist
+    assert "Browser Acceptance" in release_checklist
+    assert "Rollback" in release_checklist
+    assert "Production Deployment And Operations" in release_checklist
+    assert "Authorization headers" in release_checklist
+    assert "raw document chunks" in release_checklist
     assert "browser QA readiness: `passed`" in final_review
     assert "QA first-run upload guidance" in final_review
     assert "GitHub Actions as authoritative" in final_review
