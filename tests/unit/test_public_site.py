@@ -10,20 +10,24 @@ def test_public_site_contains_install_free_project_guide():
     html = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
     css = (ROOT / "site" / "styles.css").read_text(encoding="utf-8")
 
-    assert "TagMemoRAG | Browser-first RAG for real documents" in html
-    assert "without running TagMemoRAG" in html
+    assert "TagMemoRAG 文档 | 面向真实文档的浏览器优先 RAG" in html
+    assert "不需要运行 TagMemoRAG" in html
+    assert "docs-sidebar" in html
+    assert "本页目录" in html
+    assert "搜索文档、功能、流程" in html
     assert "Manual Library" in html
-    assert "User Q&A" in html
-    assert "Readiness Guide" in html
-    assert "Optional OCR" in html
-    assert "Access Management" in html
+    assert "用户问答" in html
+    assert "RAG Readiness" in html
+    assert "OCR 的作用" in html
+    assert "人员与权限" in html
     assert "https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0" in html
-    assert "storage keys, checksums, or local paths" in html
+    assert "节点 ID" in html
     assert "sk-" not in html
     assert "storage_key" not in html
     assert "blob_key" not in html
-    assert "@media (max-width: 920px)" in css
-    assert "grid-template-columns" in css
+    assert "@media (max-width: 1120px)" in css
+    assert ".docs-layout" in css
+    assert ".toc" in css
 
 
 def test_github_pages_workflow_publishes_static_site():

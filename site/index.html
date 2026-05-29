@@ -1,240 +1,160 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>TagMemoRAG | Browser-first RAG for real documents</title>
-    <meta name="description" content="TagMemoRAG is a self-hosted, browser-first RAG system for product manuals, PDFs, DOCX files, scanned documents, and grounded Q&A.">
+    <title>TagMemoRAG 文档 | 面向真实文档的浏览器优先 RAG</title>
+    <meta name="description" content="TagMemoRAG 官方文档：了解项目能力、快速开始、手册库、用户问答、OCR、权限管理和部署发布。">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="TagMemoRAG home">
+    <header class="docs-topbar">
+      <a class="brand" href="#overview" aria-label="TagMemoRAG 文档首页">
         <span class="brand-mark">T</span>
-        <span>TagMemoRAG</span>
+        <span>TagMemoRAG Docs</span>
       </a>
-      <nav aria-label="Primary navigation">
-        <a href="#capabilities">Capabilities</a>
-        <a href="#quick-start">Quick start</a>
-        <a href="#guide">Guide</a>
-        <a href="#faq">FAQ</a>
-        <a class="nav-cta" href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">v0.1.0</a>
+      <label class="search-box">
+        <span>搜索</span>
+        <input type="search" placeholder="搜索文档、功能、流程">
+      </label>
+      <nav aria-label="外部链接">
+        <a href="https://github.com/sxc19960907/TagMemoRAG">GitHub</a>
+        <a href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">v0.1.0</a>
       </nav>
     </header>
 
-    <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Public release v0.1.0</p>
-          <h1>Browser-first RAG for real product manuals and knowledge documents.</h1>
+    <div class="docs-layout">
+      <aside class="docs-sidebar" aria-label="文档导航">
+        <div class="sidebar-section">
+          <p>开始</p>
+          <a class="active" href="#overview">项目概览</a>
+          <a href="#quick-start">快速开始</a>
+          <a href="#concepts">核心概念</a>
+        </div>
+        <div class="sidebar-section">
+          <p>使用手册</p>
+          <a href="#manual-library">手册库</a>
+          <a href="#qa">用户问答</a>
+          <a href="#readiness">RAG Readiness</a>
+          <a href="#quality">质量治理</a>
+        </div>
+        <div class="sidebar-section">
+          <p>运维</p>
+          <a href="#ocr">OCR</a>
+          <a href="#access">人员与权限</a>
+          <a href="#deployment">部署与发布</a>
+          <a href="#faq">FAQ</a>
+        </div>
+      </aside>
+
+      <main class="docs-content">
+        <section id="overview" class="doc-section intro">
+          <div class="version-pill">Public release v0.1.0</div>
+          <h1>TagMemoRAG 官方文档</h1>
           <p class="lead">
-            TagMemoRAG turns PDFs, DOCX files, Markdown, text, and optional OCR output into a grounded Q&A experience with citations, readiness checks, retrieval review, and admin workflows.
+            TagMemoRAG 是一个面向真实文档的浏览器优先 RAG 系统。它帮助团队把 PDF、DOCX、Markdown、文本和可选 OCR 内容变成可验证、有引用来源的问答体验。
           </p>
-          <div class="hero-actions">
-            <a class="button primary" href="#quick-start">Start the guide</a>
-            <a class="button" href="https://github.com/sxc19960907/TagMemoRAG">View on GitHub</a>
+          <div class="intro-actions">
+            <a class="button primary" href="#quick-start">开始阅读</a>
+            <a class="button" href="https://github.com/sxc19960907/TagMemoRAG">查看仓库</a>
           </div>
-        </div>
-        <div class="product-shot" aria-label="Product interface preview">
-          <div class="shot-toolbar">
-            <span></span>
-            <span></span>
-            <span></span>
+        </section>
+
+        <section id="quick-start" class="doc-section">
+          <h2>快速开始</h2>
+          <p>正常用户不需要理解内部索引细节。推荐先按照浏览器流程完成一次真实体验。</p>
+          <ol class="step-list">
+            <li><strong>打开 Manual Library</strong><span>创建或加载知识库，上传第一份手册并填写产品元数据。</span></li>
+            <li><strong>重建索引</strong><span>执行 full 或 incremental rebuild，让文档进入可检索状态。</span></li>
+            <li><strong>检查 Readiness</strong><span>确认文档、检索、来源预览、OCR 和交付检查是否就绪。</span></li>
+            <li><strong>进入 Q&A</strong><span>用真实用户问题测试回答，并检查引用来源是否可靠。</span></li>
+          </ol>
+        </section>
+
+        <section id="concepts" class="doc-section">
+          <h2>核心概念</h2>
+          <div class="term-grid">
+            <article><h3>知识库</h3><p>一组可检索文档、索引、元数据和运行状态的边界。</p></article>
+            <article><h3>手册</h3><p>具有产品、型号、语言、标签和来源文件信息的文档单元。</p></article>
+            <article><h3>引用</h3><p>回答中的证据指针，用户可以通过来源卡片核对。</p></article>
+            <article><h3>Readiness</h3><p>面向交付的检查清单，帮助判断是否能给用户试用。</p></article>
           </div>
-          <div class="shot-shell">
-            <aside>
-              <strong>TagMemoRAG</strong>
-              <span>Manual Library</span>
-              <span>RAG Readiness</span>
-              <span>User Q&A</span>
-            </aside>
-            <section>
-              <div class="shot-status">Ready for grounded Q&A</div>
-              <div class="shot-question">How do I clean the nozzle?</div>
-              <div class="shot-answer">
-                <strong>Answer</strong>
-                <p>Follow the maintenance steps in the cited manual passage before using the machine again.</p>
-                <div class="citation-row">
-                  <span>cit_001</span>
-                  <span>Page 12</span>
-                  <span>Strong evidence</span>
-                </div>
-              </div>
-              <div class="shot-grid">
-                <span>PDF</span>
-                <span>DOCX</span>
-                <span>OCR</span>
-                <span>Eval</span>
-              </div>
-            </section>
+        </section>
+
+        <section id="manual-library" class="doc-section">
+          <h2>手册库</h2>
+          <p>Manual Library 是管理员处理文档的主入口。它负责上传、校验、标签治理、脏状态检查、诊断和重建。</p>
+          <div class="callout">
+            <strong>第一次使用</strong>
+            <span>先上传一份小而真实的文档，完成一次重建，再去 Q&A 问一个真实问题。</span>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="section proof-strip" aria-label="Release summary">
-        <div>
-          <strong>Audience</strong>
-          <span>Operators, support teams, and builders who need trustworthy document Q&A.</span>
-        </div>
-        <div>
-          <strong>Documents</strong>
-          <span>PDF, scanned PDF with OCR, DOCX, Markdown, plain text, and public web imports.</span>
-        </div>
-        <div>
-          <strong>Validation</strong>
-          <span>GitHub CI passed unit/e2e tests and baseline eval suites for v0.1.0.</span>
-        </div>
-      </section>
+        <section id="qa" class="doc-section">
+          <h2>用户问答</h2>
+          <p>Q&A 页面面向最终用户，不暴露调参、节点 ID、plan ID 或底层诊断字段。用户看到的是问题、回答、引用和安全的来源说明。</p>
+          <pre><code>用户问题 → 路由知识库 → 检索证据 → 生成回答 → 展示引用来源</code></pre>
+        </section>
 
-      <section class="section intro-grid" aria-label="Project overview">
-        <article>
-          <h2>What It Does</h2>
-          <p>
-            TagMemoRAG gives teams a practical path from messy documents to usable answers: upload manuals, rebuild the index, ask a question, inspect cited sources, and review quality signals when an answer needs attention.
-          </p>
-        </article>
-        <article>
-          <h2>Why It Exists</h2>
-          <p>
-            RAG systems often demo well but become hard to operate. This project focuses on browser-first workflows, delivery readiness, safe source display, and repeatable quality checks so a real user can try the system without reading internals.
-          </p>
-        </article>
-      </section>
+        <section id="readiness" class="doc-section">
+          <h2>RAG Readiness</h2>
+          <p>Readiness 页面把“能不能交付给用户体验”拆成可扫描的检查项：知识库是否加载、手册是否可检索、评测是否通过、Q&A 是否可用、OCR 和来源预览是否清楚。</p>
+        </section>
 
-      <section id="capabilities" class="section">
-        <div class="section-heading">
-          <p class="eyebrow">Capabilities</p>
-          <h2>Everything needed for a first usable RAG experience.</h2>
-        </div>
-        <div class="feature-grid">
-          <article>
-            <h3>Manual Library</h3>
-            <p>Upload files, validate metadata, manage tags, check dirty state, and rebuild the searchable index from the browser.</p>
-          </article>
-          <article>
-            <h3>User Q&A</h3>
-            <p>Ask natural-language questions and receive grounded answers with citations and source cards.</p>
-          </article>
-          <article>
-            <h3>Readiness Guide</h3>
-            <p>See whether documents, indexing, retrieval quality, OCR, source previews, and delivery checks are ready.</p>
-          </article>
-          <article>
-            <h3>Retrieval Quality</h3>
-            <p>Review feedback, inspect expected evidence, and keep retrieval behavior visible during iteration.</p>
-          </article>
-          <article>
-            <h3>Access Management</h3>
-            <p>Manage API-key identities, scopes, KB access, and lifecycle guidance from an admin page.</p>
-          </article>
-          <article>
-            <h3>Optional OCR</h3>
-            <p>Use local Tesseract tooling to extract text from scanned PDF pages when native PDF text is missing.</p>
-          </article>
-        </div>
-      </section>
+        <section id="quality" class="doc-section">
+          <h2>质量治理</h2>
+          <p>Retrieval Quality 和 eval report 用来持续观察弱问题、期望证据、反馈闭环和回归风险。发布前建议至少跑一次非性能单元/e2e 测试和 baseline eval。</p>
+        </section>
 
-      <section id="quick-start" class="section guide-band">
-        <div class="section-heading">
-          <p class="eyebrow">Quick Start</p>
-          <h2>The normal browser flow.</h2>
-        </div>
-        <ol class="timeline">
-          <li>
-            <strong>Open Manual Library</strong>
-            <span>Create or load a knowledge base, then upload the first manual with product metadata.</span>
-          </li>
-          <li>
-            <strong>Rebuild the index</strong>
-            <span>Run a full or incremental rebuild so the document becomes searchable.</span>
-          </li>
-          <li>
-            <strong>Check Readiness</strong>
-            <span>Confirm documents, retrieval, source previews, and delivery gates before inviting users.</span>
-          </li>
-          <li>
-            <strong>Ask in Q&A</strong>
-            <span>Use the user-facing Q&A page to ask a real question and inspect citations.</span>
-          </li>
-          <li>
-            <strong>Review quality</strong>
-            <span>Use Retrieval Quality and eval reports to track weak cases and improve evidence.</span>
-          </li>
-        </ol>
-      </section>
+        <section id="ocr" class="doc-section">
+          <h2>OCR 的作用</h2>
+          <p>OCR 处理扫描版 PDF 中没有原生文本的页面。它不是单独的问答通道，而是把识别出的文本送入同一套解析、分块、检索和回答流程。</p>
+          <div class="warning">
+            <strong>注意</strong>
+            <span>OCR 需要操作者安装本地 Tesseract 工具，并在配置中显式启用。</span>
+          </div>
+        </section>
 
-      <section id="guide" class="section manual-layout">
-        <div class="section-heading">
-          <p class="eyebrow">Operator Guide</p>
-          <h2>How to think about running TagMemoRAG.</h2>
-        </div>
-        <div class="manual-grid">
-          <article>
-            <h3>1. Prepare Documents</h3>
-            <p>Start with a small, representative set of manuals. Prefer files with clear product names, model numbers, category labels, and language metadata.</p>
-          </article>
-          <article>
-            <h3>2. Build and Verify</h3>
-            <p>After upload, rebuild the KB and ask questions that reflect real support tasks. Check that answers cite the right passages.</p>
-          </article>
-          <article>
-            <h3>3. Add OCR When Needed</h3>
-            <p>OCR is useful when a PDF page is scanned and has no native text. It feeds the same retrieval pipeline rather than becoming a separate answer path.</p>
-          </article>
-          <article>
-            <h3>4. Keep Access Bounded</h3>
-            <p>Give Q&A users search access, rebuild operators rebuild access, and administrators the smallest scope needed for management tasks.</p>
-          </article>
-          <article>
-            <h3>5. Treat Sources as Ground Truth</h3>
-            <p>Answers should be inspected through citation chips and source cards. Source previews should never expose storage keys, checksums, or local paths.</p>
-          </article>
-          <article>
-            <h3>6. Ship With Readiness Checks</h3>
-            <p>Before handoff, run local tests, browser flow checks, and the baseline eval suite. Use the Readiness page as a shared closure checklist.</p>
-          </article>
-        </div>
-      </section>
+        <section id="access" class="doc-section">
+          <h2>人员与权限</h2>
+          <p>建议按最小权限分配：普通问答用户只需要 search，负责文档维护的人员需要 rebuild，管理员才需要管理密钥和访问边界。</p>
+        </section>
 
-      <section class="section release-panel" aria-label="Release status">
-        <div>
-          <p class="eyebrow">Release</p>
-          <h2>v0.1.0 is the first public release.</h2>
-          <p>
-            The release was tagged from the validated master branch after local checks and GitHub Actions Quality CI passed. It is suitable for evaluation, browser demos, and early operator trials.
-          </p>
-        </div>
-        <a class="button primary" href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">Open release notes</a>
-      </section>
+        <section id="deployment" class="doc-section">
+          <h2>部署与发布</h2>
+          <p>当前公开文档通过 GitHub Pages 发布。项目本体可以自托管运行，发布前应确认本地质量门、GitHub Actions、Readiness 页面和真实浏览器流程。</p>
+          <ul>
+            <li>Release: <a href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">TagMemoRAG v0.1.0</a></li>
+            <li>Repository: <a href="https://github.com/sxc19960907/TagMemoRAG">sxc19960907/TagMemoRAG</a></li>
+          </ul>
+        </section>
 
-      <section id="faq" class="section faq">
-        <div class="section-heading">
-          <p class="eyebrow">FAQ</p>
-          <h2>Common questions.</h2>
-        </div>
-        <details open>
-          <summary>Can I read this website without installing the project?</summary>
-          <p>Yes. This site is static and meant to be served publicly through GitHub Pages without running TagMemoRAG.</p>
-        </details>
-        <details>
-          <summary>Does OCR require a cloud service?</summary>
-          <p>No. The current OCR path is optional and uses local Tesseract command-line tooling when enabled by the operator.</p>
-        </details>
-        <details>
-          <summary>Is the Q&A page the same as the admin workbench?</summary>
-          <p>No. The Q&A page is user-facing and hides debug controls. Admin pages handle upload, rebuild, readiness, quality review, and access management.</p>
-        </details>
-        <details>
-          <summary>What should I verify before a pilot?</summary>
-          <p>Upload real documents, rebuild the KB, ask real user questions, inspect citations, confirm Readiness, and run the non-performance unit/e2e gate plus baseline eval suite.</p>
-        </details>
-      </section>
-    </main>
+        <section id="faq" class="doc-section">
+          <h2>FAQ</h2>
+          <details open>
+            <summary>不安装项目可以看这个文档站吗？</summary>
+            <p>可以。这个站点是静态页面，通过 GitHub Pages 公开访问，不需要运行 TagMemoRAG。</p>
+          </details>
+          <details>
+            <summary>Q&A 页面和管理员 Workbench 是一回事吗？</summary>
+            <p>不是。Q&A 面向最终用户，Workbench 和其他 admin 页面用于调试、上传、重建和治理。</p>
+          </details>
+          <details>
+            <summary>回答可信度怎么判断？</summary>
+            <p>先看回答是否引用了正确来源，再通过来源卡片核对手册片段、页码、OCR 标记和来源预览。</p>
+          </details>
+        </section>
+      </main>
 
-    <footer class="site-footer">
-      <span>TagMemoRAG v0.1.0</span>
-      <a href="https://github.com/sxc19960907/TagMemoRAG">GitHub</a>
-      <a href="https://github.com/sxc19960907/TagMemoRAG/releases/tag/v0.1.0">Release notes</a>
-    </footer>
+      <aside class="toc" aria-label="本页目录">
+        <p>本页目录</p>
+        <a href="#overview">项目概览</a>
+        <a href="#quick-start">快速开始</a>
+        <a href="#manual-library">手册库</a>
+        <a href="#qa">用户问答</a>
+        <a href="#ocr">OCR</a>
+        <a href="#deployment">部署</a>
+      </aside>
+    </div>
   </body>
 </html>
