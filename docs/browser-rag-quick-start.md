@@ -89,7 +89,7 @@ Use this path when the KB is empty or when you want the shortest normal-user flo
 2. In the answer area, confirm the page says **Start by adding a manual**.
 3. Use the left-side **Add manual** form to choose a `.md`, `.txt`, text-based `.pdf`, or readable `.docx` manual.
 4. Fill or confirm the title, source file, category, language, and tags.
-5. Click **Add and index**.
+5. Click **Upload and index**.
 6. Wait for **Manual is indexed. Ask a question about it below.**
 7. Click one of the suggested questions generated from the uploaded manual, or type your own question.
 8. Confirm the answer cites the uploaded manual in the Sources panel.
