@@ -663,6 +663,8 @@ const zh = {
   "Open source preview": "打开来源预览",
   "Preview unavailable. Use the cited passage and {page} to verify the source.": "暂无预览。请结合引用片段和{page}核验来源。",
   "Preview unavailable. Use the cited passage to verify the source.": "暂无预览。请使用引用片段核验来源。",
+  "Text source can be verified from the cited passage and {page}.": "文本来源可结合引用片段和{page}直接核验。",
+  "Text source can be verified from the cited passage below.": "文本来源可通过下方引用片段直接核验。",
   "OCR text should be checked against the page image for {page}.": "OCR 文本建议对照{page}页面图像核验。",
   "OCR text should be checked against the page image.": "OCR 文本建议对照页面图像核验。",
   "Preview opens the cited source image for {page}.": "预览会打开{page}对应的来源图像。",

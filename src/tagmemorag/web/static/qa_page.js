@@ -1577,8 +1577,8 @@ function sourcePreviewFallbackDetail(item, pageLabel) {
       : t("Preview unavailable. Use the cited passage to verify the source.");
   }
   return pageLabel
-    ? t("Preview unavailable. Use the cited passage and {page} to verify the source.", { page: pageLabel })
-    : t("Preview unavailable. Use the cited passage to verify the source.");
+    ? t("Text source can be verified from the cited passage and {page}.", { page: pageLabel })
+    : t("Text source can be verified from the cited passage below.");
 }
 
 function sourceVerificationDetail(item, asset, pageLabel) {

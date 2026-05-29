@@ -1400,6 +1400,7 @@ def test_qa_page_static_asset_is_served(tmp_path, fake_embedder):
     assert "Verify original source" in js.text
     assert "Open source preview" in js.text
     assert "Preview unavailable" in js.text
+    assert "Text source can be verified from the cited passage below." in js.text
     assert "sourcePreviewFallbackDetail" in js.text
     assert "The PDF snapshot renderer is missing" in js.text
     assert "asset_warnings" in js.text

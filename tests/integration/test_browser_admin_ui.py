@@ -1361,12 +1361,15 @@ def _exercise_multiformat_upload_qa_user_flow(page, port: int, txt_path: Path, p
             assert "blob_key" not in preview_href
         else:
             active_source.locator("[data-source-preview-unavailable]").wait_for()
-            assert "Preview unavailable" in active_source.inner_text()
             if str(upload["manual_id"]) == "pdf-gasket-calibration":
                 assert (
                     "PDF snapshot renderer is missing" in active_source.inner_text()
                     or "Use the cited passage" in active_source.inner_text()
+                    or "Text source can be verified" in active_source.inner_text()
                 )
+            else:
+                assert "Text source can be verified" in active_source.inner_text()
+                assert "Preview unavailable" not in active_source.inner_text()
 
         if str(upload["manual_id"]) == "pdf-gasket-calibration":
             assert "Page" in sources_text or "Pages" in sources_text
