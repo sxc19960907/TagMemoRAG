@@ -300,6 +300,25 @@ function renderError(error) {
   el.sourceMeta.textContent = t("Sources unavailable.");
 }
 
+function renderEmptyConversationState() {
+  stopLoadingStages();
+  resetPostAnswerUi();
+  state.lastAnswerText = "";
+  if (el.question) el.question.value = "";
+  el.answer.className = "qa-answer-message empty-state";
+  el.answer.innerHTML = `
+    <strong>${t("Ask about a symptom, task, model, or error.")}</strong>
+    <p>${t("Good questions include weak steam, no coffee output, descaling, or nozzle cleaning. Answers will cite the manual passages used on the right.")}</p>
+  `;
+  el.answerMeta.textContent = t("No answer yet");
+  if (el.copyAnswer) el.copyAnswer.disabled = true;
+  el.sources.className = "qa-source-list empty-state";
+  el.sources.textContent = t("No sources yet.");
+  el.sourceMeta.textContent = t("Cited source snippets will appear here.");
+  setStatus("");
+  renderFirstRunGuidance();
+}
+
 function renderAnswer(body) {
   stopLoadingStages();
   const answer = body.answer || {};
@@ -824,7 +843,9 @@ function clearHistory() {
   state.activeTurnId = "";
   renderHistory();
   clearSessionMemory();
+  renderEmptyConversationState();
   updateSubmitNewState();
+  renderContextMode();
 }
 
 function renderSuggestions() {

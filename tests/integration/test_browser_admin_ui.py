@@ -975,6 +975,17 @@ def _exercise_library_qa_user_flow(page, port: int) -> None:
     assert "demo-service-manual.md" in sources_text
     assert "Cited manual passage" in sources_text
     assert "Click a citation in the answer to focus a source." in page.locator("#qa-source-meta").inner_text()
+    _assert_qa_clear_conversation_reset(page)
+    page.get_by_role("textbox", name="Q&A question").fill("蒸汽很小怎么办？")
+    page.get_by_role("button", name="Ask question").click()
+    page.locator("#qa-status").get_by_text("Answer ready.").wait_for(timeout=10000)
+    answer_text = page.locator("#qa-answer").inner_text()
+    assert "YOUR QUESTION" in answer_text
+    assert "MANUAL ANSWER" in answer_text
+    assert "清洗喷嘴" in answer_text
+    sources_text = page.locator("#qa-sources").inner_text()
+    assert "demo-service-manual.md" in sources_text
+    assert page.locator(".qa-history-item").count() == 1
     followups_text = page.locator("#qa-followups").inner_text()
     assert "Suggested follow-ups" in followups_text
     assert "These will continue from the current answer when useful." in followups_text
@@ -1669,6 +1680,25 @@ def _assert_qa_layout(page) -> None:
     assert mobile_metrics["scrollWidth"] <= mobile_metrics["innerWidth"]
     assert mobile_metrics["centerTop"] == 0
     page.set_viewport_size({"width": 1440, "height": 980})
+
+
+def _assert_qa_clear_conversation_reset(page) -> None:
+    assert page.locator(".qa-history-item").count() == 1
+    page.locator("#qa-clear-history").click()
+    page.locator("#qa-history").get_by_text("No questions yet.").wait_for(timeout=5000)
+    assert page.locator(".qa-history-item").count() == 0
+    empty_answer = page.locator("#qa-answer").inner_text()
+    assert "Ask about a symptom, task, model, or error." in empty_answer
+    assert "Answers will cite the manual passages used on the right." in empty_answer
+    assert "No answer yet" in page.locator("#qa-answer-meta").inner_text()
+    assert "No sources yet." in page.locator("#qa-sources").inner_text()
+    assert "Cited source snippets will appear here." in page.locator("#qa-source-meta").inner_text()
+    assert page.locator("#qa-followups").is_hidden()
+    assert page.locator("#qa-feedback").is_hidden()
+    assert page.locator("#qa-copy-answer").is_disabled()
+    assert page.locator("#qa-submit-new").is_disabled()
+    assert page.locator("#qa-question").input_value() == ""
+    assert "New question" in page.locator("#qa-context-mode").inner_text()
 
 
 def _assert_qa_first_screen_guidance(page) -> None:
