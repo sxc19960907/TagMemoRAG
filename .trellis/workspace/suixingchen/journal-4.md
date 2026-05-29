@@ -796,3 +796,37 @@ Redesigned the public GitHub Pages site as an official docs-style page, simplifi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 166: CI actions runtime maintenance
+
+**Date**: 2026-05-29
+**Task**: CI actions runtime maintenance
+**Branch**: `master`
+
+### Summary
+
+Updated repository-managed GitHub Actions to Node 24-compatible actions, replaced the public-site publish action with an equivalent shell-based gh-pages publish step, verified local workflow parsing and documentation tests, and confirmed remote Quality CI plus public-site publishing passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f40987d` | (see git log) |
+| `a0c91f0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
