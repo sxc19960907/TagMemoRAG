@@ -929,3 +929,36 @@ Fixed the user-facing Q&A clear action so it resets history, answer, sources, fo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 170: Q&A text source verification copy
+
+**Date**: 2026-05-29
+**Task**: Q&A text source verification copy
+**Branch**: `master`
+
+### Summary
+
+Changed Q&A source-card fallback copy so text and Markdown evidence is described as directly verifiable from the cited passage while keeping preview-unavailable warnings for asset failure paths; updated translations and source-card tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42aa28d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
