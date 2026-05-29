@@ -830,3 +830,36 @@ Updated repository-managed GitHub Actions to Node 24-compatible actions, replace
 ### Next Steps
 
 - None - task complete
+
+
+## Session 167: Browser black-box RAG acceptance
+
+**Date**: 2026-05-29
+**Task**: Browser black-box RAG acceptance
+**Branch**: `master`
+
+### Summary
+
+Ran the documented browser demo path as a user, verified clean Q&A over the demo manual with citations and source-card focus, and recorded UX follow-ups for demo workspace reset, clear-history behavior, and source preview copy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d550528` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
