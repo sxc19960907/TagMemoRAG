@@ -995,3 +995,36 @@ Improved the Q&A first-run empty knowledge-base experience with actionable uploa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 172: First user RAG acceptance
+
+**Date**: 2026-05-29
+**Task**: First user RAG acceptance
+**Branch**: `master`
+
+### Summary
+
+Ran the first-user RAG acceptance pass across public docs, Q&A first-run upload, multiformat TXT/PDF/DOCX browser flow, and scanned-PDF OCR; fixed the stale quick-start upload button label.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ec5a1a3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
