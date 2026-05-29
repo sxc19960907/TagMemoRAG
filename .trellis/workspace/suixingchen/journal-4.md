@@ -962,3 +962,36 @@ Changed Q&A source-card fallback copy so text and Markdown evidence is described
 ### Next Steps
 
 - None - task complete
+
+
+## Session 171: Q&A empty KB onboarding
+
+**Date**: 2026-05-29
+**Task**: Q&A empty KB onboarding
+**Branch**: `master`
+
+### Summary
+
+Improved the Q&A first-run empty knowledge-base experience with actionable upload/index/ask guidance, upload-panel highlighting, source-panel placeholders, and browser regression coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `08c838e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

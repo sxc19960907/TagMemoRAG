@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 170
+- **Total Sessions**: 171
 - **Last Active**: 2026-05-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~964 | Active |
+| `journal-4.md` | ~997 | Active |
 | `journal-3.md` | ~1974 | Archived |
 | `journal-2.md` | ~1975 | Archived |
 | `journal-1.md` | ~1980 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 171 | 2026-05-29 | Q&A empty KB onboarding | `08c838e` | `master` |
 | 170 | 2026-05-29 | Q&A text source verification copy | `42aa28d` | `master` |
 | 169 | 2026-05-29 | Q&A clear conversation reset | `a3339e5` | `master` |
 | 168 | 2026-05-29 | Clean demo workspace option | `f637d57` | `master` |
