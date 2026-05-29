@@ -35,6 +35,8 @@ def test_github_pages_workflow_publishes_static_site():
 
     assert "Publish Public Site" in workflow
     assert "contents: write" in workflow
-    assert "peaceiris/actions-gh-pages" in workflow
-    assert "publish_dir: ./site" in workflow
-    assert "publish_branch: gh-pages" in workflow
+    assert "actions/checkout@v6" in workflow
+    assert "cp -R site/." in workflow
+    assert "checkout --orphan gh-pages" in workflow
+    assert "push --force origin gh-pages" in workflow
+    assert "actions-gh-pages" not in workflow
