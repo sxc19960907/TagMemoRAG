@@ -896,3 +896,36 @@ Added a --clean option to the demo library QA command, constrained cleanup to th
 ### Next Steps
 
 - None - task complete
+
+
+## Session 169: Q&A clear conversation reset
+
+**Date**: 2026-05-29
+**Task**: Q&A clear conversation reset
+**Branch**: `master`
+
+### Summary
+
+Fixed the user-facing Q&A clear action so it resets history, answer, sources, follow-ups, feedback, copy state, question text, status, and context mode; added browser integration coverage for clear-and-reask behavior and verified local plus remote CI.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a3339e5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
